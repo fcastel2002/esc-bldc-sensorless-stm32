@@ -1,0 +1,14 @@
+@startuml
+title Diagrama de estados - APP
+state INIT
+state STOP
+state FAULT
+state RUN
+
+[*] --> INIT : RESET
+INIT --> STOP: INIT_DONE
+STOP --> RUN : RUN_ACK
+RUN --> STOP : STOP_REQ
+RUN --> FAULT : FAULT
+
+@enduml
