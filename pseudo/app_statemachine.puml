@@ -1,0 +1,27 @@
+@startuml
+title Diagrama de estados - APPLICATION
+hide empty description
+state INIT#pink
+state STOP#pink
+state FAULT#pink
+state RUN#pink
+
+state StopRun#Yellow
+state RunStop#Yellow
+state FaultInit#Yellow
+
+
+[*] --> INIT : RESET
+INIT  -down-> STOP: INIT_DONE
+
+STOP --> StopRun : RUN_ACK
+StopRun --> RUN : RUN
+
+RUN --> RunStop : STOP_ACK
+RunStop -> STOP : STOP
+RUN --> FAULT : FAULT
+STOP -> FAULT : FAULT
+FAULT --> FaultInit : FAULT_CLEAR
+FaultInit -> INIT : RESET
+
+@enduml
