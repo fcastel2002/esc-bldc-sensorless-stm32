@@ -1,7 +1,40 @@
 
+@startuml
+hide empty description
+state RUN#pink
+state RUN#pink{
+    state STARTUP#LightYellow
+    state READY#LightYellow
+    state ALIGN#LightYellow
+    state SPIN#LightYellow
+    state FREEWHEEL#LightYellow
 
-state RUN 
-state RUN{
-    state STARTUP
     
 }
+state INIT#pink
+state STOP#pink
+state FAULT#pink
+
+state InitStop#LightGreen
+state StopRun#LightGreen
+state RunStop#LightGreen
+state FaultStop#LightGreen
+state StopFault#LightGreen
+state InitFault#LightGreen
+state RunFault#LightGreen
+[*] -> INIT : SET
+INIT -> InitStop : STOP_ACK <<transition>>
+InitStop -> STOP : STOP 
+INIT --> InitFault : FAULT_ACK <<transition>>
+InitFault --> FAULT : FAULT
+STOP --> StopRun : RUN_ACK <<transition>>
+StopRun --> RUN : RUN
+RUN --> RunStop : STOP_ACK <<transition>>
+RunStop  -> STOP : STOP
+RUN -> RunFault : FAULT_ACK <<transition>>
+RunFault -> FAULT : FAULT
+FAULT --> FaultStop : STOP_ACK <<transition>>
+FaultStop -> STOP : STOP
+STOP -> StopFault : FAULT_ACK <<transition>>
+StopFault -> FAULT : FAULT
+@enduml

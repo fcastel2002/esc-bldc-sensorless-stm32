@@ -61,18 +61,12 @@ typedef struct
 	APP_CTRL_FLAGS  ctrlFlag;
 	APP_STATE currentState;
 }APP_CTRL_STRUCT;
-
-void (*STATE_TABLE[])(APP_CTRL_STRUCT *) = {
-	mainStateInit,
-	mainStateRun,
-	mainStateStop,
-	mainStateFault
-};
-
 void mainStateInit(APP_CTRL_STRUCT *pAppCtrl);
 void mainStateRun(APP_CTRL_STRUCT *pAppCtrl);
 void mainStateStop(APP_CTRL_STRUCT *pAppCtrl);
 void mainStateFault(APP_CTRL_STRUCT *pAppCtrl);
+
+extern void (*STATE_TABLE[])(APP_CTRL_STRUCT *);
 
 static inline void APP_StateMachine(APP_CTRL_STRUCT *pAppCtrl) {
 	STATE_TABLE[pAppCtrl -> currentState] (pAppCtrl);
