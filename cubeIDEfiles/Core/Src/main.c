@@ -150,6 +150,7 @@ void pwmCycle(uint16_t step,const uint8_t pwmValue){
   */
 int main(void)
 {
+
   /* USER CODE BEGIN 1 */
   /* USER CODE END 1 */
 
