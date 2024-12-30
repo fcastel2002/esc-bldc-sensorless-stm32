@@ -74,6 +74,12 @@ void Error_Handler(void);
 #define ENB_GPIO_Port GPIOA
 #define ENA_Pin GPIO_PIN_12
 #define ENA_GPIO_Port GPIOA
+#define ZC_C_Pin GPIO_PIN_4
+#define ZC_C_GPIO_Port GPIOB
+#define ZC_A_Pin GPIO_PIN_5
+#define ZC_A_GPIO_Port GPIOB
+#define ZC_B_Pin GPIO_PIN_6
+#define ZC_B_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

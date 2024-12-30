@@ -18,10 +18,11 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "states.h"
+
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdbool.h>
+#include "states.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -48,10 +49,15 @@ UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
-uint8_t data[] = "Hola jiji\r\n";
-uint8_t TxData[512];
-int enviado = 1	;
-int mainLoop = 0, uartCallback = 0;
+uint8_t step = 1;
+uint32_t encoderValue;
+bool direction = false;
+
+volatile uint8_t zc_b_state;
+volatile uint8_t zc_c_state;
+volatile uint8_t zc_a_state;
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -64,14 +70,77 @@ static void MX_TIM3_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
+void pwmCycle(uint16_t step, const uint8_t pwmValue);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+    if (htim->Instance == TIM3) {
+        pwmCycle(step, 45); // Ejecutar el ciclo PWM para el paso actual
 
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-	enviado = 1;
-	uartCallback++;
+        // Ajustar el siguiente paso según la dirección
+        if (direction) {
+            step = (step % 6) + 1; // Avanzar en la secuencia (1 → 6)
+        } else {
+            step = (step - 2 + 6) % 6 + 1; // Retroceder en la secuencia (6 → 1)
+        }
+    }
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
+	if (GPIO_Pin == SWITCH_Pin) {
+		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+		direction = !direction;
+	}
+}
+void pwmCycle(uint16_t step,const uint8_t pwmValue){
+
+	switch(step){
+	case 1: //A+ B- C0
+		HAL_GPIO_WritePin(GPIOA, ENA_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOA, ENB_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOB, ENC_Pin, GPIO_PIN_RESET);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwmValue);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+		break;
+    case 2: //A+ B0 C-
+        HAL_GPIO_WritePin(GPIOA, ENA_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOA, ENB_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(GPIOB, ENC_Pin, GPIO_PIN_SET);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, pwmValue);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+		break;
+	case 3: //A0 B+ C-
+		HAL_GPIO_WritePin(GPIOA, ENA_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(GPIOA, ENB_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOB, ENC_Pin, GPIO_PIN_SET);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pwmValue);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+		break;
+	case 4: //A- B+ C0
+		HAL_GPIO_WritePin(GPIOA, ENA_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOA, ENB_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOB, ENC_Pin, GPIO_PIN_RESET);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, pwmValue);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+		break;
+	case 5: //A- B0 C+
+		HAL_GPIO_WritePin(GPIOA, ENA_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOA, ENB_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(GPIOB, ENC_Pin, GPIO_PIN_SET);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwmValue);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+		break;
+	case 6: //A0 B- C+
+		HAL_GPIO_WritePin(GPIOA, ENA_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(GPIOA, ENB_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOB, ENC_Pin, GPIO_PIN_SET);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwmValue);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+		break;
+
+	}
 }
 /* USER CODE END 0 */
 
@@ -82,10 +151,7 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
 int main(void)
 {
   /* USER CODE BEGIN 1 */
-	for (int i = 0; i < 512; i++) {
-		TxData[i] = i & 0xFF;
-	}
-	/* USER CODE END 1 */
+  /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -111,27 +177,27 @@ int main(void)
   MX_TIM3_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-
+HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
+HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
+HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
+HAL_TIM_Base_Start_IT(&htim3);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	   encoderValue = __HAL_TIM_GET_COUNTER(&htim2);
+	     __HAL_TIM_SET_AUTORELOAD(&htim3, encoderValue);
+	     zc_b_state = HAL_GPIO_ReadPin(GPIOB, ZC_B_Pin);
+	     zc_c_state = HAL_GPIO_ReadPin(GPIOB, ZC_C_Pin);
+	     zc_a_state = HAL_GPIO_ReadPin(GPIOB, ZC_A_Pin);
+	     // Convertir a valores enteros y enviar
+	     ITM_SendChar(zc_b_state + '0');
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-		if (enviado == 1) {
-			enviado = 0;
-			HAL_UART_Transmit_DMA(&huart2, TxData, sizeof(TxData));
-		}
-	  HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-	  if(uartCallback > 10){
-		  HAL_UART_DMAStop(&huart2);
-	  }
-	  HAL_Delay(500);
-	  mainLoop++;
-
   }
   /* USER CODE END 3 */
 }
@@ -456,6 +522,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : ZC_C_Pin ZC_A_Pin ZC_B_Pin */
+  GPIO_InitStruct.Pin = ZC_C_Pin|ZC_A_Pin|ZC_B_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* EXTI interrupt init*/
   HAL_NVIC_SetPriority(EXTI15_10_IRQn, 0, 0);
