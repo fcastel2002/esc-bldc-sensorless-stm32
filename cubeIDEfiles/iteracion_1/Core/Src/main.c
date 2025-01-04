@@ -6,7 +6,7 @@
   ******************************************************************************
   * @attention
   *
-  * Copyright (c) 2024 STMicroelectronics.
+  * Copyright (c) 2025 STMicroelectronics.
   * All rights reserved.
   *
   * This software is licensed under terms that can be found in the LICENSE file
@@ -21,21 +21,31 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdbool.h>
-#include "states.h"
+#include <stdio.h>
+#include <string.h>
 #include "config_datos.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-UART_HandleTypeDef huart2;
-DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+void alignment(void);
+void startupRamp(void);
+void commutationCycle(uint8_t step, uint8_t pmwValue);
+typedef struct {
+    char *command;               // Texto del comando
+    void (*execute)();           // Puntero a la función
+} Command;
+Command commandTable[] = {
+    {"ALIGN", alignment},
+    {"STARTUP", startupRamp},
 
+    {NULL, NULL}  // Marca el final de la tabla
+};
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -52,15 +62,14 @@ UART_HandleTypeDef huart2;
 DMA_HandleTypeDef hdma_usart2_tx;
 
 /* USER CODE BEGIN PV */
-uint8_t step = 1;
-uint32_t encoderValue;
-bool direction = false;
+#define BUFFER_SIZE 30
+uint8_t rx_data[1];
+uint8_t rx_buffer[BUFFER_SIZE];
+uint8_t rx_index = 0;
 
-volatile uint8_t zc_b_state;
-volatile uint8_t zc_c_state;
-volatile uint8_t zc_a_state;
-volatile uint8_t velocidad;
-
+uint16_t PWM_ARR;
+uint16_t pwm_VAL;
+volatile uint32_t timer_counter = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -73,35 +82,64 @@ static void MX_TIM3_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
-void pwmCycle(uint16_t step, const uint8_t pwmValue);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
-
-}
-
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-    if (htim->Instance == TIM3) {
-        pwmCycle(step, 45); // Ejecutar el ciclo PWM para el paso actual
-
-        // Ajustar el siguiente paso según la dirección
-        if (direction) {
-            step = (step % 6) + 1; // Avanzar en la secuencia (1 → 6)
-        } else {
-            step = (step - 2 + 6) % 6 + 1; // Retroceder en la secuencia (6 → 1)
-        }
-    }
-}
-
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin) {
-	if (GPIO_Pin == SWITCH_Pin) {
-		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-		direction = !direction;
+	if (htim->Instance == TIM2) {
+		timer_counter++;
 	}
 }
-void pwmCycle(uint16_t step,const uint8_t pwmValue){
+
+void delay(uint32_t delay_ms){
+	uint32_t start_time = timer_counter;
+	while(timer_counter - start_time < delay_ms);
+
+}
+void processCommand(char *input) {
+    for (int i = 0; commandTable[i].command != NULL; i++) {
+        if (strcmp(input, commandTable[i].command) == 0) {  // Compara el comando recibido
+            commandTable[i].execute();  // Ejecuta la función asociada
+            return;
+        }
+    }
+    // Si no se encuentra el comando
+    HAL_UART_Transmit(&huart2, (uint8_t *)"Unknown Command\r\n", 17, HAL_MAX_DELAY);
+}
+
+
+void clearRxBuffer(void) {
+    memset(rx_buffer, 0, BUFFER_SIZE);  // Establece todos los elementos a 0
+    rx_index = 0;                          // Reinicia el índice del buffer
+}
+
+void startupRamp(void){
+	HAL_UART_Transmit(&huart2, (uint8_t *)"Starting...\r\n", 13, HAL_MAX_DELAY);
+	float current_time = 0.0f;
+	float omega, T_comm;
+	uint8_t pwm_val;
+	uint8_t step = 1;
+	while(current_time <= STARTUP_TIME){
+		omega = VEL_INICIAL + ALPHA*current_time;
+
+		T_comm = 2 * PI / (PARES_POLOS * omega);
+		pwm_val= (DUTY_MIN + DUTY_SLOPE * current_time)*PWM_ARR/100;
+		step = (step % 6) + 1;
+		commutationCycle(step, pwm_val);
+		current_time += T_comm;
+		HAL_Delay(T_comm);
+
+	}
+}
+
+void alignment(void) {
+	pwm_VAL = (uint8_t)((DUTY_ALIGN / 100.0f) * PWM_ARR);
+	HAL_UART_Transmit(&huart2, (uint8_t *)"Aligning...\r\n", 13, 1000);
+	uint8_t step = 1;
+	commutationCycle(step, pwm_VAL);
+}
+void commutationCycle(uint8_t step, uint8_t pwmValue){
 
 	switch(step){
 	case 1: //A+ B- C0
@@ -146,8 +184,49 @@ void pwmCycle(uint16_t step,const uint8_t pwmValue){
 		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, pwmValue);
 		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
 		break;
-
+	case 7: //ALL FLOATING
+		HAL_GPIO_WritePin(GPIOA, ENA_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(GPIOA, ENB_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(GPIOB, ENC_Pin, GPIO_PIN_RESET);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, 0);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_2, 0);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_3, 0);
+		break;
 	}
+
+}
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART2) {  // Verifica el UART correcto
+        if (rx_data[0] == '\r') {  // Detecta el carácter de fin de línea
+            rx_buffer[rx_index] = '\0';  // Finaliza la cadena con terminador nulo
+            rx_index = 0;  // Reinicia el índice para el próximo mensaje
+
+            // Procesa el mensaje completo
+            HAL_UART_Transmit(&huart2, (uint8_t *)"\r\nReceived: ", 12, HAL_MAX_DELAY);
+            HAL_UART_Transmit(&huart2, rx_buffer, strlen((char *)rx_buffer), HAL_MAX_DELAY);
+            HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", 2, HAL_MAX_DELAY);
+            processCommand((char *)rx_buffer);  // Procesa el comando recibido
+            clearRxBuffer();  // Limpia el buffer acumulador
+        } else if (rx_data[0] == '\b' || rx_data[0] == '\177') {  // Detecta Backspace
+            if (rx_index > 0) {  // Si hay algo en el buffer
+                rx_index--;  // Retrocede el índice
+                // Simula el borrado en el terminal
+                HAL_UART_Transmit(&huart2, (uint8_t *)"\b \b", 3, HAL_MAX_DELAY);
+            }
+        } else {  // Cualquier otro carácter
+            rx_buffer[rx_index++] = rx_data[0];  // Almacena el carácter en el buffer
+            HAL_UART_Transmit(&huart2, rx_data, 1, HAL_MAX_DELAY);  // Eco del carácter recibido
+
+            // Evita desbordamientos
+            if (rx_index >= BUFFER_SIZE) {
+                HAL_UART_Transmit(&huart2, (uint8_t *)"\r\nBuffer Overflow\r\n", 19, HAL_MAX_DELAY);
+                rx_index = 0;  // Reinicia el índice en caso de desbordamiento
+            }
+        }
+
+        // Reinicia la recepción para el siguiente byte
+        HAL_UART_Receive_IT(&huart2, rx_data, 1);
+    }
 }
 /* USER CODE END 0 */
 
@@ -159,6 +238,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
+
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -185,26 +265,20 @@ int main(void)
   MX_TIM3_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
-HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
-HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
-HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_3);
-HAL_TIM_Encoder_Start(&htim2, TIM_CHANNEL_ALL);
-HAL_TIM_Base_Start_IT(&htim3);
+  HAL_UART_Receive_IT(&huart2, rx_data, 1);
+  PWM_ARR = TIM1->ARR; // obtiene el valor actual del ARR del timer PWM
+  HAL_TIM_Base_Start_IT(&htim2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	   encoderValue = __HAL_TIM_GET_COUNTER(&htim2);
-	     __HAL_TIM_SET_AUTORELOAD(&htim3, encoderValue);
-	     zc_b_state = HAL_GPIO_ReadPin(GPIOB, ZC_B_Pin);
-	     zc_c_state = HAL_GPIO_ReadPin(GPIOB, ZC_C_Pin);
-	     zc_a_state = HAL_GPIO_ReadPin(GPIOB, ZC_A_Pin);
-	     // Convertir a valores enteros y enviar
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  //HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+	  //HAL_Delay(100);
   }
   /* USER CODE END 3 */
 }
@@ -333,47 +407,30 @@ static void MX_TIM2_Init(void)
 
   /* USER CODE END TIM2_Init 0 */
 
-  TIM_Encoder_InitTypeDef sConfig = {0};
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_IC_InitTypeDef sConfigIC = {0};
 
   /* USER CODE BEGIN TIM2_Init 1 */
 
   /* USER CODE END TIM2_Init 1 */
   htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 0;
+  htim2.Init.Prescaler = 7200-1;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 999;
+  htim2.Init.Period = 1000-1;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-  if (HAL_TIM_IC_Init(&htim2) != HAL_OK)
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
   {
     Error_Handler();
   }
-  sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
-  sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
-  sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
-  sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
-  sConfig.IC1Filter = 10;
-  sConfig.IC2Polarity = TIM_ICPOLARITY_RISING;
-  sConfig.IC2Selection = TIM_ICSELECTION_DIRECTTI;
-  sConfig.IC2Prescaler = TIM_ICPSC_DIV1;
-  sConfig.IC2Filter = 0;
-  if (HAL_TIM_Encoder_Init(&htim2, &sConfig) != HAL_OK)
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
   {
     Error_Handler();
   }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
-  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
-  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
-  sConfigIC.ICFilter = 0;
-  if (HAL_TIM_IC_ConfigChannel(&htim2, &sConfigIC, TIM_CHANNEL_3) != HAL_OK)
   {
     Error_Handler();
   }
