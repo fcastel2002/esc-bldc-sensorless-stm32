@@ -70,6 +70,10 @@ uint8_t rx_index = 0;
 uint16_t PWM_ARR;
 uint16_t pwm_VAL;
 volatile uint32_t timer_counter = 0;
+
+float current_time;
+float omega, T_comm;
+uint8_t pwm_val;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -105,7 +109,7 @@ void processCommand(char *input) {
         }
     }
     // Si no se encuentra el comando
-    HAL_UART_Transmit(&huart2, (uint8_t *)"Unknown Command\r\n", 17, HAL_MAX_DELAY);
+    HAL_UART_Transmit(&huart2, (uint8_t *)"Unknown Command\r\n", 17, 3);
 }
 
 
@@ -115,29 +119,41 @@ void clearRxBuffer(void) {
 }
 
 void startupRamp(void){
-	HAL_UART_Transmit(&huart2, (uint8_t *)"Starting...\r\n", 13, HAL_MAX_DELAY);
-	float current_time = 0.0f;
-	float omega, T_comm;
-	uint8_t pwm_val;
-	uint8_t step = 1;
-	while(current_time <= STARTUP_TIME){
-		omega = VEL_INICIAL + ALPHA*current_time;
+	HAL_UART_Transmit(&huart2, (uint8_t *)"Starting...\r\n", 13, 3);
+	current_time = 0.0f;
 
-		T_comm = 2 * PI / (PARES_POLOS * omega);
+	uint8_t step = 1;
+
+	while(current_time <= STARTUP_TIME){
+		omega = (VEL_INICIAL + ALPHA*current_time)*2*PI;
+
+		T_comm = (2 * PI / (PARES_POLOS * omega))*1000.0f;
 		pwm_val= (DUTY_MIN + DUTY_SLOPE * current_time)*PWM_ARR/100;
 		step = (step % 6) + 1;
 		commutationCycle(step, pwm_val);
 		current_time += T_comm;
-		HAL_Delay(T_comm);
 
 	}
 }
 
 void alignment(void) {
+	__HAL_UART_DISABLE_IT(&huart2, UART_IT_RXNE);  // Deshabilita interrupciones por recepción
+	__HAL_UART_DISABLE_IT(&huart2, UART_IT_TXE);   // Deshabilita interrupciones por transmisión
+
 	pwm_VAL = (uint8_t)((DUTY_ALIGN / 100.0f) * PWM_ARR);
-	HAL_UART_Transmit(&huart2, (uint8_t *)"Aligning...\r\n", 13, 1000);
+	HAL_UART_Transmit(&huart2, (uint8_t *)"Aligning...\r\n", 13, 3);
 	uint8_t step = 1;
-	commutationCycle(step, pwm_VAL);
+	commutationCycle(step, 70);
+	for (unsigned int k = 0; k < 10; k++){
+		HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
+		for (unsigned int i = 0; i < 10000; i++) {
+
+		}
+	}
+	step = 7;
+	commutationCycle(step, 0);
+	__HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);  // Habilita interrupciones por recepción
+	__HAL_UART_ENABLE_IT(&huart2, UART_IT_TXE);   // Habilita interrupciones por transmisión
 }
 void commutationCycle(uint8_t step, uint8_t pwmValue){
 
@@ -202,8 +218,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
             rx_index = 0;  // Reinicia el índice para el próximo mensaje
 
             // Procesa el mensaje completo
-            HAL_UART_Transmit(&huart2, (uint8_t *)"\r\nReceived: ", 12, HAL_MAX_DELAY);
-            HAL_UART_Transmit(&huart2, rx_buffer, strlen((char *)rx_buffer), HAL_MAX_DELAY);
+            HAL_UART_Transmit(&huart2, (uint8_t *)"\r\nReceived: ", 12, 3);
+            HAL_UART_Transmit(&huart2, rx_buffer, strlen((char *)rx_buffer), 3);
             HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", 2, HAL_MAX_DELAY);
             processCommand((char *)rx_buffer);  // Procesa el comando recibido
             clearRxBuffer();  // Limpia el buffer acumulador
@@ -211,7 +227,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
             if (rx_index > 0) {  // Si hay algo en el buffer
                 rx_index--;  // Retrocede el índice
                 // Simula el borrado en el terminal
-                HAL_UART_Transmit(&huart2, (uint8_t *)"\b \b", 3, HAL_MAX_DELAY);
+                HAL_UART_Transmit(&huart2, (uint8_t *)"\b \b", 3, 3);
             }
         } else {  // Cualquier otro carácter
             rx_buffer[rx_index++] = rx_data[0];  // Almacena el carácter en el buffer
@@ -219,7 +235,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 
             // Evita desbordamientos
             if (rx_index >= BUFFER_SIZE) {
-                HAL_UART_Transmit(&huart2, (uint8_t *)"\r\nBuffer Overflow\r\n", 19, HAL_MAX_DELAY);
+                HAL_UART_Transmit(&huart2, (uint8_t *)"\r\nBuffer Overflow\r\n", 19, 3);
                 rx_index = 0;  // Reinicia el índice en caso de desbordamiento
             }
         }
