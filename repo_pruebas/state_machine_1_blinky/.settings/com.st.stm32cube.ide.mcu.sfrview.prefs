@@ -1,2 +1,2 @@
 eclipse.preferences.version=1
-sfrviewstate={"fFavorites"\:{"fLists"\:{"ccr1tim4"\:["STM32F103/TIM4/CCR1/CCR1"]}},"fProperties"\:{"fNodeProperties"\:{}}}
+sfrviewstate={"fFavorites"\:{"fLists"\:{"ccr1tim4"\:["STM32F103/TIM4/CCR1/CCR1","STM32F103/TIM4/CNT/CNT"]}},"fProperties"\:{"fNodeProperties"\:{"STM32F103/TIM4/CNT"\:{"fNodeProperties"\:{"autoupdate"\:"true"}},"STM32F103/TIM4/CCR1"\:{"fNodeProperties"\:{"autoupdate"\:"true"}}}}}

@@ -21,33 +21,20 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <string.h>
-#include <stdio.h>
-#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-typedef enum {
-	IDLE,
-	PROCESS_COMMAND,
-	PROCESS_EVENT,
-	FINISH
 
-}state;
+TIM_HandleTypeDef htim4;
+TIM_HandleTypeDef htim3;
+ UART_HandleTypeDef huart2;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define BUFFER_SIZE 32
-#define IN_U TIM_CHANNEL_1
-#define IN_V TIM_CHANNEL_2
-#define IN_W TIM_CHANNEL_3
-#define EN_U (1U << 10)  // PB10
-#define EN_V (1U << 1)   // PB1
-#define EN_W (1U << 11)  // PB11
 
-#define CCR_TIM3 800
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -55,24 +42,73 @@ typedef enum {
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-TIM_HandleTypeDef htim3;
-TIM_HandleTypeDef htim4;
 
-UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-uint8_t rx_data[1];
-uint8_t rx_buffer[BUFFER_SIZE];
-uint8_t rx_index = 0;
-volatile uint32_t timer4_channel2 = 0;
-volatile int blink_count = 0;
-volatile state state_machine = IDLE;
-volatile uint32_t timerCounter = 0;
-uint32_t eventDuration = 10;
-uint32_t timer;
-volatile bool eventFlag = false;
-volatile uint8_t stepCounter = 0;
-volatile uint8_t step = 0;
+ typedef enum {
+	IDLE,
+	PROCESS_COMMAND,
+	STARTUP,
+	RUNNING,
+	ALIGNING,
+	READY, // aligned
+	FINISH
+
+}state;
+ void commutation(uint8_t step,uint16_t pwm);
+ void commutator(void);
+ void processCommand(char *input);
+ void clearRxBuffer(void);
+
+ void blink(void);
+ state handleState(void);
+ void ledON(void);
+ void alignment(void);
+ void startup(void);
+ void pwm_stop(void);
+ void pwm_init(void);
+ uint8_t rx_data[1];
+ uint8_t rx_buffer[BUFFER_SIZE];
+ uint8_t rx_index = 0;
+ volatile uint32_t timer4_channel2 = 0;
+ volatile int blink_count = 0;
+ volatile state state_machine = IDLE;
+ volatile uint32_t timerCounter = 0;
+ uint32_t eventDuration = 10;
+ uint32_t timer;
+ volatile bool eventFlag = false;
+
+
+
+ bool aligned_flag = false;
+ bool startup_flag = false;
+ typedef struct {
+     char *command;               // Texto del comando
+     void (*execute)();
+ } Command;
+
+ Command commandTable[] = {
+     {"ALIGN", alignment},
+ 	{"LEDON", ledON},
+ 	{"STARTUP", startup},
+     {NULL, NULL}  // Marca el final de la tabla
+ };
+ typedef struct{
+ 	state currentState;
+ 	bool *eventFlag;
+ 	uint32_t delay;
+ }TimerDependentEvent;
+
+ TimerDependentEvent eventTable[]={
+ 		{ALIGNING, &aligned_flag, 1},
+ 		{RUNNING, &eventFlag, 1},
+		{STARTUP, &startup_flag, STARTUP_TIME_X},
+ 		{IDLE, NULL, 0}
+ };
+
+
+#define NUM_TIMER_EVENTS (sizeof(eventTable)/sizeof(eventTable[0]))
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -82,22 +118,8 @@ static void MX_TIM4_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
-void processCommand(char *input);
-void clearRxBuffer(void);
-void blink(void);
-void handleState(void);
-void ledON(void);
-void commutation(uint8_t step);
-void alignment(void);
-typedef struct {
-    char *command;               // Texto del comando
-    void (*execute)();
-} Command;
-Command commandTable[] = {
-    {"ALIGN", alignment},
-	{"LEDON", ledON},
-    {NULL, NULL}  // Marca el final de la tabla
-};
+
+
 
 
 /* USER CODE END PFP */
@@ -105,71 +127,79 @@ Command commandTable[] = {
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void commutation(uint8_t step) {
-    GPIOB->ODR &= ~(EN_U | EN_V | EN_W);
 
-    switch(step) {
-        case 0:
-            GPIOB->ODR |= (EN_U | EN_V);  // Activar EN_U y EN_V
-            HAL_TIM_PWM_Start(&htim3, IN_U);
+void pwm_stop(void) {
+	HAL_TIM_PWM_Stop(&htim3, IN_U);
+	HAL_TIM_PWM_Stop(&htim3, IN_V);
+	HAL_TIM_PWM_Stop(&htim3, IN_W);
+}
 
-            GPIOB->ODR &= ~EN_W;         // Desactivar EN_W
-            __HAL_TIM_SET_COMPARE(&htim3, IN_U, CCR_TIM3);
-            __HAL_TIM_SET_COMPARE(&htim3, IN_V, 0);
+void pwm_init(void){
+	__HAL_TIM_SET_COMPARE(&htim3, IN_U, 0);
+	__HAL_TIM_SET_COMPARE(&htim3, IN_V, 0);
+	__HAL_TIM_SET_COMPARE(&htim3, IN_W, 0);
 
-            break;
-        case 1:
-            GPIOB->ODR |= (EN_U | EN_W); // Activar EN_U y EN_W
-            HAL_TIM_PWM_Start(&htim3, IN_U);
-
-            GPIOB->ODR &= ~EN_V;         // Desactivar EN_V
-            __HAL_TIM_SET_COMPARE(&htim3, IN_U, CCR_TIM3);
-            __HAL_TIM_SET_COMPARE(&htim3, IN_W, 0);
-            break;
-        case 2:
-            GPIOB->ODR |= (EN_V | EN_W); // Activar EN_V y EN_W
-            HAL_TIM_PWM_Start(&htim3, IN_V);
-
-            GPIOB->ODR &= ~EN_U;         // Desactivar EN_U
-            __HAL_TIM_SET_COMPARE(&htim3, IN_V, CCR_TIM3);
-            __HAL_TIM_SET_COMPARE(&htim3, IN_W, 0);
-            break;
-        case 3:
-            GPIOB->ODR |= (EN_U | EN_V); // Activar EN_U y EN_V
-            HAL_TIM_PWM_Start(&htim3, IN_V);
-
-            GPIOB->ODR &= ~EN_W;         // Desactivar EN_W
-            __HAL_TIM_SET_COMPARE(&htim3, IN_V, CCR_TIM3);
-            __HAL_TIM_SET_COMPARE(&htim3, IN_U, 0);
-            break;
-        case 4:
-            GPIOB->ODR |= (EN_U | EN_W); // Activar EN_U y EN_W
-            HAL_TIM_PWM_Start(&htim3, IN_W);
-
-            GPIOB->ODR &= ~EN_V;         // Desactivar EN_V
-            __HAL_TIM_SET_COMPARE(&htim3, IN_W, CCR_TIM3);
-            __HAL_TIM_SET_COMPARE(&htim3, IN_U, 0);
-            break;
-        case 5:
-            GPIOB->ODR |= (EN_V | EN_W); // Activar EN_V y EN_W
-            HAL_TIM_PWM_Start(&htim3, IN_W);
-
-            GPIOB->ODR &= ~(EN_U | EN_V | EN_W);         // Desactivar EN_U
-            __HAL_TIM_SET_COMPARE(&htim3, IN_W, CCR_TIM3);
-            __HAL_TIM_SET_COMPARE(&htim3, IN_V, 0);
-            break;
-        default:
-            break;
-    }
+	HAL_TIM_PWM_Start(&htim3, IN_U);
+	HAL_TIM_PWM_Start(&htim3,IN_V);
+	HAL_TIM_PWM_Start(&htim3, IN_W);
+	return;
 }
 
 void alignment(void){
-	__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, 499);
-	stepCounter = 0;
-	step = 0;
-	commutation(1);
+	aligned_flag = false;
+	state_machine = ALIGNING;
+	HAL_TIM_Base_Stop_IT(&htim4);
+	HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
+	HAL_TIM_Base_Stop(&htim4);
+
+	__HAL_TIM_SET_COUNTER(&htim4, 0);
+	__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, ALIGN_TIME);
+	pwm_init();
+
+	commutation(POS_UV, DC_ALIGN);
+	HAL_TIM_Base_Start_IT(&htim4);
 	HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
+	while(!aligned_flag);
+	state_machine = READY;
+	pwm_stop();
 }
+void startup(void){
+	alignment();
+	state_machine =  STARTUP;
+	bool  localFlag = false;
+	uint16_t pwm = DC_STARTUP_INIT;
+	uint8_t step = POS_UV;
+	uint16_t time = TIME_STARTUP_COMMUTATION_INIT;
+	uint16_t duration = 0;
+	pwm_init();
+	while(!localFlag){
+		//__HAL_TIM_SET_COUNTER(&htim4, 0);
+		//__HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, time);
+		HAL_Delay(time);
+		commutation(step, pwm);
+		//HAL_TIM_Base_Start_IT(&htim4);
+		//HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
+		//while(!startup_flag);
+
+		step = (step + 1) % NUM_POS;
+		(pwm < DC_STARTUP_END) ? pwm += DC_STARTUP_STEP : pwm;
+	    if (time > TIME_STARTUP_COMMUTATION_FINAL) {
+	        time -= TIME_STARTUP_STEP;
+	    } else if (duration < 1000){
+	        duration++;
+	    }
+	    else {
+			localFlag = true;
+	    }
+//		startup_flag = false;
+
+
+	}
+	pwm_stop();
+	state_machine = READY;
+
+}
+
 void blink(void){
 	eventDuration = 10;
 	HAL_TIM_Base_Start_IT(&htim4);
@@ -185,25 +215,9 @@ void ledON(){
 
 
 }
-void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
-	if (htim->Instance == TIM4) {
-		eventFlag = true;
-		if (eventDuration > 0) {
-			eventDuration--;
-			HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-		} else {
-			HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
-
-			HAL_TIM_Base_Stop_IT(&htim4);
-			eventFlag = false;
-	}
-}
-}
-
 void processCommand(char *input) {
     for (int i = 0; commandTable[i].command != NULL; i++) {
         if (strcmp(input, commandTable[i].command) == 0) {  // Compara el comando recibido
-            state_machine = PROCESS_EVENT;
             eventFlag = true;
         	commandTable[i].execute();  // Ejecuta la función asociada
             clearRxBuffer();  // Limpia el buffer acumulador
@@ -224,6 +238,7 @@ void clearRxBuffer(void) {
     memset(rx_buffer, 0, BUFFER_SIZE);  // Establece todos los elementos a 0
     rx_index = 0;                          // Reinicia el índice del buffer
 }
+
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     if (huart->Instance == USART2) {  // Verifica el UART correcto
         if (rx_data[0] == '\r') {  // Detecta el carácter de fin de línea
@@ -232,7 +247,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
 
             // Procesa el mensaje completo
             HAL_UART_Transmit(&huart2, (uint8_t *)"\r\nReceived: ", 12, 3);
-            HAL_UART_Transmit(&huart2, rx_buffer, strlen((char *)rx_buffer), 3);
+            HAL_UART_Transmit(&huart2, rx_buffer	, strlen((char *)rx_buffer), 3);
             HAL_UART_Transmit(&huart2, (uint8_t *)"\r\n", 2, HAL_MAX_DELAY);
             state_machine = PROCESS_COMMAND;
         } else if (rx_data[0] == '\b' || rx_data[0] == '\177') {  // Detecta Backspace
@@ -256,27 +271,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
         HAL_UART_Receive_IT(&huart2, rx_data, 1);
     }
 }
-
-void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim) {
-	if (htim->Instance == TIM4 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) {
-	    //TIM3->CCER &= ~(TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E | TIM_CCER_CC4E);
-		__HAL_TIM_SET_COUNTER(&htim4, 0);
-		if(stepCounter > 12){
-			HAL_UART_Transmit(&huart2, (uint8_t*) "Delay concluido\r\n", 17, 4);
-
-		HAL_TIM_PWM_Stop(&htim3, IN_U);
-		HAL_TIM_PWM_Stop(&htim3, IN_V);
-		HAL_TIM_PWM_Stop(&htim3, IN_W);
-		eventFlag = false;
-		HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
-		return;
-		}
-		stepCounter++;
-		commutation((step++) % 6);
-	}
-}
-
-void handleState(void){
+state handleState(void){
 	switch(state_machine){
 	case IDLE:
 		if(!__HAL_UART_GET_IT_SOURCE(&huart2, UART_IT_RXNE)){
@@ -285,27 +280,156 @@ void handleState(void){
 		break;
 
 	case PROCESS_COMMAND:
-	__HAL_UART_DISABLE_IT(&huart2, UART_IT_RXNE);
-	processCommand((char*) rx_buffer);
-	break;
-	case PROCESS_EVENT:
 		__HAL_UART_DISABLE_IT(&huart2, UART_IT_RXNE);
-	if (!eventFlag) {
-		HAL_UART_Transmit(&huart2, (uint8_t*) "Event Finished\r\n", 16, 3);
-		state_machine = FINISH;
+		processCommand((char*) rx_buffer);
+		break;
+
+	case STARTUP:
+		__HAL_UART_DISABLE_IT(&huart2, UART_IT_RXNE);
+		//startup();
+		break;
+	case ALIGNING:
+		__HAL_UART_DISABLE_IT(&huart2, UART_IT_RXNE);
+		alignment();
+		break;
+	case RUNNING:
+		__HAL_UART_DISABLE_IT(&huart2, UART_IT_RXNE);
+		break;
+
+	case READY:
+		if(!__HAL_UART_GET_IT_SOURCE(&huart2, UART_IT_RXNE)){
+					__HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
+				}
+		break;
+	case FINISH:
+		// Asegúrate de que las interrupciones de UART estén habilitadas al finalizar
+		timerCounter = 0; // Reinicia el contador
+		__HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
+		state_machine = IDLE; // Vuelve al estado IDLE
+
+		break;
+
+
+}
+	return (state_machine);
+}
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim) {
+	if (htim->Instance == TIM4) {
+		eventFlag = true;
+		if (eventDuration > 0) {
+			eventDuration--;
+			HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+		} else {
+			HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
+
+			HAL_TIM_Base_Stop_IT(&htim4);
+			eventFlag = false;
 	}
-	break;
-
-	  case FINISH:
-	            // Asegúrate de que las interrupciones de UART estén habilitadas al finalizar
-	            timerCounter = 0; // Reinicia el contador
-	            __HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
-	            state_machine = IDLE; // Vuelve al estado IDLE
-	            break;
-
-
 }
 }
+void commutation(uint8_t step, uint16_t pwm) {
+    GPIOB->ODR &= ~(EN_U | EN_V | EN_W);
+
+    switch(step) {
+        case POS_UV:
+            GPIOB->ODR |= (EN_U | EN_V);  // Activar EN_U y EN_V
+
+            GPIOB->ODR &= ~EN_W;         // Desactivar EN_W
+            __HAL_TIM_SET_COMPARE(&htim3, IN_U, pwm);
+            __HAL_TIM_SET_COMPARE(&htim3, IN_V, 0);
+            HAL_TIM_PWM_Start(&htim3, IN_U);
+            HAL_TIM_PWM_Start(&htim3, IN_V);
+
+            break;
+        case POS_UW:
+            GPIOB->ODR |= (EN_U | EN_W); // Activar EN_U y EN_W
+
+            GPIOB->ODR &= ~EN_V;         // Desactivar EN_V
+            __HAL_TIM_SET_COMPARE(&htim3, IN_U, pwm);
+            __HAL_TIM_SET_COMPARE(&htim3, IN_W, 0);
+            HAL_TIM_PWM_Start(&htim3, IN_U);
+            HAL_TIM_PWM_Start(&htim3, IN_W);
+            break;
+        case POS_VW:
+            GPIOB->ODR |= (EN_V | EN_W); // Activar EN_V y EN_W
+
+            GPIOB->ODR &= ~EN_U;         // Desactivar EN_U
+            __HAL_TIM_SET_COMPARE(&htim3, IN_V, pwm);
+            __HAL_TIM_SET_COMPARE(&htim3, IN_W, 0);
+            HAL_TIM_PWM_Start(&htim3, IN_V);
+            HAL_TIM_PWM_Start(&htim3, IN_W);
+            break;
+        case POS_VU:
+            GPIOB->ODR |= (EN_U | EN_V); // Activar EN_U y EN_V
+
+            GPIOB->ODR &= ~EN_W;         // Desactivar EN_W
+            __HAL_TIM_SET_COMPARE(&htim3, IN_V, pwm);
+            __HAL_TIM_SET_COMPARE(&htim3, IN_U, 0);
+            HAL_TIM_PWM_Start(&htim3, IN_V);
+            HAL_TIM_PWM_Start(&htim3, IN_U);
+
+            break;
+        case POS_WU:
+            GPIOB->ODR |= (EN_U | EN_W); // Activar EN_U y EN_W
+
+            GPIOB->ODR &= ~EN_V;         // Desactivar EN_V
+            __HAL_TIM_SET_COMPARE(&htim3, IN_W, pwm);
+            __HAL_TIM_SET_COMPARE(&htim3, IN_U, 0);
+            HAL_TIM_PWM_Start(&htim3, IN_W);
+            HAL_TIM_PWM_Start(&htim3, IN_U);
+            break;
+        case POS_WV:
+            GPIOB->ODR |= (EN_V | EN_W); // Activar EN_V y EN_W
+
+            GPIOB->ODR &= ~(EN_U | EN_V | EN_W);         // Desactivar EN_U
+            __HAL_TIM_SET_COMPARE(&htim3, IN_W, pwm);
+            __HAL_TIM_SET_COMPARE(&htim3, IN_V, 0);
+            HAL_TIM_PWM_Start(&htim3, IN_W);
+            HAL_TIM_PWM_Start(&htim3, IN_V);
+
+            break;
+        default:
+            break;
+    }
+}
+
+
+
+void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim) {
+	if (htim->Instance == TIM4 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) {
+	    //TIM3->CCER &= ~(TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E | TIM_CCER_CC4E);
+		__HAL_TIM_DISABLE(&htim4);
+
+		__HAL_TIM_SET_COUNTER(&htim4, 0);
+		HAL_TIM_Base_Stop_IT(&htim4);
+		HAL_TIM_Base_Stop(&htim4);
+
+		HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
+		for (int i = 0; i < NUM_TIMER_EVENTS; i++) {
+			// Detener el temporizador y deshabilitar el contador
+			if (eventTable[i].currentState == state_machine) {
+				if (eventTable[i].eventFlag != NULL) {
+					*(eventTable[i].eventFlag) = true;
+					HAL_TIM_Base_Stop_IT(&htim4);
+					HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
+
+				}
+				break;
+
+			}
+
+
+		}
+		__HAL_TIM_SET_COUNTER(&htim4, 0);
+		HAL_TIM_Base_Start_IT(&htim4);
+		HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
+		__HAL_TIM_ENABLE(&htim4);
+
+
+	}
+}
+
+
 /* USER CODE END 0 */
 
 /**
@@ -343,16 +467,15 @@ int main(void)
   /* USER CODE BEGIN 2 */
   //HAL_TIM_Base_Start_IT(&htim4);
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
-
+  state statetete;
   HAL_UART_Receive_IT(&huart2, rx_data, 1);
   /* USER CODE END 2 */
-
+1
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  handleState();
-		timer = __HAL_TIM_GET_COUNTER(&htim4);
+	  statetete = handleState();
 
     /* USER CODE END WHILE */
 

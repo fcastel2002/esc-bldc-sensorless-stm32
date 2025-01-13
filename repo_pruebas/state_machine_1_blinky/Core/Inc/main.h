@@ -31,7 +31,10 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <string.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include "basic_config.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
