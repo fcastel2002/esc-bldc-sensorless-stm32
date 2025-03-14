@@ -1,0 +1,9 @@
+../Core/Src/comm.c:26:6:clearRxBuffer	8	static
+../Core/Src/comm.c:31:6:processCommand	88	static
+../Core/Src/comm.c:73:13:configStatusToString	16	static
+../Core/Src/comm.c:85:14:executeCommand	24	static
+../Core/Src/comm.c:140:14:parseParameter	16	static
+../Core/Src/comm.c:147:15:parseAction	16	static
+../Core/Src/comm.c:155:6:transmitirUART	16	static
+../Core/Src/comm.c:169:6:HAL_UART_TxCpltCallback	16	static
+../Core/Src/comm.c:175:6:HAL_UART_RxCpltCallback	16	static

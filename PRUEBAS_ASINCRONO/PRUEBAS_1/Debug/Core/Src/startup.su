@@ -1,0 +1,4 @@
+../Core/Src/startup.c:24:6:generate_sine_tables	56	static
+../Core/Src/startup.c:69:6:foc_startup	8	static
+../Core/Src/startup.c:88:6:update_pwm_startup_foc	16	static
+../Core/Src/startup.c:133:6:executeTransition	8	static

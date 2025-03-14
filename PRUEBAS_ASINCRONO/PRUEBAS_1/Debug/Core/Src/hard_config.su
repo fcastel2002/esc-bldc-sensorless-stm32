@@ -1,0 +1,5 @@
+../Core/Src/hard_config.c:16:6:set_default_params	8	static
+../Core/Src/hard_config.c:31:6:update_all_esc	16	static
+../Core/Src/hard_config.c:39:10:compute_crc32	24	static
+../Core/Src/hard_config.c:46:10:get_pwm_freq	4	static
+../Core/Src/hard_config.c:50:14:set_pwm_freq	16	static
