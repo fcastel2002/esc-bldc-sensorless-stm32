@@ -1,4 +1,4 @@
-@startuml
+@startuml RUN SUBSTATES
 hide empty description
 state READY#LightBlue
 state ALIGN#LightBlue

@@ -1,4 +1,4 @@
-@startuml
+@startuml APP STATE MACHINE
 title Diagrama de estados - APPLICATION
 hide empty description
 state INIT#pink
