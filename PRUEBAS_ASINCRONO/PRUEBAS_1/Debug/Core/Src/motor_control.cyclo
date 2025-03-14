@@ -1,9 +1,0 @@
-../Core/Src/motor_control.c:90:8:safe_mod	1
-../Core/Src/motor_control.c:94:6:commutation	9
-../Core/Src/motor_control.c:202:6:update_all_motor_control	1
-../Core/Src/motor_control.c:212:10:filtro_media_movil	2
-../Core/Src/motor_control.c:226:6:zero_crossing	26
-../Core/Src/motor_control.c:317:6:motor_detection	3
-../Core/Src/motor_control.c:341:6:check_motor_status	9
-../Core/Src/motor_control.c:374:24:map_speed	4
-../Core/Src/motor_control.c:391:6:pi_control	8

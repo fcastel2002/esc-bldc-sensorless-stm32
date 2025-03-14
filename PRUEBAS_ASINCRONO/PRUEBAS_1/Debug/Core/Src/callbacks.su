@@ -1,2 +1,0 @@
-../Core/Src/callbacks.c:11:6:HAL_TIM_IC_CaptureCallback	24	static,ignoring_inline_asm
-../Core/Src/callbacks.c:36:6:HAL_TIM_OC_DelayElapsedCallback	16	static,ignoring_inline_asm

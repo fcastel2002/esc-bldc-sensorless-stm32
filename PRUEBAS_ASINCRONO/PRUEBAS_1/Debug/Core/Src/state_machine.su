@@ -1,2 +1,0 @@
-../Core/Src/state_machine.c:24:14:handleState	8	static
-../Core/Src/state_machine.c:100:6:event_delay	16	static

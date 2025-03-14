@@ -1,2 +1,0 @@
-../Core/Src/callbacks.c:11:6:HAL_TIM_IC_CaptureCallback	8
-../Core/Src/callbacks.c:36:6:HAL_TIM_OC_DelayElapsedCallback	7
