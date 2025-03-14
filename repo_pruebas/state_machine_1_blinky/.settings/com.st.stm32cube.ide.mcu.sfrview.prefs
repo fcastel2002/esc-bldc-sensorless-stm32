@@ -1,7 +1,11 @@
 eclipse.preferences.version=1
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 sfrviewstate={"fFavorites"\:{"fLists"\:{"ccr1tim4"\:["STM32F103/TIM4/CCR1/CCR1","STM32F103/TIM4/CNT/CNT"]}},"fProperties"\:{"fNodeProperties"\:{"STM32F103/TIM4/CNT"\:{"fNodeProperties"\:{"autoupdate"\:"true"}},"STM32F103/TIM4/CCR1"\:{"fNodeProperties"\:{"autoupdate"\:"true"}}}}}
+=======
+sfrviewstate={"fFavorites"\:{"fLists"\:{}},"fProperties"\:{"fNodeProperties"\:{}}}
+>>>>>>> Stashed changes
 =======
 sfrviewstate={"fFavorites"\:{"fLists"\:{}},"fProperties"\:{"fNodeProperties"\:{}}}
 >>>>>>> Stashed changes
