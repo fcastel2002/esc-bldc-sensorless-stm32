@@ -9,8 +9,8 @@
 #include "main.h"
 #include <stdlib.h>
 #include "motor_control.h"
-#define KP 1.40f
-#define KI 0.4f //real Ki = KI * 2/SCALE
+#define KP 1.80f
+#define KI 0.5f //real Ki = KI * 2/SCALE
 #define SCALE 1
 #define dt 0.002
 
