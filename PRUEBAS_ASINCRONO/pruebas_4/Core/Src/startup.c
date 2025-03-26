@@ -73,7 +73,7 @@ void foc_startup(void){
     // 2. Configurar timer para actualización PWM
     TIM4->PSC =  5 -1;
     TIM4->ARR = sine_ctrl.timer_arr;
-    TIM4->CCR2 = 26;           // Valor inicial del comparador
+    TIM4->CCR2 = 1000;           // Valor inicial del comparador
 	app_state = FOC_STARTUP;
 	PWM_INIT();
 	GPIOB->ODR |= EN_U;
@@ -94,16 +94,18 @@ void update_pwm_startup_foc() {
     if(phase_counter >= SIN_TABLE_SIZE) {
         phase_counter -= SIN_TABLE_SIZE;  // Más eficiente que módulo
     }
+
     it_count++;
     if(it_count == 600){
     	sine_ctrl.phase_step = 5;
-    	TIM4->CCR2 =24;
+    	TIM4->CCR2 =300;
     }
-
+    /*
     if(it_count >=1300){
     	executeTransition();
     	return;
     }
+    */
 
     // Cálculo de índices con desplazamiento de 120°
     uint16_t idx_u = phase_counter;
