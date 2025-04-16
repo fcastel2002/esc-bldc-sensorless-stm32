@@ -47,7 +47,7 @@ extern "C" {
 /* USER CODE BEGIN ET */
 //timers
 extern TIM_HandleTypeDef htim2;
-//extern TIM_HandleTypeDef htim3;
+extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 extern TIM_HandleTypeDef htim1;
 

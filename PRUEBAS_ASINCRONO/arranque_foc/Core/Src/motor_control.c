@@ -103,13 +103,11 @@ void commutation(int8_t step) {
 		float_V = false;
 		float_U = false;
 
-		//GPIOA->ODR &= ~IN_W;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_W, 0);
-
-		GPIOB->ODR |= IN_U;
-		GPIOB->ODR &= ~IN_V;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_U, pwmVal);
-		__HAL_TIM_SET_COMPARE(&htim1, EN_V, pwmVal);
+		GPIOA->ODR &= ~EN_W;
+		GPIOB->ODR |= EN_U;
+		GPIOB->ODR |= EN_V;
+		__HAL_TIM_SET_COMPARE(&htim1, IN_U, pwmVal);
+		__HAL_TIM_SET_COMPARE(&htim1, IN_V, 0);
 		break;
 	case POS_UW:
 		PWM_STOP();
@@ -117,13 +115,11 @@ void commutation(int8_t step) {
 		float_W = false;
 		float_U = false;
 		float_V = true;
-		//GPIOB->ODR &= ~IN_V;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_V, 0);
-
-		GPIOB->ODR |= IN_U;
-		GPIOA->ODR &= ~IN_W;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_U, pwmVal);
-		__HAL_TIM_SET_COMPARE(&htim1, EN_W, pwmVal);
+		GPIOB->ODR &= ~EN_V;
+		GPIOB->ODR |= EN_U;
+		GPIOA->ODR |=  EN_W;
+		__HAL_TIM_SET_COMPARE(&htim1, IN_U, pwmVal);
+		__HAL_TIM_SET_COMPARE(&htim1, IN_W, 0);
 		break;
 	case POS_VW:
 		PWM_STOP();
@@ -132,14 +128,12 @@ void commutation(int8_t step) {
 		float_W = false;
 		float_V = false;
 		float_U = true;
-		//GPIOB->ODR &= ~IN_U;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_U, 0);
+		GPIOB->ODR &= ~EN_U;
 
-		GPIOB->ODR |= IN_V;
-		GPIOA->ODR &=  ~IN_W;
-
-		__HAL_TIM_SET_COMPARE(&htim1, EN_V, pwmVal);
-		__HAL_TIM_SET_COMPARE(&htim1, EN_W, pwmVal);
+		GPIOA->ODR |=  EN_W;
+		GPIOB->ODR |= EN_V;
+		__HAL_TIM_SET_COMPARE(&htim1, IN_V, pwmVal);
+		__HAL_TIM_SET_COMPARE(&htim1, IN_W, 0);
 
 		break;
 	case POS_VU:
@@ -149,13 +143,11 @@ void commutation(int8_t step) {
 		float_W = true;
 		float_V = false;
 		float_U = false;
-		//GPIOA->ODR &= ~IN_W;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_W, 0);
-		GPIOB->ODR |=  IN_V;
-		GPIOB->ODR &= ~IN_U;
-
-		__HAL_TIM_SET_COMPARE(&htim1, EN_V, pwmVal);
-		__HAL_TIM_SET_COMPARE(&htim1, EN_U, pwmVal);
+		GPIOB->ODR |= EN_U;
+		GPIOB->ODR |=  EN_V;
+		GPIOA->ODR &= ~EN_W;
+		__HAL_TIM_SET_COMPARE(&htim1, IN_V, pwmVal);
+		__HAL_TIM_SET_COMPARE(&htim1, IN_U, 0);
 		break;
 	case POS_WU:
 		PWM_STOP();
@@ -164,13 +156,11 @@ void commutation(int8_t step) {
 		float_W = false;
 		float_U = false;
 		float_V = true;
-		//GPIOB->ODR &= ~IN_V;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_V, 0);
-
-		GPIOA->ODR |=  IN_W;
-		GPIOB->ODR &= ~IN_U;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_W, pwmVal);
-		__HAL_TIM_SET_COMPARE(&htim1, EN_U, pwmVal);
+		GPIOB->ODR &= ~EN_V;
+		GPIOA->ODR |=  EN_W;
+		GPIOB->ODR |= EN_U;
+		__HAL_TIM_SET_COMPARE(&htim1, IN_W, pwmVal);
+		__HAL_TIM_SET_COMPARE(&htim1, IN_U, 0);
 		break;
 	case POS_WV:
 		PWM_STOP();
@@ -179,30 +169,28 @@ void commutation(int8_t step) {
 		float_W = false;
 		float_V = false;
 		float_U = true;
-		//GPIOB->ODR &= ~IN_U;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_U, 0);
-
-		GPIOA->ODR |=  IN_W;
-		GPIOB->ODR &= ~IN_V;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_W, pwmVal);
-		__HAL_TIM_SET_COMPARE(&htim1, EN_V, pwmVal);
+		GPIOB->ODR &= ~EN_U;
+		GPIOA->ODR |=  EN_W;
+		GPIOB->ODR |= EN_V;
+		__HAL_TIM_SET_COMPARE(&htim1, IN_W, pwmVal);
+		__HAL_TIM_SET_COMPARE(&htim1, IN_V, 0);
 		break;
 
 	case POS_INIT:
-		GPIOB->ODR |= IN_U;
-		GPIOB->ODR |= IN_V;
-		GPIOA->ODR |= IN_W;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_U, pwmVal);
-		__HAL_TIM_SET_COMPARE(&htim1, EN_W, 0);
-		__HAL_TIM_SET_COMPARE(&htim1, EN_V, 0);
+		GPIOB->ODR |= EN_U;
+		GPIOB->ODR |= EN_V;
+		GPIOA->ODR |= EN_W;
+		__HAL_TIM_SET_COMPARE(&htim1, IN_U, pwmVal);
+		__HAL_TIM_SET_COMPARE(&htim1, IN_W, 0);
+		__HAL_TIM_SET_COMPARE(&htim1, IN_V, 0);
 		break;
 	case POS_SOUND:
-		GPIOB->ODR |= IN_U;
-		GPIOB->ODR &= ~IN_V;
-		GPIOA->ODR |= IN_W;
-		__HAL_TIM_SET_COMPARE(&htim1, EN_U, pwmVal);
-		__HAL_TIM_SET_COMPARE(&htim1, EN_W, pwmVal);
-		__HAL_TIM_SET_COMPARE(&htim1, EN_V, pwmVal);
+		GPIOB->ODR |= EN_U;
+		GPIOB->ODR |= EN_V;
+		GPIOA->ODR |= EN_W;
+		__HAL_TIM_SET_COMPARE(&htim1, IN_U, pwmVal);
+		__HAL_TIM_SET_COMPARE(&htim1, IN_W, pwmVal);
+		__HAL_TIM_SET_COMPARE(&htim1, IN_V, pwmVal);
 		break;
 	default:
 		break;
