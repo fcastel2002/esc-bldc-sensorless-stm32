@@ -25,6 +25,7 @@ App_States_t handleState(void){
 	static uint8_t comm_initialized = 0;
 	static uint32_t last_uart_check = 0;
 	static uint8_t flash_initialized = 0;
+	uint32_t current_time =0;
 	if(!comm_initialized){
 		commInit();
 		comm_initialized = 1;
@@ -83,7 +84,7 @@ App_States_t handleState(void){
 	case FOC_STARTUP:
 		break;
 	case RUNNING:
-		uint32_t current_time = HAL_GetTick();
+		current_time = HAL_GetTick();
 		if (current_time - last_uart_check > 50) {
 			last_uart_check = current_time;
 

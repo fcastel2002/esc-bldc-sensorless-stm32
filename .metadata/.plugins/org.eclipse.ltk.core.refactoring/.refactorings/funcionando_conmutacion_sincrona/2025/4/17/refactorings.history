@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">
+<refactoring comment="Rename resource &apos;funcionando_conmutacion_sincrona/PRUEBA_ARRANQUE_2.ioc&apos; to &apos;funcionando_conmutacion_sincrona.ioc&apos;" description="Rename resource &apos;PRUEBA_ARRANQUE_2.ioc&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="PRUEBA_ARRANQUE_2.ioc" name="funcionando_conmutacion_sincrona.ioc" stamp="1745344134126" updateReferences="true"/>
+</session>

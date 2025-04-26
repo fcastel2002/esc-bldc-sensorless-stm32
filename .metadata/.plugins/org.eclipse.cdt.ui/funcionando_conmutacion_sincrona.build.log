@@ -1,0 +1,10 @@
+15:32:51 **** Build of configuration Debug for project funcionando_conmutacion_sincrona ****
+make -j16 all 
+arm-none-eabi-size   funcionando_conmutacion_sincrona.elf 
+   text	   data	    bss	    dec	    hex	filename
+  42900	    172	   4720	  47792	   bab0	funcionando_conmutacion_sincrona.elf
+Finished building: default.size.stdout
+ 
+
+15:32:51 Build Finished. 0 errors, 0 warnings. (took 172ms)
+

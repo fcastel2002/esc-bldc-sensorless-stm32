@@ -122,13 +122,17 @@ ConfigStatus executeCommand(CommandAction action, CommandParam param,  char* val
 	case PARAM_PWM_FREQ:
 		switch(action){
 		case ACTION_SET:
+		{
 				uint16_t new_freq = atoi(value);
 				result = set_pwm_freq(new_freq);
 			break;
+		}
 		case ACTION_GET:
+		{
 				uint16_t act_freq = get_pwm_freq();
 				transmitirUART("PWM FREQ: %d Hz\r\n",act_freq);
 			break;
+		}
 		case ACTION_RESET:
 			break;
 
