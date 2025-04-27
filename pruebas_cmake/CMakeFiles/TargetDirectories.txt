@@ -1,0 +1,6 @@
+K:/repositorio/sensorlessESC_MyEP_CASTEL/pruebas_cmake/CMakeFiles/funcionando_conmutacion_sincrona2.dir
+K:/repositorio/sensorlessESC_MyEP_CASTEL/pruebas_cmake/CMakeFiles/edit_cache.dir
+K:/repositorio/sensorlessESC_MyEP_CASTEL/pruebas_cmake/CMakeFiles/rebuild_cache.dir
+K:/repositorio/sensorlessESC_MyEP_CASTEL/pruebas_cmake/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
+K:/repositorio/sensorlessESC_MyEP_CASTEL/pruebas_cmake/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+K:/repositorio/sensorlessESC_MyEP_CASTEL/pruebas_cmake/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir
