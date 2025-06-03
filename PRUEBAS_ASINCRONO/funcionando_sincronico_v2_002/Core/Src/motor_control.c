@@ -41,6 +41,8 @@
 #define STALL_CHECK_TIME_MS 25
 ////////
 
+#define  ZCP_TO_CHECK 4
+#define SPEED_TOLERANCE_PCT 40
 
 volatile uint16_t speed_command = 0;
 volatile uint16_t pwmVal = 0;
@@ -76,8 +78,7 @@ static volatile float min_speed_integral = 0;
 volatile int32_t diff_speed = 0;
 volatile uint8_t direction = 0;
 
-#define  ZCP_TO_CHECK 12
-#define SPEED_TOLERANCE_PCT 20
+
 static uint16_t last_W_timestamp = 0;
 static uint16_t W_periods[ZCP_TO_CHECK];
 static uint8_t W_period_idx = 0;
@@ -265,14 +266,16 @@ void zero_crossing(uint8_t fase){
 				if(valid_W_zcp < ZCP_TO_CHECK){
 					valid_W_zcp++;
 
-				}else{
+				}
+				if(valid_W_zcp == ZCP_TO_CHECK){
+
 					uint16_t avg_period = 0;
 					uint8_t is_consistent = 1;
 					for(uint8_t i = 0; i< ZCP_TO_CHECK;i++){
 						avg_period += W_periods[i];
 					}
 					avg_period /= ZCP_TO_CHECK;
-					if(avg_period > 1000 || avg_period < 20){
+					if(avg_period > 20){
 						for(uint8_t i = 0; i < ZCP_TO_CHECK; i++){
 							uint32_t tolerance = avg_period * SPEED_TOLERANCE_PCT / 100;
 							if(abs(W_periods[i] - avg_period)> tolerance){
@@ -293,6 +296,7 @@ void zero_crossing(uint8_t fase){
 
 						}
 					}
+					valid_W_zcp = 0;
 				}
 			}
 			last_W_timestamp = current_timestamp;
