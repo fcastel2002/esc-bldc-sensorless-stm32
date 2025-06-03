@@ -233,6 +233,60 @@ uint16_t filtro_media_movil(uint16_t measurement){
 	return (uint16_t)new_speed;
 }
 
+static inline void check_zero_crossing_consistency(uint16_t current_timestamp) {
+	if(last_W_timestamp != 0){
+		uint16_t period;
+		if(last_W_timestamp > current_timestamp){
+		    // Solo si es estrictamente mayor, ha ocurrido un desbordamiento
+		    period = (0xFFFF - last_W_timestamp) + current_timestamp + 1; // +1 porque el contador incluye el 0
+		}
+		else{
+		    period = current_timestamp - last_W_timestamp;
+		}
+
+		W_periods[W_period_idx] = period;
+
+		W_period_idx = (W_period_idx + 1) % ZCP_TO_CHECK;
+
+		if(valid_W_zcp < ZCP_TO_CHECK){
+			valid_W_zcp++;
+
+		}
+		if(valid_W_zcp == ZCP_TO_CHECK){
+
+			uint16_t avg_period = 0;
+			uint8_t is_consistent = 1;
+			for(uint8_t i = 0; i< ZCP_TO_CHECK;i++){
+				avg_period += W_periods[i];
+			}
+			avg_period /= ZCP_TO_CHECK;
+			if(avg_period > 20){
+				for(uint8_t i = 0; i < ZCP_TO_CHECK; i++){
+					uint32_t tolerance = avg_period * SPEED_TOLERANCE_PCT / 100;
+					if(abs(W_periods[i] - avg_period)> tolerance){
+						is_consistent = 0;
+						break;
+					}
+				}
+				if(is_consistent){
+
+					valid_W_zcp =0;
+					consistent_zero_crossing = 1;
+					speed_buffer_size = 1;
+
+				}
+				else{
+
+					consistent_zero_crossing = 0;
+
+				}
+			}
+			valid_W_zcp = 0;
+		}
+	}
+	last_W_timestamp = current_timestamp;
+}
+
 void zero_crossing(uint8_t fase){
 
 	switch(fase){
@@ -249,57 +303,7 @@ void zero_crossing(uint8_t fase){
 		}
 		if(app_state == RUNNING || app_state == CLOSEDLOOP || app_state == FOC_STARTUP){
 			uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
-			if(last_W_timestamp != 0){
-				uint16_t period;
-				if(last_W_timestamp > current_timestamp){
-				    // Solo si es estrictamente mayor, ha ocurrido un desbordamiento
-				    period = (0xFFFF - last_W_timestamp) + current_timestamp + 1; // +1 porque el contador incluye el 0
-				}
-				else{
-				    period = current_timestamp - last_W_timestamp;
-				}
-
-				W_periods[W_period_idx] = period;
-
-				W_period_idx = (W_period_idx + 1) % ZCP_TO_CHECK;
-
-				if(valid_W_zcp < ZCP_TO_CHECK){
-					valid_W_zcp++;
-
-				}
-				if(valid_W_zcp == ZCP_TO_CHECK){
-
-					uint16_t avg_period = 0;
-					uint8_t is_consistent = 1;
-					for(uint8_t i = 0; i< ZCP_TO_CHECK;i++){
-						avg_period += W_periods[i];
-					}
-					avg_period /= ZCP_TO_CHECK;
-					if(avg_period > 20){
-						for(uint8_t i = 0; i < ZCP_TO_CHECK; i++){
-							uint32_t tolerance = avg_period * SPEED_TOLERANCE_PCT / 100;
-							if(abs(W_periods[i] - avg_period)> tolerance){
-								is_consistent = 0;
-								break;
-							}
-						}
-						if(is_consistent){
-
-							valid_W_zcp =0;
-							consistent_zero_crossing = 1;
-							speed_buffer_size = 1;
-
-						}
-						else{
-
-							consistent_zero_crossing = 0;
-
-						}
-					}
-					valid_W_zcp = 0;
-				}
-			}
-			last_W_timestamp = current_timestamp;
+			check_zero_crossing_consistency(current_timestamp);
 		}
 		if((commutationStep == POS_UW || commutationStep == POS_WV) && app_state == CLOSEDLOOP){
 		    uint16_t current_capture = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
