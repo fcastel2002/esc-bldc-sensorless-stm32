@@ -59,4 +59,29 @@ void pwm_input(TIM_HandleTypeDef *htim);
 extern void check_motor_status(void);
 extern void stop_motor(uint8_t mode);
 
+// Nuevas definiciones para medición tri-fase
+#define PHASE_COUNT 3
+#define ZCP_BUFFER_SIZE 4
+#define SPEED_CONSENSUS_THRESHOLD 15  // % de tolerancia entre fases
+
+// Estructura para cada fase
+typedef struct {
+    uint16_t last_timestamp;
+    uint16_t periods[ZCP_BUFFER_SIZE];
+    uint8_t period_idx;
+    uint8_t valid_periods;
+    uint16_t avg_period;
+    uint8_t is_consistent;
+} phase_measurement_t;
+
+// Variables externas para medición tri-fase
+extern phase_measurement_t phase_measurements[PHASE_COUNT];
+extern volatile uint16_t consensus_speed;
+extern volatile uint8_t active_phases_count;
+extern volatile uint8_t speed_measurement_ready;
+
+// Funciones para medición tri-fase
+void reset_phase_measurements(void);
+void get_phase_diagnostics(uint16_t* phase_speeds, uint8_t* phase_status);
+
 #endif /* INC_MOTOR_CONTROL_H_ */

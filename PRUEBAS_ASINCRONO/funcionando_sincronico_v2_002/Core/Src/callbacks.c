@@ -40,10 +40,8 @@ void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim) {
 
 
 	}
-	if (htim->Instance == TIM4 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1) {
-		__disable_irq();
+	if (htim->Instance == TIM4 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1 && CLOSEDLOOP == app_state) {
 		pi_control();
-		__enable_irq();
 	}
 
 }

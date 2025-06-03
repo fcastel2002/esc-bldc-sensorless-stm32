@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include "motor_control.h"
 #define KP 0.75f
-#define KI 1.05f //real Ki = KI * 2/SCALE
+#define KI 1.35f //real Ki = KI * 2/SCALE
 #define SCALE 1
 #define dt 0.002
 
@@ -27,10 +27,9 @@
  *
  */
 
-#define SPEED_MAX 920	//pwm
-#define SPEED_MIN 17000
+#define SPEED_MAX 500	//pwm
+#define SPEED_MIN 14000
 #define SPEED_RANGE (SPEED_MIN - SPEED_MAX)
-#define OPEN_LOOP_FINAL_SPEED 3000
 ////////////
 
 // limites PWM
@@ -42,7 +41,7 @@
 ////////
 
 #define  ZCP_TO_CHECK 4
-#define SPEED_TOLERANCE_PCT 60
+#define SPEED_TOLERANCE_PCT 25
 
 volatile uint16_t speed_command = 0;
 volatile uint16_t pwmVal = 0;
@@ -86,9 +85,20 @@ static uint8_t valid_W_zcp = 0;
 
 // speed measure digital filter variables
 static volatile uint8_t speed_buffer_size = 1;
-static volatile uint16_t speed_buffer[5] = {0};
+static volatile uint16_t speed_buffer[2] = {0};
 static volatile uint16_t filtered_speed = 0;
 static volatile uint16_t last_speed_capture = 1;
+
+// Variables para medición tri-fase
+phase_measurement_t phase_measurements[PHASE_COUNT] = {0}; 
+volatile uint16_t consensus_speed = 0;
+volatile uint8_t active_phases_count = 0;
+volatile uint8_t speed_measurement_ready = 0;
+
+
+static void process_phase_measurement(uint8_t phase_idx, uint16_t current_timestamp);
+static void calculate_consensus_speed(void);
+
 int8_t safe_mod(int8_t value, int8_t mod) {
     return (value % mod + mod) % mod;
 }
@@ -215,10 +225,17 @@ uint16_t filtro_media_movil(uint16_t measurement){
 	int32_t new_speed = 0;
 	static uint16_t prev_speed = 0;
 	static volatile uint8_t speed_index = 0;
-	if(measurement < 1700 && prev_speed > 1700 && measurement < 12000 && prev_speed < 12000){
+	if(measurement < SPEED_MAX || measurement > SPEED_MIN){
+		if(prev_speed >= SPEED_MAX && prev_speed <= SPEED_MIN ){
+
 		speed_buffer[speed_index] = prev_speed;
-	}
-	else{
+		
+		}else{
+			speed_buffer[speed_index] = (SPEED_MAX - SPEED_MIN) / 2; // Valor por defecto si la medición es inválida
+		
+		}
+	
+	}else{
 		speed_buffer[speed_index] = measurement;
 		prev_speed = measurement;
 	}
@@ -234,9 +251,10 @@ uint16_t filtro_media_movil(uint16_t measurement){
 }
 
 void zero_crossing(uint8_t fase){
+	static uint8_t speed_calc_counter = 0;
 
 	switch(fase){
-	case 1:
+	case 1:  // Fase W
 		if(app_state == RUNNING || app_state == CLOSEDLOOP){
 			if (direction == 0) {
 				commutationStep = safe_mod(commutationStep + 1, NUM_POS);
@@ -244,31 +262,29 @@ void zero_crossing(uint8_t fase){
 				commutationStep = safe_mod(commutationStep - 1, NUM_POS);
 			}
 			last_zc_timestamp = HAL_GetTick();
-
 			commutation(commutationStep);
 		}
+		
+		// Procesar medición de velocidad para fase W
 		if(app_state == RUNNING || app_state == CLOSEDLOOP || app_state == FOC_STARTUP){
 			uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
+			process_phase_measurement(0, current_timestamp);  // Fase W = índice 0
+			
+			// Mantener compatibilidad con código existente
 			if(last_W_timestamp != 0){
 				uint16_t period;
 				if(last_W_timestamp > current_timestamp){
-				    // Solo si es estrictamente mayor, ha ocurrido un desbordamiento
-				    period = (0xFFFF - last_W_timestamp) + current_timestamp + 1; // +1 porque el contador incluye el 0
+				    period = (0xFFFF - last_W_timestamp) + current_timestamp + 1;
 				}
 				else{
 				    period = current_timestamp - last_W_timestamp;
 				}
-
 				W_periods[W_period_idx] = period;
-
 				W_period_idx = (W_period_idx + 1) % ZCP_TO_CHECK;
-
 				if(valid_W_zcp < ZCP_TO_CHECK){
 					valid_W_zcp++;
-
 				}
 				if(valid_W_zcp == ZCP_TO_CHECK){
-
 					uint16_t avg_period = 0;
 					uint8_t is_consistent = 1;
 					for(uint8_t i = 0; i< ZCP_TO_CHECK;i++){
@@ -284,16 +300,12 @@ void zero_crossing(uint8_t fase){
 							}
 						}
 						if(is_consistent){
-
 							valid_W_zcp =0;
 							consistent_zero_crossing = 1;
 							speed_buffer_size = 1;
-
 						}
 						else{
-
 							consistent_zero_crossing = 0;
-
 						}
 					}
 					valid_W_zcp = 0;
@@ -301,52 +313,71 @@ void zero_crossing(uint8_t fase){
 			}
 			last_W_timestamp = current_timestamp;
 		}
-		if((commutationStep == POS_UW || commutationStep == POS_WV) && app_state == CLOSEDLOOP){
-		    uint16_t current_capture = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
-
-		    // Calcular diff_speed basado en la diferencia desde la última captura
-		    if(last_speed_capture != 0) {
-		        uint16_t speed_period;
-		        if(last_speed_capture > current_capture) {
-		            speed_period = (0xFFFF - last_speed_capture) + current_capture + 1;
+		
+		// Actualizar velocidad usando consenso tri-fase cada cierto número de ZC
+		if(app_state == CLOSEDLOOP){
+		    speed_calc_counter++;
+		    if(speed_calc_counter >= 2) {  // Cada 2 zero-crossings
+		        calculate_consensus_speed();
+		        
+		        // Usar velocidad por consenso si está disponible, sino usar método original
+		        if(speed_measurement_ready && consensus_speed > 0) {
+		            diff_speed = consensus_speed;
+		            filtered_speed = filtro_media_movil(diff_speed);
 		        } else {
-		            speed_period = current_capture - last_speed_capture;
+		            // Fallback al método original
+		            uint16_t current_capture = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
+		            if(last_speed_capture != 0) {
+		                uint16_t speed_period;
+		                if(last_speed_capture > current_capture) {
+		                    speed_period = (0xFFFF - last_speed_capture) + current_capture + 1;
+		                } else {
+		                    speed_period = current_capture - last_speed_capture;
+		                }
+		                diff_speed = speed_period;
+		                filtered_speed = filtro_media_movil(diff_speed);
+		            }
+		            last_speed_capture = current_capture;
 		        }
-		        diff_speed = speed_period;
-		        filtered_speed = filtro_media_movil(diff_speed);
+		        speed_calc_counter = 0;
 		    }
-		    last_speed_capture = current_capture;
-
-		    // No reiniciar el timer
 		}
-
 		break;
-	case 2:
-
+		
+	case 2:  // Fase V
 		if(app_state == RUNNING || app_state == CLOSEDLOOP){
-
 			if (direction == 0) {
 				commutationStep = safe_mod(commutationStep + 1, NUM_POS);
 			} else {
 				commutationStep = safe_mod(commutationStep - 1, NUM_POS);
 			}
-					commutation(commutationStep);
+			commutation(commutationStep);
+		}
+		
+		// Procesar medición de velocidad para fase V
+		if(app_state == RUNNING || app_state == CLOSEDLOOP || app_state == FOC_STARTUP){
+			uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
+			process_phase_measurement(1, current_timestamp);  // Fase V = índice 1
 		}
 		break;
-	case 3:
-
+		
+	case 3:  // Fase U
 		if(app_state == RUNNING || app_state == CLOSEDLOOP){
-
 			if (direction == 0) {
 				commutationStep = safe_mod(commutationStep + 1, NUM_POS);
 			} else {
 				commutationStep = safe_mod(commutationStep - 1, NUM_POS);
 			}
-					commutation(commutationStep);
+			commutation(commutationStep);
+		}
+		
+		// Procesar medición de velocidad para fase U
+		if(app_state == RUNNING || app_state == CLOSEDLOOP || app_state == FOC_STARTUP){
+			uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_3);
+			process_phase_measurement(2, current_timestamp);  // Fase U = índice 2
 		}
 		break;
 	}
-
 }
 
 void motor_detection(){
@@ -424,7 +455,6 @@ static inline uint16_t map_speed(uint16_t raw_speed){
 }
 
 void pi_control(){
-	__disable_irq();
 	speed_measure =  map_speed(filtered_speed);
 	if(app_state == CLOSEDLOOP){
 		speed_error = speed_setpoint - speed_measure;
@@ -453,7 +483,6 @@ void pi_control(){
 		if(speed_output > max_limit_pwm) speed_output = max_limit_pwm;
 		pwmVal = (uint16_t)speed_output ;
 	}
-	__enable_irq();
 }
 
 static inline void pwm_break(void){
@@ -489,4 +518,122 @@ void stop_motor(uint8_t mode){
 			app_state = IDLE;
 			break;
 	}
+}
+
+static void process_phase_measurement(uint8_t phase_idx, uint16_t current_timestamp) {
+    phase_measurement_t* phase = &phase_measurements[phase_idx];
+    
+    if(phase->last_timestamp != 0) {
+        uint16_t period;
+        if(phase->last_timestamp > current_timestamp) {
+            period = (0xFFFF - phase->last_timestamp) + current_timestamp + 1;
+        } else {
+            period = current_timestamp - phase->last_timestamp;
+        }
+        
+        // Filtrar períodos muy pequeños o muy grandes (ruido)
+        if(period > 50 && period < 50000) {
+            phase->periods[phase->period_idx] = period;
+            phase->period_idx = (phase->period_idx + 1) % ZCP_BUFFER_SIZE;
+            
+            if(phase->valid_periods < ZCP_BUFFER_SIZE) {
+                phase->valid_periods++;
+            }
+            
+            // Calcular promedio y consistencia si tenemos suficientes muestras
+            if(phase->valid_periods >= ZCP_BUFFER_SIZE) {
+                uint32_t sum = 0;
+                for(uint8_t i = 0; i < ZCP_BUFFER_SIZE; i++) {
+                    sum += phase->periods[i];
+                }
+                phase->avg_period = sum / ZCP_BUFFER_SIZE;
+                
+                // Verificar consistencia
+                phase->is_consistent = 1;
+                for(uint8_t i = 0; i < ZCP_BUFFER_SIZE; i++) {
+                    uint32_t tolerance = phase->avg_period * SPEED_TOLERANCE_PCT / 100;
+                    if(abs(phase->periods[i] - phase->avg_period) > tolerance) {
+                        phase->is_consistent = 0;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    phase->last_timestamp = current_timestamp;
+}
+
+// Función para calcular velocidad por consenso
+static void calculate_consensus_speed(void) {
+    uint16_t valid_speeds[PHASE_COUNT];
+    uint8_t valid_count = 0;
+    
+    // Recopilar velocidades válidas de cada fase
+    for(uint8_t i = 0; i < PHASE_COUNT; i++) {
+        if(phase_measurements[i].is_consistent && phase_measurements[i].valid_periods >= ZCP_BUFFER_SIZE) {
+            valid_speeds[valid_count] = phase_measurements[i].avg_period;
+            valid_count++;
+        }
+    }
+    
+    active_phases_count = valid_count;
+    
+    if(valid_count >= 2) {  // Necesitamos al menos 2 fases para consenso
+        uint32_t sum = 0;
+        uint8_t consensus_count = 0;
+        
+        // Calcular promedio inicial
+        for(uint8_t i = 0; i < valid_count; i++) {
+            sum += valid_speeds[i];
+        }
+        uint16_t avg_speed = sum / valid_count;
+        
+        // Verificar consenso entre fases
+        sum = 0;
+        for(uint8_t i = 0; i < valid_count; i++) {
+            uint32_t tolerance = avg_speed * SPEED_CONSENSUS_THRESHOLD / 100;
+            if(abs(valid_speeds[i] - avg_speed) <= tolerance) {
+                sum += valid_speeds[i];
+                consensus_count++;
+            }
+        }
+        
+        if(consensus_count >= 2) {
+            consensus_speed = sum / consensus_count;
+            speed_measurement_ready = 1;
+        } else {
+            speed_measurement_ready = 0;
+        }
+    } else if(valid_count == 1) {
+        // Si solo tenemos una fase válida, la usamos con precaución
+        consensus_speed = valid_speeds[0];
+        speed_measurement_ready = 1;
+    } else {
+        speed_measurement_ready = 0;
+    }
+}
+
+// Función para reiniciar mediciones tri-fase
+void reset_phase_measurements(void) {
+    for(uint8_t i = 0; i < PHASE_COUNT; i++) {
+        phase_measurements[i].last_timestamp = 0;
+        phase_measurements[i].period_idx = 0;
+        phase_measurements[i].valid_periods = 0;
+        phase_measurements[i].avg_period = 0;
+        phase_measurements[i].is_consistent = 0;
+        for(uint8_t j = 0; j < ZCP_BUFFER_SIZE; j++) {
+            phase_measurements[i].periods[j] = 0;
+        }
+    }
+    consensus_speed = 0;
+    active_phases_count = 0;
+    speed_measurement_ready = 0;
+}
+
+// Función de diagnóstico para monitorear estado de mediciones
+void get_phase_diagnostics(uint16_t* phase_speeds, uint8_t* phase_status) {
+    for(uint8_t i = 0; i < PHASE_COUNT; i++) {
+        phase_speeds[i] = phase_measurements[i].avg_period;
+        phase_status[i] = phase_measurements[i].is_consistent ? 1 : 0;
+    }
 }
