@@ -31,7 +31,7 @@ void commInit(void){
 	rx_head = 0;
 	rx_tail = 0;
 	cmd_index = 0;
-	HAL_UART_Receive_IT(&huart2, (uint8_t*)&rx_buffer[rx_head],1);
+	HAL_UART_Receive_IT(&huart1, (uint8_t*)&rx_buffer[rx_head],1);
 }
 void processCurrentCommand(void){
 	processCommand(cmd_buffer);
@@ -202,7 +202,7 @@ void transmitirUART(const char* formato, ...) {
     while (tx_busy && HAL_GetTick() < timeout);
 
     tx_busy = 1;
-    HAL_UART_Transmit_IT(&huart2, (uint8_t*)buffer, strlen(buffer));
+    HAL_UART_Transmit_IT(&huart1, (uint8_t*)buffer, strlen(buffer));
     va_end(args);
 }
 // Procesar comando de velocidad
@@ -230,14 +230,14 @@ uint8_t processSpeedCommand(void) {
 }
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
-	if(huart->Instance == USART2){
+	if(huart->Instance == USART1){
 		tx_busy = 0;
 	}
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-    if (huart->Instance == USART2) {
+    if (huart->Instance == USART1) {
     	rx_head = (rx_head + 1) % BUFFER_SIZE;
 
-    	HAL_UART_Receive_IT(&huart2, (uint8_t*)&rx_buffer[rx_head], 1);    }
+    	HAL_UART_Receive_IT(&huart1, (uint8_t*)&rx_buffer[rx_head], 1);    }
 }

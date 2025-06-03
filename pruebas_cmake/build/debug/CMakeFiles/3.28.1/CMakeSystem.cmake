@@ -1,9 +1,9 @@
-set(CMAKE_HOST_SYSTEM "Windows-10.0.26100")
-set(CMAKE_HOST_SYSTEM_NAME "Windows")
-set(CMAKE_HOST_SYSTEM_VERSION "10.0.26100")
-set(CMAKE_HOST_SYSTEM_PROCESSOR "AMD64")
+set(CMAKE_HOST_SYSTEM "Linux-6.11.0-24-generic")
+set(CMAKE_HOST_SYSTEM_NAME "Linux")
+set(CMAKE_HOST_SYSTEM_VERSION "6.11.0-24-generic")
+set(CMAKE_HOST_SYSTEM_PROCESSOR "x86_64")
 
-include("K:/repositorio/sensorlessESC_MyEP_CASTEL/pruebas_cmake/cmake/gcc-arm-none-eabi.cmake")
+include("/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/pruebas_cmake/cmake/gcc-arm-none-eabi.cmake")
 
 set(CMAKE_SYSTEM "Generic")
 set(CMAKE_SYSTEM_NAME "Generic")

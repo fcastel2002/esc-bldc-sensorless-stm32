@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "comm.h": "c",
+        "hard_config.h": "c"
+    },
+    "cortex-debug.variableUseNaturalFormat": true
+}

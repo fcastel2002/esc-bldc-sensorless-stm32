@@ -6,41 +6,26 @@
     "configurations": [
         {
             "cwd": "${workspaceRoot}",
-            "executable": "./build/funcionando_conmutacion_sincrona2.elf",
+            "executable": "./build/debug/funcionando_conmutacion_sincrona2.elf",
             "name": "Debug with OpenOCD",
             "request": "launch",
             "type": "cortex-debug",
             "servertype": "openocd",
-            "serverpath": "C:\\ST\\STM32CubeIDE_1.14.1\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.externaltools.openocd.win32_2.4.100.202501161620\\tools\\bin\\openocd.exe",
-
             "configFiles": [
-                "interface stlink.cfg",
-                "target stm32f1x.cfg"
+                "interface/stlink.cfg",
+                "target/stm32f1x.cfg"
             ],
-            "searchDir": ["C:\\ST\\STM32CubeIDE_1.14.1\\STM32CubeIDE\\plugins\\com.st.stm32cube.ide.mcu.debug.openocd_2.3.100.202501240831\\resources\\openocd\\st_scripts"],
+            "searchDir": [
+                "/usr/share/openocd/scripts"
+            ],
             "runToEntryPoint": "main",
-                      // --- Envío de comandos directos a OpenOCD ---
-                      "openOCDLaunchCommands": [
-                        // 1. Configurar velocidad del adaptador (prueba 1000, si falla prueba 500 o 100)
-                        "adapter speed 1000",
-                        // 2. Configurar estrategia de reset por hardware (SRST) para conectar bajo reset
-                        "reset_config srst_only srst_nogate connect_assert_srst",
-                        // 3. Inicializar interfaz (necesario antes de 'reset init')
-                        "init",
-                        // 4. Detener el target manteniendo la línea de reset activa
-                        "reset init"
-                    ],
-                    // --- Fin de comandos ---
-        
-                     // Es necesario si usamos "reset init" para que funcione el reinicio desde VSCode
-                     "overrideRestartCommands": [
-                        "reset init",
-                        "continue"
-                     ],
-        
-            "showDevDebugOutput": "raw"
-            
+            "liveWatch": {
+                "enabled": true,
+                "samplesPerSecond": 4
+            },
+            "showDevDebugOutput": "none"
         },
+  
         {
             "cwd": "${workspaceFolder}",
             "executable": "${command:cmake.launchTargetPath}",

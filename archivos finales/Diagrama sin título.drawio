@@ -1,0 +1,64 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (X11; Ubuntu; Linux x86_64; rv:138.0) Gecko/20100101 Firefox/138.0" version="27.0.8">
+  <diagram name="Página-1" id="7SsDn3JGqacGFHzD45mj">
+    <mxGraphModel dx="1426" dy="795" grid="1" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-1" value="" style="whiteSpace=wrap;html=1;aspect=fixed;" vertex="1" parent="1">
+          <mxGeometry x="130" y="120" width="510" height="510" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-2" value="" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="130" y="120" width="510" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-5" value="" style="swimlane;startSize=0;" vertex="1" parent="1">
+          <mxGeometry x="330" y="550" width="310" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-6" value="VELOCIDAD EN RPM" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="Vc8HTgeRrnUlUPNhhuZg-5">
+          <mxGeometry x="20" y="25" width="260" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-7" value="" style="whiteSpace=wrap;html=1;aspect=fixed;" vertex="1" parent="1">
+          <mxGeometry x="330" y="200" width="300" height="300" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-8" value="VELOCIDAD vs TIEMPO (Graph)" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;strokeColor=default;" vertex="1" parent="1">
+          <mxGeometry x="355" y="210" width="260" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-9" value="ESTADO&lt;br&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;conectado/desconectado" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="155" y="180" width="120" height="85" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-11" value="Fault Code" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="130" y="590" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-12" value="Indice de estabilidad" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="130" y="530" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-13" value="Sensorless BLDC ESC" style="rounded=1;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="312.5" y="122.5" width="145" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-14" value="Run" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="140" y="320" width="70" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-15" value="Stop" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="220" y="320" width="70" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-16" value="Consignas" style="swimlane;fontStyle=0;childLayout=stackLayout;horizontal=1;startSize=30;horizontalStack=0;resizeParent=1;resizeParentMax=0;resizeLast=0;collapsible=1;marginBottom=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="140" y="390" width="140" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-17" value="X Vueltas" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;rotatable=0;whiteSpace=wrap;html=1;" vertex="1" parent="Vc8HTgeRrnUlUPNhhuZg-16">
+          <mxGeometry y="30" width="140" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-18" value="Rampa de velocidad:" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;rotatable=0;whiteSpace=wrap;html=1;" vertex="1" parent="Vc8HTgeRrnUlUPNhhuZg-16">
+          <mxGeometry y="60" width="140" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-19" value="Max Vel / Min Vel" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;spacingRight=4;overflow=hidden;points=[[0,0.5],[1,0.5]];portConstraint=eastwest;rotatable=0;whiteSpace=wrap;html=1;" vertex="1" parent="Vc8HTgeRrnUlUPNhhuZg-16">
+          <mxGeometry y="90" width="140" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-20" value="&lt;div align=&quot;left&quot;&gt;Puerto&lt;/div&gt;" style="rounded=1;whiteSpace=wrap;html=1;align=left;" vertex="1" parent="1">
+          <mxGeometry x="155" y="275" width="120" height="25" as="geometry" />
+        </mxCell>
+        <mxCell id="Vc8HTgeRrnUlUPNhhuZg-21" value="" style="triangle;whiteSpace=wrap;html=1;rotation=90;" vertex="1" parent="1">
+          <mxGeometry x="260" y="280" width="10" height="15" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

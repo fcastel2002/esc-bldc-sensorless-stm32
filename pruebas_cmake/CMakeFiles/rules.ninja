@@ -17,7 +17,7 @@
 rule ASM_COMPILER__funcionando_conmutacion_sincrona2_unscanned_Debug
   depfile = $DEP_FILE
   deps = gcc
-  command = ${LAUNCHER}${CODE_CHECK}C:\ST\STM32CubeCLT_1.18.0\GNU-tools-for-STM32\bin\arm-none-eabi-gcc.exe $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
+  command = ${LAUNCHER}${CODE_CHECK}/opt/st/stm32cubeclt_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
   description = Building ASM object $out
 
 
@@ -27,7 +27,7 @@ rule ASM_COMPILER__funcionando_conmutacion_sincrona2_unscanned_Debug
 rule C_COMPILER__funcionando_conmutacion_sincrona2_unscanned_Debug
   depfile = $DEP_FILE
   deps = gcc
-  command = ${LAUNCHER}${CODE_CHECK}C:\ST\STM32CubeCLT_1.18.0\GNU-tools-for-STM32\bin\arm-none-eabi-gcc.exe $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
+  command = ${LAUNCHER}${CODE_CHECK}/opt/st/stm32cubeclt_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
   description = Building C object $out
 
 
@@ -35,7 +35,7 @@ rule C_COMPILER__funcionando_conmutacion_sincrona2_unscanned_Debug
 # Rule for linking C executable.
 
 rule C_EXECUTABLE_LINKER__funcionando_conmutacion_sincrona2_Debug
-  command = cmd.exe /C "$PRE_LINK && C:\ST\STM32CubeCLT_1.18.0\GNU-tools-for-STM32\bin\arm-none-eabi-gcc.exe $FLAGS -mcpu=cortex-m3  -T "K:/repositorio/sensorlessESC_MyEP_CASTEL/pruebas_cmake/STM32F103XX_FLASH.ld" --specs=nano.specs -Wl,-Map=funcionando_conmutacion_sincrona2.map -Wl,--gc-sections -Wl,--start-group -lc -lm -Wl,--end-group -Wl,--print-memory-usage $LINK_FLAGS $in -o $TARGET_FILE $LINK_PATH $LINK_LIBRARIES && $POST_BUILD"
+  command = $PRE_LINK && /opt/st/stm32cubeclt_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc $FLAGS -mcpu=cortex-m3  -T "/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/pruebas_cmake/STM32F103XX_FLASH.ld" --specs=nano.specs -Wl,-Map=funcionando_conmutacion_sincrona2.map -Wl,--gc-sections -Wl,--start-group -lc -lm -Wl,--end-group -Wl,--print-memory-usage $LINK_FLAGS $in -o $TARGET_FILE $LINK_PATH $LINK_LIBRARIES && $POST_BUILD
   description = Linking C executable $TARGET_FILE
   restat = $RESTAT
 
@@ -54,7 +54,7 @@ rule CUSTOM_COMMAND
 rule C_COMPILER__STM32_Drivers_unscanned_Debug
   depfile = $DEP_FILE
   deps = gcc
-  command = ${LAUNCHER}${CODE_CHECK}C:\ST\STM32CubeCLT_1.18.0\GNU-tools-for-STM32\bin\arm-none-eabi-gcc.exe $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
+  command = ${LAUNCHER}${CODE_CHECK}/opt/st/stm32cubeclt_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc $DEFINES $INCLUDES $FLAGS -MD -MT $out -MF $DEP_FILE -o $out -c $in
   description = Building C object $out
 
 
@@ -62,7 +62,7 @@ rule C_COMPILER__STM32_Drivers_unscanned_Debug
 # Rule for re-running cmake.
 
 rule RERUN_CMAKE
-  command = C:\ST\STM32CubeCLT_1.18.0\CMake\bin\cmake.exe --regenerate-during-build -SK:\repositorio\sensorlessESC_MyEP_CASTEL\pruebas_cmake -BK:\repositorio\sensorlessESC_MyEP_CASTEL\pruebas_cmake
+  command = /opt/st/stm32cubeclt_1.18.0/CMake/bin/cmake --regenerate-during-build -S"/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/pruebas_cmake" -B"/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/pruebas_cmake"
   description = Re-running CMake...
   generator = 1
 
@@ -71,7 +71,7 @@ rule RERUN_CMAKE
 # Rule for cleaning additional files.
 
 rule CLEAN_ADDITIONAL
-  command = C:\ST\STM32CubeCLT_1.18.0\CMake\bin\cmake.exe -DCONFIG=$CONFIG -P CMakeFiles\clean_additional.cmake
+  command = /opt/st/stm32cubeclt_1.18.0/CMake/bin/cmake -DCONFIG=$CONFIG -P CMakeFiles/clean_additional.cmake
   description = Cleaning additional files...
 
 
@@ -79,7 +79,7 @@ rule CLEAN_ADDITIONAL
 # Rule for cleaning all built files.
 
 rule CLEAN
-  command = C:\ST\STM32CubeCLT_1.18.0\Ninja\bin\ninja.exe $FILE_ARG -t clean $TARGETS
+  command = /opt/st/stm32cubeclt_1.18.0/Ninja/bin/ninja $FILE_ARG -t clean $TARGETS
   description = Cleaning all built files...
 
 
@@ -87,6 +87,6 @@ rule CLEAN
 # Rule for printing all primary targets available.
 
 rule HELP
-  command = C:\ST\STM32CubeCLT_1.18.0\Ninja\bin\ninja.exe -t targets
+  command = /opt/st/stm32cubeclt_1.18.0/Ninja/bin/ninja -t targets
   description = All primary targets available:
 

@@ -8,7 +8,7 @@
 #ifndef INC_COMM_H_
 #define INC_COMM_H_
 
-#include "main.h"
+#include "usart.h"
 
 
 //defines

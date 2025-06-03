@@ -1,0 +1,6 @@
+/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/PRUEBAS_ASINCRONO/funcionando_sincronico_v2/build/Debug/CMakeFiles/funcionando_23-05_001.dir
+/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/PRUEBAS_ASINCRONO/funcionando_sincronico_v2/build/Debug/CMakeFiles/edit_cache.dir
+/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/PRUEBAS_ASINCRONO/funcionando_sincronico_v2/build/Debug/CMakeFiles/rebuild_cache.dir
+/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/PRUEBAS_ASINCRONO/funcionando_sincronico_v2/build/Debug/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
+/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/PRUEBAS_ASINCRONO/funcionando_sincronico_v2/build/Debug/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/PRUEBAS_ASINCRONO/funcionando_sincronico_v2/build/Debug/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir

@@ -142,12 +142,12 @@ App_States_t handleState(void){
 
 		break;
 	case STOPPED:
-		__HAL_UART_DISABLE_IT(&huart2, UART_IT_RXNE);
+		__HAL_UART_DISABLE_IT(&huart1, UART_IT_RXNE);
 		break;
 
 	case FINISH:
 		// Asegúrate de que las interrupciones de UART estén habilitadas al finalizar
-		__HAL_UART_ENABLE_IT(&huart2, UART_IT_RXNE);
+		__HAL_UART_ENABLE_IT(&huart1, UART_IT_RXNE);
 		app_state = IDLE; // Vuelve al estado IDLE
 
 		break;

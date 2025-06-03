@@ -54,9 +54,9 @@ extern TIM_HandleTypeDef htim1;
 
 // comms
 extern const uint32_t CPU_clock;
-extern UART_HandleTypeDef huart2;
+//extern UART_HandleTypeDef huart1;
 // dma
-extern DMA_HandleTypeDef hdma_usart2_tx;
+//extern DMA_HandleTypeDef hdma_usart1_tx;
 
 extern  CRC_HandleTypeDef hcrc;
 
@@ -74,12 +74,11 @@ extern  CRC_HandleTypeDef hcrc;
 
 /* USER CODE END EM */
 
-void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
-
 /* Exported functions prototypes ---------------------------------------------*/
 void Error_Handler(void);
 
 /* USER CODE BEGIN EFP */
+extern volatile uint32_t led_tick;
 
 /* USER CODE END EFP */
 
