@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include "motor_control.h"
 #define KP 0.75f
-#define KI 0.85f //real Ki = KI * 2/SCALE
+#define KI 1.05f //real Ki = KI * 2/SCALE
 #define SCALE 1
 #define dt 0.002
 
@@ -42,7 +42,7 @@
 ////////
 
 #define  ZCP_TO_CHECK 4
-#define SPEED_TOLERANCE_PCT 40
+#define SPEED_TOLERANCE_PCT 60
 
 volatile uint16_t speed_command = 0;
 volatile uint16_t pwmVal = 0;
