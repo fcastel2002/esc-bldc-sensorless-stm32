@@ -24,17 +24,13 @@ volatile uint16_t mod_q15 = 6553;       // 0.2 in Q15
 
 void generate_sine_tables(uint16_t pwm_arr, uint8_t direction)
 {
-    /* -----------------------------------------------------------------
-     * 1. Calculamos una sola vez; si llamas varias veces, protégelo con
-     *    un flag estático o muévelo a la inicialización.
-     * -----------------------------------------------------------------*/
     for (uint16_t i = 0; i < SIN_TABLE_SIZE; i++)
     {
         /* Ángulo base 0°-360° (rad) */
         float angle = 2.0f * (float)M_PI * i / SIN_TABLE_SIZE;
 
         /* -------------------------------------------------------------
-         * 2. Convertimos de rango [-1 … +1] a [0 … Q15_MAX]
+         * Convertimos de rango [-1 … +1] a [0 … Q15_MAX]
          *    ( 0 = 0 % duty, 32 767 ≈ 100 % duty )
          *    Fórmula:  q15 = (sin + 1) * 0.5 * 32767
          * -------------------------------------------------------------*/
@@ -42,7 +38,7 @@ void generate_sine_tables(uint16_t pwm_arr, uint8_t direction)
         uint16_t v = (uint16_t)((sinf(angle - 2.0f * (float)M_PI / 3.0f) * 0.5f + 0.5f) * Q15_MAX);
         uint16_t w = (uint16_t)((sinf(angle - 4.0f * (float)M_PI / 3.0f) * 0.5f + 0.5f) * Q15_MAX);
 
-        /* 3. Sentido de giro: cambia el orden de las fases si direction=1 */
+        /* Sentido de giro: cambia el orden de las fases si direction=1 */
         if (direction == 0)         // Sentido “normal”
         {
             sin_table_U[i] = u;
