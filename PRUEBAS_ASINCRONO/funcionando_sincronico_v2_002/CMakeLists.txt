@@ -22,8 +22,21 @@ endif()
 set(CMAKE_PROJECT_NAME funcionando_23-05_002)
 
 # Include toolchain file
-include("cmake/gcc-arm-none-eabi.cmake")
+set(CMAKE_SYSTEM_NAME Generic)
+set(CMAKE_SYSTEM_PROCESSOR arm)
 
+# Buscamos el compilador en el PATH
+find_program(ARM_GCC arm-none-eabi-gcc)
+if(NOT ARM_GCC)
+    message(FATAL_ERROR "arm-none-eabi-gcc no fue encontrado en el PATH.")
+endif()
+
+# Asignamos el compilador C y ASM
+set(CMAKE_C_COMPILER ${ARM_GCC})
+set(CMAKE_ASM_COMPILER ${ARM_GCC})
+
+# Opcional: evitar errores con el linker si no lo usás todavía
+set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
 # Enable compile command to ease indexing with e.g. clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 
@@ -56,6 +69,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/startup.c
     Core/Src/comm.c
     Core/Src/state_machine.c
+    Core/Src/speedSensing.c
 )
 
 # Add include paths

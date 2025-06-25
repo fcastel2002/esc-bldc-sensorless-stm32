@@ -48,14 +48,11 @@ extern volatile uint16_t current_cnt ;
 
 extern volatile uint8_t direction;
 // RUNTIME FUNCTIONS
-void alignment(void);
-void startup(void);
 extern void update_all_motor_control(void);
 void pi_control(void);
 extern void motor_detection(void);
 void commutation(int8_t step);
 void zero_crossing(uint8_t fase);
-void pwm_input(TIM_HandleTypeDef *htim);
 extern void check_motor_status(void);
 extern void stop_motor(uint8_t mode);
 

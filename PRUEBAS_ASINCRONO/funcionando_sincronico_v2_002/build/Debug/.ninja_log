@@ -1,4 +1,5 @@
 # ninja log v5
+<<<<<<< Updated upstream
 2	20	1748988208987530241	CMakeFiles/funcionando_23-05_002.dir/startup_stm32f103xb.s.obj	ab203806c1a58817
 2	127	1748003547367536410	CMakeFiles/funcionando_23-05_001.dir/Core/Src/stm32f1xx_it.c.obj	6cc3778f893ebef4
 1	211	1748988209174535876	CMakeFiles/funcionando_23-05_002.dir/Core/Src/crc.c.obj	a69bd6ae52a877e8
@@ -52,3 +53,57 @@
 151	275	1748988209242537925	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_flash_ex.c.obj	b420bcb68863f888
 3	151	1748988209117534159	CMakeFiles/funcionando_23-05_002.dir/Core/Src/flash_config.c.obj	fbf40675a386bda3
 2	123	1748988209089533315	CMakeFiles/funcionando_23-05_002.dir/Core/Src/stm32f1xx_it.c.obj	5bbd6a20a0a71c33
+=======
+3	200	1749782871399700408	CMakeFiles/funcionando_23-05_002.dir/Core/Src/flash_config.c.obj	75c82fed087c2fa0
+3	172	1749782871373699864	CMakeFiles/funcionando_23-05_002.dir/Core/Src/stm32f1xx_hal_msp.c.obj	403e2c36713e798
+2	157	1749782871358699550	CMakeFiles/funcionando_23-05_002.dir/Core/Src/main.c.obj	8cedca41df410bb8
+143	268	1749782871471701915	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_gpio.c.obj	c4ee22cadc651e95
+2	193	1749782871394700303	CMakeFiles/funcionando_23-05_002.dir/Core/Src/usart.c.obj	aa46066d7c4dd23b
+157	307	1749782871510702731	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_cortex.c.obj	3ccd8f0d5e2f72d5
+7	9	0	clean	a31eedcededa8236
+3	87	1749782871290698126	CMakeFiles/funcionando_23-05_002.dir/Core/Src/syscalls.c.obj	1b6eb4057353cd7d
+177	397	1749782871600704615	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_tim.c.obj	ae0b562cdd0a6612
+2	137	1749782871338699131	CMakeFiles/funcionando_23-05_002.dir/Core/Src/crc.c.obj	ea561f4c9d2ff0a
+157	262	1749782871461701706	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_pwr.c.obj	a287bdc8eee16532
+147	319	1749782871522702983	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_dma.c.obj	2003100767d92c6d
+176	318	1749782871520702941	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_exti.c.obj	93c20fd8f769347b
+4	177	1749782871375699905	CMakeFiles/funcionando_23-05_002.dir/Core/Src/startup.c.obj	2584c9edc815cab9
+3	143	1749782871345699277	CMakeFiles/funcionando_23-05_002.dir/Core/Src/callbacks.c.obj	fb41acbb0dc9b564
+167	319	1749782871522702983	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_flash.c.obj	13592a9c0d707865
+179	332	1749782871535703255	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_tim_ex.c.obj	137287f400f65522
+1	7	0	CMakeFiles/clean.additional	ef993b15a92b8f11
+397	469	1749782871670706081	funcionando_23-05_002.elf	7786c28f85d5e6d
+2	134	1749782871335699068	CMakeFiles/funcionando_23-05_002.dir/Core/Src/stm32f1xx_it.c.obj	ea6ecfe0f219cc28
+14	176	1749782871378699968	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_gpio_ex.c.obj	9afcffecec7d217b
+3	14	1749782871216696577	CMakeFiles/funcionando_23-05_002.dir/startup_stm32f103xb.s.obj	167c7b21d4e4987c
+4	196	1749782871396700345	CMakeFiles/funcionando_23-05_002.dir/Core/Src/comm.c.obj	1ca4a48ee48731d0
+138	265	1749782871464701769	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rcc_ex.c.obj	321ac550a4767095
+3	179	1749782871380700010	CMakeFiles/funcionando_23-05_002.dir/Core/Src/hard_config.c.obj	1ebb680e0051e900
+4	183	1749782871384700094	CMakeFiles/funcionando_23-05_002.dir/Core/Src/motor_control.c.obj	d889ea665a53ccac
+2	184	1749782871384700094	CMakeFiles/funcionando_23-05_002.dir/Core/Src/tim.c.obj	122b91731842ff4e
+3	51	1749782871250697289	CMakeFiles/funcionando_23-05_002.dir/Core/Src/sysmem.c.obj	650bca4ff04337bd
+172	306	1749782871509702710	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_flash_ex.c.obj	31812c27cc74a408
+2	167	1749782871365699696	CMakeFiles/funcionando_23-05_002.dir/Core/Src/gpio.c.obj	d88a0ae24bd199ca
+5	147	1749782871349699361	CMakeFiles/funcionando_23-05_002.dir/Core/Src/state_machine.c.obj	fd4447883a5f1962
+51	219	1749782871421700868	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_crc.c.obj	3877b0064c484c7d
+8	157	1749782871359699571	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj	12f8b8d07fbdd45d
+183	332	1749782871535703255	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_uart.c.obj	2fa961f27e3797f
+87	220	1749782871422700889	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal.c.obj	e79a384088371e81
+134	307	1749782871510702731	cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rcc.c.obj	3715b0ea91741cb7
+4	33	1750889175869651958	CMakeFiles/funcionando_23-05_002.dir/Core/Src/speedSensing.c.obj	d711f73d2ce40110
+2	127	1750889175963653417	CMakeFiles/funcionando_23-05_002.dir/Core/Src/callbacks.c.obj	fb41acbb0dc9b564
+2	129	1750889175965653448	CMakeFiles/funcionando_23-05_002.dir/Core/Src/hard_config.c.obj	1ebb680e0051e900
+1	129	1750889175965653448	CMakeFiles/funcionando_23-05_002.dir/Core/Src/gpio.c.obj	d88a0ae24bd199ca
+2	129	1750889175965653448	CMakeFiles/funcionando_23-05_002.dir/Core/Src/usart.c.obj	aa46066d7c4dd23b
+1	138	1750889175974653588	CMakeFiles/funcionando_23-05_002.dir/Core/Src/main.c.obj	8cedca41df410bb8
+1	156	1750889175991653852	CMakeFiles/funcionando_23-05_002.dir/Core/Src/crc.c.obj	ea561f4c9d2ff0a
+3	158	1750889175993653883	CMakeFiles/funcionando_23-05_002.dir/Core/Src/state_machine.c.obj	fd4447883a5f1962
+1	163	1750889175998653960	CMakeFiles/funcionando_23-05_002.dir/Core/Src/tim.c.obj	122b91731842ff4e
+2	166	1750889176002654023	CMakeFiles/funcionando_23-05_002.dir/Core/Src/startup.c.obj	2584c9edc815cab9
+2	168	1750889176003654038	CMakeFiles/funcionando_23-05_002.dir/Core/Src/comm.c.obj	1ca4a48ee48731d0
+2	172	1750889176008654116	CMakeFiles/funcionando_23-05_002.dir/Core/Src/stm32f1xx_hal_msp.c.obj	403e2c36713e798
+2	172	1750889176008654116	CMakeFiles/funcionando_23-05_002.dir/Core/Src/flash_config.c.obj	75c82fed087c2fa0
+2	177	1750889176013654193	CMakeFiles/funcionando_23-05_002.dir/Core/Src/stm32f1xx_it.c.obj	ea6ecfe0f219cc28
+2	177	1750889176013654193	CMakeFiles/funcionando_23-05_002.dir/Core/Src/motor_control.c.obj	d889ea665a53ccac
+177	336	1750889176171656647	funcionando_23-05_002.elf	be606e3f08b486c1
+>>>>>>> Stashed changes
