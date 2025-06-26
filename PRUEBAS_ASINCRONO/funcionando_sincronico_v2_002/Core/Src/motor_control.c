@@ -43,58 +43,72 @@
 #define  ZCP_TO_CHECK 4
 #define SPEED_TOLERANCE_PCT 25
 
-volatile uint16_t speed_command = 0;
+
+
+// MANEJO DE CONMUTACION
+	// Variables
 volatile uint16_t pwmVal = 0;
 volatile int8_t commutationStep = 0;
 bool float_W = false;
 bool float_U = false;
 bool float_V = false;
+	//Funciones
+static void commutation(int8_t step);
 
-static volatile uint16_t pwm_freq_input = 0;
 
+// CONFIGURACION DE MOTOR
+	// Variables
+volatile uint8_t motor_control_config_done = 0;
+volatile uint16_t max_pwm = 0;
+volatile bool motor_stalled = false;
+	// Funciones
+	
+
+// VARIABLES PARA CONTROL PI DE VELOCIDAD
 volatile uint16_t speed_setpoint =  0;
-
 static volatile int32_t speed_prev_error = 0;
-
-//control pi variables
 static volatile uint16_t max_limit_pwm = 0;
 static volatile uint16_t min_limit_pwm = 0;
 static volatile float pwm_speed_range_relation = 0.0f;
-volatile uint8_t motor_control_config_done = 0;
-volatile uint8_t consistent_zero_crossing = 0;
-volatile uint16_t max_pwm = 0;
-volatile bool motor_stalled = false;
-
 static volatile uint16_t speed_measure;
 static volatile int32_t speed_error;
 static volatile int32_t speed_output = 0;
 static volatile float speed_integral = 0;
-
 static volatile float speed_proportional;
 static volatile float max_speed_integral = 0;
 static volatile float min_speed_integral = 0;
-//zero crossing algorithm variables
+//====================================================
+
+
+// VARIABLES PARA MANEJO DE VELOCIDAD
 volatile int32_t diff_speed = 0;
 volatile uint8_t direction = 0;
+//====================================================
 
-
+// VARIABLES PARA CHEQUEO DE CALIDAD DEL CRUCE POR CERO
 static uint16_t last_W_timestamp = 0;
 static uint16_t W_periods[ZCP_TO_CHECK];
 static uint8_t W_period_idx = 0;
 static uint8_t valid_W_zcp = 0;
+volatile uint8_t consistent_zero_crossing = 0; //flag
+//====================================================
 
-// speed measure digital filter variables
+// VARIABLES PARA FILTRO DIGITAL DE VELOCIDAD INPUT CAPTURE
 static volatile uint8_t speed_buffer_size = 1;
 static volatile uint16_t speed_buffer[2] = {0};
 static volatile uint16_t filtered_speed = 0;
 static volatile uint16_t last_speed_capture = 1;
+//====================================================
 
-// Variables para medición tri-fase
+// VARIABLES PARA MEDICION DE VELOCIDAD DE CONSENSO TRIFASICO
 phase_measurement_t phase_measurements[PHASE_COUNT] = {0}; 
 volatile uint16_t consensus_speed = 0;
 volatile uint8_t active_phases_count = 0;
 volatile uint8_t speed_measurement_ready = 0;
+//====================================================
 
+
+// FUNCIONES PARA MEDICION DE VELOCIDAD
 
 static void process_phase_measurement(uint8_t phase_idx, uint16_t current_timestamp);
 static void calculate_consensus_speed(void);
@@ -103,9 +117,33 @@ int8_t safe_mod(int8_t value, int8_t mod) {
     return (value % mod + mod) % mod;
 }
 
-void commutation(int8_t step) {
-
-
+/**
+ * @brief Realiza la conmutación de las fases del motor BLDC según el paso especificado
+ *
+ * Esta función controla las seis secuencias de conmutación del motor
+ * configurando los MOSFETs de potencia y los canales PWM correspondientes. Cada paso
+ * de conmutación energiza dos fases mientras deja la tercera flotante para detectar
+ * el cruce por cero de la fuerza contraelectromotriz (back-EMF).
+ *
+ * @param step Paso de conmutación a ejecutar (POS_UV, POS_UW, POS_VW, POS_VU, POS_WU, POS_WV)
+ *             También soporta POS_INIT y POS_SOUND para configuraciones especiales
+ *
+ * @details Secuencia de conmutación para motor BLDC:
+ * - POS_UV: U=PWM, V=LOW, W=FLOAT (detecta cruce por cero en W con flanco descendente)
+ * - POS_UW: U=PWM, W=LOW, V=FLOAT (detecta cruce por cero en V con flanco ascendente)
+ * - POS_VW: V=PWM, W=LOW, U=FLOAT (detecta cruce por cero en U con flanco descendente)
+ * - POS_VU: V=PWM, U=LOW, W=FLOAT (detecta cruce por cero en W con flanco ascendente)
+ * - POS_WU: W=PWM, U=LOW, V=FLOAT (detecta cruce por cero en V con flanco descendente)
+ * - POS_WV: W=PWM, V=LOW, U=FLOAT (detecta cruce por cero en U con flanco ascendente)
+ *
+ * @note Configuraciones especiales:
+ * - POS_INIT: Configuración inicial para arranque
+ * - POS_SOUND: Todas las fases con PWM para generar sonido
+ *
+ * @warning Esta función modifica directamente registros GPIO y TIM para máxima velocidad
+ * @warning Debe llamarse con un paso válido para evitar estados indefinidos del motor
+ */
+static void commutation(int8_t step) {
 	switch(step) {
 
 	case POS_UV:
@@ -270,7 +308,6 @@ void zero_crossing(uint8_t fase){
 			uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
 			process_phase_measurement(0, current_timestamp);  // Fase W = índice 0
 			
-			// Mantener compatibilidad con código existente
 			if(last_W_timestamp != 0){
 				uint16_t period;
 				if(last_W_timestamp > current_timestamp){
@@ -454,6 +491,44 @@ static inline uint16_t map_speed(uint16_t raw_speed){
 
 }
 
+/**
+ * @brief Controlador PI (Proporcional-Integral) para regulación de velocidad del motor
+ *
+ * Esta función implementa un controlador PI discreto para mantener la velocidad del motor
+ * en el valor de referencia (speed_setpoint). El controlador calcula la salida PWM
+ * necesaria basándose en el error entre la velocidad deseada y la velocidad medida.
+ *
+ * @details Algoritmo del controlador PI:
+ * 1. Mapea la velocidad filtrada a unidades PWM usando map_speed()
+ * 2. Calcula el error: error = setpoint - velocidad_medida
+ * 3. Término proporcional: P = KP * error / SCALE
+ * 4. Término integral: I += KI * (error + error_previo) * dt
+ * 5. Anti-windup del integrador: limita la integral según los límites PWM
+ * 6. Salida final: PWM = P + I (con saturación en límites PWM)
+ *
+ * @note Parámetros del controlador:
+ * - KP: Ganancia proporcional (0.75f)
+ * - KI: Ganancia integral (1.35f)
+ * - dt: Período de muestreo (0.002s = 2ms)
+ * - SCALE: Factor de escalado (1)
+ *
+ * @note Variables globales utilizadas:
+ * - speed_setpoint: Velocidad deseada en unidades PWM
+ * - filtered_speed: Velocidad medida y filtrada en unidades de período
+ * - pwmVal: Salida PWM calculada para el motor
+ * - speed_integral: Estado del integrador PI
+ * - max_limit_pwm, min_limit_pwm: Límites de saturación PWM
+ *
+ * @details Anti-windup implementado:
+ * - Calcula límites dinámicos para el integrador basados en la salida proporcional
+ * - max_speed_integral = max_limit_pwm - speed_proportional
+ * - min_speed_integral = min_limit_pwm - speed_proportional
+ * - Previene saturación del integrador cuando la salida alcanza los límites PWM
+ * - Mejora el tiempo de respuesta transitorio del controlador
+ *
+ * @note Solo opera cuando app_state == CLOSEDLOOP
+ * @warning No utiliza protección de interrupciones, debe ser llamada desde contexto seguro
+ */
 void pi_control(){
 	speed_measure =  map_speed(filtered_speed);
 	if(app_state == CLOSEDLOOP){
@@ -520,6 +595,40 @@ void stop_motor(uint8_t mode){
 	}
 }
 
+/**
+ * @brief Procesa mediciones de una fase específica para el sistema de consenso tri-fase
+ *
+ * Esta función analiza los períodos entre cruces por cero de una fase individual,
+ * mantiene un historial de mediciones y evalúa la consistencia de las mismas.
+ * Es parte del sistema de medición redundante tri-fase para mayor confiabilidad.
+ *
+ * @param phase_idx Índice de la fase (0=W, 1=V, 2=U)
+ * @param current_timestamp Timestamp actual capturado del timer (16-bit)
+ *
+ * @details Algoritmo de procesamiento:
+ * 1. Calcula período entre timestamp actual y anterior
+ * 2. Maneja overflow del contador de 16-bit correctamente
+ * 3. Filtra períodos fuera de rango válido (50 < período < 50000)
+ * 4. Almacena período en buffer circular de ZCP_BUFFER_SIZE elementos
+ * 5. Calcula período promedio cuando buffer está lleno
+ * 6. Evalúa consistencia comparando cada período con el promedio
+ * 7. Marca fase como consistente si todos los períodos están dentro de tolerancia
+ *
+ * @note Estructura de datos utilizada:
+ * - phase_measurements[phase_idx]: Estructura con buffer circular y estadísticas
+ * - last_timestamp: Último timestamp registrado para la fase
+ * - periods[]: Buffer circular de últimos períodos
+ * - avg_period: Período promedio calculado
+ * - is_consistent: Flag de consistencia de mediciones
+ *
+ * @note Criterios de validación:
+ * - Período debe estar entre 50 y 50000 para evitar ruido
+ * - Requiere ZCP_BUFFER_SIZE muestras para calcular promedio
+ * - Tolerancia de consistencia definida por SPEED_TOLERANCE_PCT
+ *
+ * @warning Esta función debe ser llamada desde contexto de interrupción
+ * @warning Los datos son válidos solo después de ZCP_BUFFER_SIZE mediciones
+ */
 static void process_phase_measurement(uint8_t phase_idx, uint16_t current_timestamp) {
     phase_measurement_t* phase = &phase_measurements[phase_idx];
     
@@ -563,7 +672,39 @@ static void process_phase_measurement(uint8_t phase_idx, uint16_t current_timest
     phase->last_timestamp = current_timestamp;
 }
 
-// Función para calcular velocidad por consenso
+/**
+ * @brief Calcula velocidad por consenso utilizando mediciones de las tres fases
+ *
+ * Esta función implementa un algoritmo de consenso para determinar la velocidad
+ * del motor basándose en las mediciones de múltiples fases, proporcionando
+ * mayor robustez y confiabilidad que la medición de una sola fase.
+ *
+ * @details Algoritmo de consenso:
+ * 1. Recopila velocidades válidas de todas las fases consistentes
+ * 2. Requiere mínimo 2 fases para establecer consenso
+ * 3. Calcula promedio inicial de todas las velocidades válidas
+ * 4. Verifica que las velocidades estén dentro del umbral de consenso
+ * 5. Calcula velocidad final promediando solo las mediciones consensuadas
+ * 6. Si solo hay 1 fase válida, la usa con precaución
+ * 7. Actualiza flags de estado del sistema de medición
+ *
+ * @note Variables globales actualizadas:
+ * - consensus_speed: Velocidad calculada por consenso
+ * - active_phases_count: Número de fases con mediciones válidas
+ * - speed_measurement_ready: Flag que indica si hay medición confiable
+ *
+ * @note Criterios de validación:
+ * - Fase debe ser consistente (is_consistent = 1)
+ * - Fase debe tener buffer lleno (valid_periods >= ZCP_BUFFER_SIZE)
+ * - Velocidades deben estar dentro de SPEED_CONSENSUS_THRESHOLD (15%)
+ * - Mínimo 2 fases para consenso, 1 fase para operación degradada
+ *
+ * @note Estados de salida:
+ * - speed_measurement_ready = 1: Medición confiable disponible
+ * - speed_measurement_ready = 0: Mediciones inconsistentes o insuficientes
+ *
+ * @warning Esta función debe ser llamada periódicamente para mantener mediciones actuales
+ */
 static void calculate_consensus_speed(void) {
     uint16_t valid_speeds[PHASE_COUNT];
     uint8_t valid_count = 0;

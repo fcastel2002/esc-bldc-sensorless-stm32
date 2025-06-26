@@ -51,12 +51,13 @@ extern volatile uint8_t direction;
 extern void update_all_motor_control(void);
 void pi_control(void);
 extern void motor_detection(void);
-void commutation(int8_t step);
-void zero_crossing(uint8_t fase);
+//void commutation(int8_t step);
+extern void zero_crossing(uint8_t fase);
+
 extern void check_motor_status(void);
 extern void stop_motor(uint8_t mode);
 
-// Nuevas definiciones para medición tri-fase
+// MACROS PARA MEDICION DE VELOCIDAD 
 #define PHASE_COUNT 3
 #define ZCP_BUFFER_SIZE 4
 #define SPEED_CONSENSUS_THRESHOLD 15  // % de tolerancia entre fases
