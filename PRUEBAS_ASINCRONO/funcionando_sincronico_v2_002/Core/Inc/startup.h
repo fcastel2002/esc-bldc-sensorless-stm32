@@ -22,28 +22,21 @@ typedef struct {
     uint16_t update_interval_ms;// Intervalo entre actualizaciones
     uint16_t startup_counter;   // Simple iteration counter for startup
 } SineDriveController;
-extern void alignment(void);
-extern void startup(void);
+
 
 extern const uint16_t sineLookupTable[100];
 
 /// ALIGN CONFIG
 #define ALIGN_TIME 15000 // 150ms per step
 #define DC_ALIGN 1400	// DDUTY CYCLE 1300 -> 72% PARA ALIGNMENT
-///
-#define PREPOSITIONING_RAMP_TABLE_SIZE 10
-static const uint16_t prepositioningRamp_table[PREPOSITIONING_RAMP_TABLE_SIZE] =  {150,300,450,600,750,900,1050,1200,1300,1500};
+
 extern volatile uint16_t zero_crossings;
 
 // FOC STARTUP DEFINES
 #define SIN_TABLE_SIZE 359
-extern void generate_sine_tables(uint16_t max_pwm, uint8_t direction);
 extern void update_pwm_startup_foc();
-void start_foc_ramp(void);
-void update_foc_ramp(void);
 extern void foc_startup(void);
 
-void executeTransition(void);
 
 extern uint16_t sin_table_U[SIN_TABLE_SIZE];
 extern uint16_t sin_table_V[SIN_TABLE_SIZE];

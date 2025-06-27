@@ -1,0 +1,24 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Flash STM32",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-c",
+        "openocd -f interface/stlink.cfg -f target/stm32f1x.cfg -c \"program \\\"${workspaceFolder}/build/Debug/funcionando_23-05_002.elf\\\" verify reset exit\""
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "options": {
+        "shell": {
+          "executable": "/bin/bash",
+          "args": ["-c"]
+        }
+      }
+    }
+  ]
+}

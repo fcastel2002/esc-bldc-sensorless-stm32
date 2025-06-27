@@ -15,7 +15,6 @@ bool startup_flag = false;
 bool startup_ok = false;
 
 const TimerDependentEvent eventTable[]={
-		{ALIGNING, &aligned_flag, ALIGN_TIME},
 		{RUNNING, &eventFlag, 1},
 		{STARTUP, &startup_flag, STARTUP_TIME_X},
 		{IDLE, NULL, 0}
@@ -88,8 +87,7 @@ App_States_t handleState(void){
 
 	case STARTUP:
 		break;
-	case ALIGNING:
-		break;
+
 	case FOC_STARTUP:
 		break;
 	case RUNNING:

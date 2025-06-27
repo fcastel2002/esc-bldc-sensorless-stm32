@@ -121,7 +121,7 @@ CMAKE_FIND_PACKAGE_REDIRECTS_DIR:STATIC=/home/pachi/Documents/Proyectos/ESC Sens
 CMAKE_INSTALL_PREFIX:PATH=/usr/local
 
 //Program used to build from build.ninja files.
-CMAKE_MAKE_PROGRAM:FILEPATH=/usr/bin/ninja
+CMAKE_MAKE_PROGRAM:FILEPATH=/opt/st/stm32cubeclt_1.18.0/Ninja/bin/ninja
 
 //Flags used by the linker during the creation of modules during
 // all build types.

@@ -1,6 +1,6 @@
-set(CMAKE_HOST_SYSTEM "Linux-6.8.0-51-generic")
+set(CMAKE_HOST_SYSTEM "Linux-6.8.0-60-generic")
 set(CMAKE_HOST_SYSTEM_NAME "Linux")
-set(CMAKE_HOST_SYSTEM_VERSION "6.8.0-51-generic")
+set(CMAKE_HOST_SYSTEM_VERSION "6.8.0-60-generic")
 set(CMAKE_HOST_SYSTEM_PROCESSOR "x86_64")
 
 include("/home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/PRUEBAS_ASINCRONO/funcionando_sincronico_v2_002/cmake/gcc-arm-none-eabi.cmake")

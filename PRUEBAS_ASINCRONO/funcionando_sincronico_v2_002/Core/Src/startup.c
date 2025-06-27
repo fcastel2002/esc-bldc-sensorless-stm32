@@ -21,8 +21,10 @@ uint16_t sin_table_V[SIN_TABLE_SIZE] = {0};
 uint16_t sin_table_W[SIN_TABLE_SIZE] = {0};
 static uint16_t zero_sine_value = 0;
 volatile uint16_t mod_q15 = 6553;       // 0.2 in Q15
+static void generate_sine_tables(uint16_t pwm_arr, uint8_t direction);
+static void executeTransition(void);
 
-void generate_sine_tables(uint16_t pwm_arr, uint8_t direction)
+static void generate_sine_tables(uint16_t pwm_arr, uint8_t direction)
 {
     for (uint16_t i = 0; i < SIN_TABLE_SIZE; i++)
     {
@@ -59,6 +61,39 @@ SineDriveController sine_ctrl = {
     .timer_arr =initial_arr,// Frecuencia inicial baja (~50 Hz)
 };
 
+/**
+ * @brief Inicializa y ejecuta el arranque suave del motor usando control FOC sinusoidal
+ *
+ * Esta función implementa un arranque suave del motor BLDC utilizando señales sinusoidales
+ * en las tres fases. El arranque FOC (Field Oriented Control) permite acelerar gradualmente
+ * el motor desde velocidad cero hasta una velocidad donde el control six-step puede tomar
+ * el control de manera estable.
+ *
+ * @details Secuencia de inicialización:
+ * 1. Configura el timer ARR con frecuencia inicial baja (initial_arr = 8000)
+ * 2. Genera tablas sinusoidales para las tres fases según la dirección del motor
+ * 3. Configura TIM4 como timer de actualización PWM con PSC=35
+ * 4. Habilita todas las salidas PWM y los enable de las tres fases
+ * 5. Inicia el timer TIM4 con interrupción de actualización
+ * 6. Cambia el estado de la aplicación a FOC_STARTUP
+ *
+ * @note Configuración de hardware:
+ * - TIM1: Generación PWM para las tres fases del motor
+ * - TIM4: Timer de control de frecuencia del arranque FOC
+ * - PSC de TIM4: 35 (para obtener frecuencia de actualización adecuada)
+ * - ARR inicial: 8000 (frecuencia aproximada de 50 Hz)
+ *
+ * @note Variables globales inicializadas:
+ * - app_state: Cambia a FOC_STARTUP
+ * - float_U, float_V, float_W: Todas configuradas como true
+ * - sine_ctrl.startup_counter: Resetea a 0
+ * - sine_ctrl.timer_arr: Configurado con valor inicial
+ *
+ * @note Solo genera las tablas sinusoidales en la primera ejecución para optimizar performance
+ * 
+ * @warning Esta función debe ser llamada solo cuando el motor está detenido
+ * @warning Requiere que las variables de dirección y configuración estén previamente establecidas
+ */
 void foc_startup(void){
 	static uint8_t is_first_startup = 1;
     sine_ctrl.timer_arr = initial_arr;
@@ -66,10 +101,8 @@ void foc_startup(void){
 		generate_sine_tables(TIM1->ARR, direction);
 		is_first_startup = 0;
 	}
-    // 2. Configurar timer para actualización PWM
     TIM4->PSC =  35;
     TIM4->ARR = sine_ctrl.timer_arr;
-//    TIM4->CCR2 = 50;           // Valor inicial del comparador
 
 	app_state = FOC_STARTUP;
 	PWM_INIT();
@@ -97,6 +130,46 @@ volatile uint16_t sine_w = 0;
 const  uint16_t ARR_LOCK_TEST = 1800;     // ≈300 rpm eléctricos
 const  uint16_t STARTUP_ITERATIONS = 2000; // Fixed startup time iterations
 
+/**
+ * @brief Actualiza las señales PWM durante el arranque FOC sinusoidal del motor
+ *
+ * Esta función es llamada periódicamente por la interrupción de TIM4 para generar
+ * señales sinusoidales trifásicas con rampa de frecuencia y amplitud. Implementa
+ * un arranque de duración fija que acelera gradualmente el motor hasta alcanzar
+ * una velocidad estable para la transición al control six-step.
+ *
+ * @details Algoritmo de control:
+ * 1. Verifica que el estado sea FOC_STARTUP, sino retorna
+ * 2. Incrementa contador de fase según phase_step para generar rotación
+ * 3. Implementa rampa de frecuencia reduciendo timer_arr hasta ARR_LOCK_TEST
+ * 4. Implementa rampa de amplitud incrementando mod_q15 hasta 1.0 (Q15_ONE)
+ * 5. Calcula valores PWM sinusoidales para cada fase usando las tablas precalculadas
+ * 6. Aplica modulación de amplitud y escalado a rango PWM del timer
+ * 7. Después de STARTUP_ITERATIONS, ejecuta transición a modo six-step
+ *
+ * @note Parámetros de control:
+ * - phase_step: Incremento de fase por actualización (determina velocidad eléctrica)
+ * - timer_arr: Período de actualización (decrece para acelerar)
+ * - mod_q15: Amplitud de modulación en formato Q15 (0.2 a 1.0)
+ * - ARR_LOCK_TEST: Frecuencia objetivo (~300 rpm eléctricos, valor 1800)
+ * - STARTUP_ITERATIONS: Duración fija del arranque (2000 iteraciones)
+ *
+ * @details Generación de señales PWM:
+ * - Utiliza tablas sinusoidales precalculadas con desfase de 120° eléctricos
+ * - Aplica modulación de amplitud: señal_final = sin_table[idx] * mod_q15
+ * - Escalado final: PWM = (señal_modulada >> 15) * TIM1->ARR >> 15
+ * - Actualiza directamente los registros de comparación de TIM1
+ *
+ * @note Variables globales utilizadas:
+ * - sine_ctrl: Estructura de control con contadores y parámetros
+ * - sin_table_U/V/W: Tablas sinusoidales para cada fase
+ * - mod_q15: Amplitud de modulación en formato Q15
+ * - app_state: Estado actual de la aplicación
+ *
+ * @warning Solo opera cuando app_state == FOC_STARTUP
+ * @warning Debe ser llamada desde ISR de TIM4 con frecuencia constante
+ * @warning La transición automática puede interrumpir el arranque prematuramente
+ */
 void update_pwm_startup_foc(void)
 {
     if(app_state != FOC_STARTUP) return;
@@ -141,7 +214,8 @@ void update_pwm_startup_foc(void)
 }
 
 volatile bool ready_for_running = false;
-void executeTransition(void) {
+
+static void executeTransition(void) {
     // Configurar para six-step
     pwmVal = max_pwm * 0.45f;  // 30% duty cycle inicial
     // Desactivar salidas temporalmente

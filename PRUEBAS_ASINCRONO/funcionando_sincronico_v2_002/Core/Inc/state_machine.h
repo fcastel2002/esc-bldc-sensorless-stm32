@@ -24,7 +24,6 @@
 	FOC_STARTUP,
 	CONFIG,
 	RUNNING,
-	ALIGNING,
 	READY,
 	CLOSEDLOOP,// aligned
 	STOPPED,
@@ -33,15 +32,6 @@
 
 }App_States_t;
 
-typedef enum{
-
-	SENSORLESS_EVENT_NONE = 0,
-	SENSORLESS_EVENT_ZC_U,
-	SENSORLESS_EVENT_ZC_V,
-	SENSORLESS_EVENT_ZC_W,
-	SENSORLESS_EVENT_ERROR
-
-}SENSORLESS_EVENT;
 
  typedef struct{
  	App_States_t currentState;
