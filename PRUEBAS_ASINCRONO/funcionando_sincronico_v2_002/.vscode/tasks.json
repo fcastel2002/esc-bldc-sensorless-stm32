@@ -2,6 +2,14 @@
   "version": "2.0.0",
   "tasks": [
     {
+      "label": "Build Project",
+      "type": "shell",
+      "command": "make",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
       "label": "Flash STM32",
       "type": "shell",
       "command": "bash",
@@ -11,14 +19,40 @@
       ],
       "group": {
         "kind": "build",
-        "isDefault": true
+        "isDefault": false
       },
       "options": {
         "shell": {
           "executable": "/bin/bash",
-          "args": ["-c"]
+          "args": [
+            "-c"
+          ]
         }
       }
+    },
+    {
+      "label": "Build & Flash STM32",
+      "dependsOn": [
+        "CMake: build",
+        "Flash STM32"
+      ],
+      "dependsOrder": "sequence",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "type": "cmake",
+      "label": "CMake: build",
+      "command": "build",
+      "targets": [
+        "all"
+      ],
+      "preset": "${command:cmake.activeBuildPresetName}",
+      "group": "build",
+      "problemMatcher": [],
+      "detail": "CMake template build task"
     }
   ]
 }

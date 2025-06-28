@@ -21,10 +21,13 @@ volatile uint8_t tx_busy = 0;
 volatile uint8_t cmd_received_ack = 0;
 volatile uint8_t cmd_speed_received_ack = 0;
 volatile uint8_t set_cmd_received_ack = 0;
+volatile uint8_t stop_cmd_ack = 0;
 volatile uint8_t running_cmd_ack = 0;
+volatile uint8_t emergency_cmd_ack = 0;
 static char cmd_buffer[MAX_CMD_LEN];
 static uint8_t cmd_index = 0;
 ConfigStatus executeCommand(CommandAction action, CommandParam param, char* value);
+volatile App_States_t cmd_origin_state = IDLE;
 const char* configStatusToString(ConfigStatus status);
 void commInit(void){
 	memset((void*)rx_buffer,0,BUFFER_SIZE);
@@ -44,9 +47,9 @@ void processUartData(void){
 		if(byte == '\r' || byte == '\n'){
 			if(cmd_index > 0){
 				cmd_buffer[cmd_index] = '\0';
+				cmd_origin_state = app_state;
 				cmd_received_ack = 1;
 				cmd_index = 0;
-				app_state = PROCESS_COMMAND;
 				break;
 			}
 		}else if(cmd_index < MAX_CMD_LEN - 1){
@@ -95,12 +98,12 @@ void processCommand(char *cmd) {
 	}
 	
 	if(param == PARAM_UNKNOWN && (action != ACTION_RUN && action != ACTION_STOP && action != ACTION_EMERGENCY)){
-		transmitirUART("ERROR: Unknown parameter\r\n");
+		transmitirUART("ERROR: Parametro desconocido\r\n");
 		app_state = IDLE;
 		return;
 	}
-	if(app_state == CLOSEDLOOP && (action != ACTION_STOP || action!= ACTION_EMERGENCY)){
-		transmitirUART("ERROR: Cannot change parameters while in CLOSEDLOOP\r\n");
+	if(cmd_origin_state == CLOSEDLOOP && action != ACTION_STOP && action != ACTION_EMERGENCY){
+		transmitirUART("ERROR: No se puede ejecutar este comando en CLOSEDLOOP\r\n");
 		return;
 	}
 	ConfigStatus result = executeCommand(action, param, parsed == 3? value_str : NULL);
@@ -111,6 +114,34 @@ void processCommand(char *cmd) {
 	}
 
 
+
+}
+void handleCommandEffects(void) {
+    if(set_cmd_received_ack) {
+        // Transición a estado CONFIG
+        esc_config_done = 0;
+        motor_control_config_done = 0;
+        set_cmd_received_ack = 0;
+        app_state = CONFIG;
+    }
+    else if(running_cmd_ack) {
+        // Transición a estado RUNNING
+        running_cmd_ack = 0;
+        foc_startup();
+        
+    }
+    else if(stop_cmd_ack) {
+        // Transición a estado IDLE
+        stop_cmd_ack = 0;
+        stop_motor(0);
+        app_state = IDLE;
+    }
+    else if(emergency_cmd_ack) {
+        // Transición de emergencia a IDLE
+        emergency_cmd_ack = 0;
+        stop_motor(1);
+        app_state = IDLE;
+    }
 
 }
 const char *configStatusToString(ConfigStatus status){
@@ -202,7 +233,7 @@ CommandAction parseAction(char* action_str){
 	if(strcmp( action_str, "RESET") == 0) return ACTION_RESET;
 	if(strcmp (action_str, "RUN") == 0) return ACTION_RUN;
 	if(strcmp(action_str, "STOP") == 0) return ACTION_STOP;
-	if(strcmp(action_str, "STOP") == 0) return ACTION_EMERGENCY;
+	if(strcmp(action_str, "ESTOP") == 0) return ACTION_EMERGENCY;
 	return ACTION_UNKNOWN;
 }
 void transmitirUART(const char* formato, ...) {

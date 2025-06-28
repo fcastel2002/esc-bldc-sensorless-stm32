@@ -26,7 +26,8 @@ extern volatile uint8_t cmd_received_ack;
 extern volatile uint8_t cmd_speed_received_ack;
 extern volatile uint8_t set_cmd_received_ack;
 extern volatile uint8_t running_cmd_ack;
-
+extern volatile uint8_t stop_cmd_ack;
+extern volatile uint8_t emergency_cmd_ack;
  //types
 
  typedef struct {
@@ -76,7 +77,7 @@ extern volatile uint8_t running_cmd_ack;
  void commInit(void);
  void processUartData(void);
  extern uint8_t processSpeedCommand(void);
-
+extern void handleCommandEffects(void);
  extern uint16_t getActualSpeed(void);
  CommandParam parseParameter(char* param_str);
  CommandAction parseAction(char* action_str);

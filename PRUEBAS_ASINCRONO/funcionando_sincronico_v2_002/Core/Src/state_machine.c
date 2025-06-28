@@ -9,29 +9,18 @@
 #include "state_machine.h"
 
 volatile App_States_t app_state = IDLE;
-volatile bool eventFlag = false;
-bool aligned_flag = false;
-bool startup_flag = false;
-bool startup_ok = false;
 
-const TimerDependentEvent eventTable[]={
-		{RUNNING, &eventFlag, 1},
-		{STARTUP, &startup_flag, STARTUP_TIME_X},
-		{IDLE, NULL, 0}
-};
+
+
 
 App_States_t handleState(void){
 	static uint8_t comm_initialized = 0;
 	static uint32_t last_uart_check = 0;
 	static uint8_t flash_initialized = 0;
-	uint32_t current_time = 0;
+    uint32_t current_time = HAL_GetTick();
 	if(!comm_initialized){
 		commInit();
 		comm_initialized = 1;
-	}
-
-	if (app_state != RUNNING && app_state != CLOSEDLOOP) {
-		processUartData();
 	}
 
 	if(!flash_initialized){
@@ -49,43 +38,27 @@ App_States_t handleState(void){
 		foc_startup();
 		motor_stalled = false;
 	}
-	if (consistent_zero_crossing && RUNNING == app_state) {
-		app_state = READY;
-	}
-	else if( 0 == consistent_zero_crossing && CLOSEDLOOP == app_state){
-		app_state = RUNNING;
+
+
+	if(cmd_received_ack && (app_state == IDLE || app_state == RUNNING || app_state == CLOSEDLOOP)){
+		if(processSpeedCommand()){
+			cmd_speed_received_ack = 0;
+		}
+		else{
+			 processCurrentCommand();
+			 handleCommandEffects();
+
+		}
+		cmd_received_ack = 0;
 	}
 	switch(app_state){
 	case IDLE:
+		if(current_time - last_uart_check > 50) {
+                processUartData();
+                last_uart_check = current_time;
+            }
 		break;
 
-	case PROCESS_COMMAND:
-		if (cmd_received_ack) {
-			// Procesar comando actual
-			if(processSpeedCommand()){
-			cmd_speed_received_ack = 0;
-			cmd_received_ack = 0;
-			}
-	
-			processCurrentCommand();
-
-			if (!running_cmd_ack && !set_cmd_received_ack) {
-				app_state = IDLE;
-			}
-			else if (set_cmd_received_ack) {
-				esc_config_done = 0;
-				motor_control_config_done = 0;
-				set_cmd_received_ack = 0;
-				app_state = CONFIG;
-			}
-
-		}
-		else{
-			app_state = IDLE;
-		}
-		cmd_received_ack = 0;
-	
-		break;
 
 	case STARTUP:
 		break;
@@ -94,16 +67,12 @@ App_States_t handleState(void){
 		break;
 	case RUNNING:
 
-		current_time = HAL_GetTick();
 		if (current_time - last_uart_check > 50) {
 			last_uart_check = current_time;
-
 			// Procesar datos UART
 			processUartData();
-
-
 		}
-
+		if(consistent_zero_crossing)app_state = READY;
 		break;
 
 	case CONFIG:
@@ -119,9 +88,8 @@ App_States_t handleState(void){
 
 			// Procesar datos UART
 			processUartData();
-
 		}
-		//closedLoop();
+		if( 0 == consistent_zero_crossing) app_state = RUNNING;
 		break;
 	case READY:
 		TIM4->PSC = 2;
@@ -151,37 +119,3 @@ App_States_t handleState(void){
 	return (app_state);
 }
 
-void event_delay(void) {
-	__HAL_TIM_DISABLE(&htim4);
-
-	__HAL_TIM_SET_COUNTER(&htim4, 0);
-	HAL_TIM_Base_Stop_IT(&htim4);
-	HAL_TIM_Base_Stop(&htim4);
-
-	HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_3);
-	for (int i = 0; i < NUM_TIMER_EVENTS; i++) {
-		// Detener el temporizador y deshabilitar el contador
-		if (eventTable[i].currentState == app_state) {
-			if (eventTable[i].eventFlag != NULL) {
-				*(eventTable[i].eventFlag) = true;
-				__HAL_TIM_ENABLE(&htim4);
-				__HAL_TIM_SET_COUNTER(&htim4, 0);
-
-				HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_3);
-
-				return;
-
-			}
-			break;
-
-		}
-
-
-	}
-	__HAL_TIM_SET_COUNTER(&htim4, 0);
-	HAL_TIM_Base_Start_IT(&htim4);
-	HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_3);
-	__HAL_TIM_ENABLE(&htim4);
-
-
-}
