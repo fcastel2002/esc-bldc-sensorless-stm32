@@ -45,7 +45,7 @@ extern volatile uint16_t reference_comm;
 extern volatile uint16_t reference_zcp;
 
 extern volatile uint16_t current_cnt ;
-
+extern volatile int32_t diff_speed;
 extern volatile uint8_t direction;
 // RUNTIME FUNCTIONS
 extern void update_all_motor_control(void);

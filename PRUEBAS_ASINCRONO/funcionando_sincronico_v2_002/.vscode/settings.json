@@ -2,7 +2,15 @@
     "files.associations": {
         "comm.h": "c",
         "hard_config.h": "c",
-        "main.h": "c"
+        "main.h": "c",
+        "state_machine.h": "c",
+        "basic_config.h": "c",
+        "stdarg.h": "c",
+        "motor_control.h": "c",
+        "flash_config.h": "c",
+        "math.h": "c",
+        "startup.h": "c",
+        "usart.h": "c"
     },
     "cortex-debug.variableUseNaturalFormat": true
 }

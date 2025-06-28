@@ -44,6 +44,7 @@
  void event_delay(void);
  //variables
 extern volatile App_States_t app_state;
+extern volatile App_States_t pre_command_state;
 extern volatile bool eventFlag;
 extern bool aligned_flag ;
 extern bool startup_flag;

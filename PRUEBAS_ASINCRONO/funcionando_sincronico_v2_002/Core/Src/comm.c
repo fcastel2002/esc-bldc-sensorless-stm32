@@ -76,7 +76,7 @@ void processCommand(char *cmd) {
 	int parsed = sscanf(cmd, ":%[^:]:%[^:]:%s", action_str, param_str, value_str);
 
 	// Permitir comandos con solo action (parsed == 1) para RUN, STOP, EMERGENCY_STOP
-	if(parsed < 1 || (parsed < 2 && (strcmp(action_str,"RUN")!=0 && strcmp(action_str,"STOP")!=0 && strcmp(action_str,"EMERGENCY_STOP")!=0))){
+	if(parsed < 1 || (parsed < 2 && (strcmp(action_str,"RUN")!=0 && strcmp(action_str,"STOP")!=0 && strcmp(action_str,"ESTOP")!=0))){
 		transmitirUART("ERROR: Invalid command\r\n");
 		if(app_state != RUNNING && app_state != CLOSEDLOOP)app_state = IDLE;
 		return;
@@ -97,6 +97,10 @@ void processCommand(char *cmd) {
 	if(param == PARAM_UNKNOWN && (action != ACTION_RUN && action != ACTION_STOP && action != ACTION_EMERGENCY)){
 		transmitirUART("ERROR: Unknown parameter\r\n");
 		app_state = IDLE;
+		return;
+	}
+	if(app_state == CLOSEDLOOP && (action != ACTION_STOP || action!= ACTION_EMERGENCY)){
+		transmitirUART("ERROR: Cannot change parameters while in CLOSEDLOOP\r\n");
 		return;
 	}
 	ConfigStatus result = executeCommand(action, param, parsed == 3? value_str : NULL);
@@ -198,7 +202,7 @@ CommandAction parseAction(char* action_str){
 	if(strcmp( action_str, "RESET") == 0) return ACTION_RESET;
 	if(strcmp (action_str, "RUN") == 0) return ACTION_RUN;
 	if(strcmp(action_str, "STOP") == 0) return ACTION_STOP;
-	if(strcmp(action_str, "EMERGENCY_STOP") == 0) return ACTION_EMERGENCY;
+	if(strcmp(action_str, "STOP") == 0) return ACTION_EMERGENCY;
 	return ACTION_UNKNOWN;
 }
 void transmitirUART(const char* formato, ...) {
@@ -235,6 +239,10 @@ uint8_t processSpeedCommand(void) {
     }
 
     return processed;
+}
+uint16_t getActualSpeed(void){
+
+	return (uint16_t)diff_speed;
 }
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){

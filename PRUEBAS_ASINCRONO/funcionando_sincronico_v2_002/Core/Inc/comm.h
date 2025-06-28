@@ -75,7 +75,9 @@ extern volatile uint8_t running_cmd_ack;
 
  void commInit(void);
  void processUartData(void);
- uint8_t processSpeedCommand(void);
+ extern uint8_t processSpeedCommand(void);
+
+ extern uint16_t getActualSpeed(void);
  CommandParam parseParameter(char* param_str);
  CommandAction parseAction(char* action_str);
  void transmitirUART(const char *formato, ...);

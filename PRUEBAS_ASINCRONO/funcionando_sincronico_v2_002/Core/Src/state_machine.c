@@ -62,6 +62,11 @@ App_States_t handleState(void){
 	case PROCESS_COMMAND:
 		if (cmd_received_ack) {
 			// Procesar comando actual
+			if(processSpeedCommand()){
+			cmd_speed_received_ack = 0;
+			cmd_received_ack = 0;
+			}
+	
 			processCurrentCommand();
 
 			if (!running_cmd_ack && !set_cmd_received_ack) {
@@ -79,10 +84,7 @@ App_States_t handleState(void){
 			app_state = IDLE;
 		}
 		cmd_received_ack = 0;
-		if(cmd_speed_received_ack){
-			app_state = CLOSEDLOOP;
-			cmd_speed_received_ack = 0;
-		}
+	
 		break;
 
 	case STARTUP:
@@ -99,16 +101,7 @@ App_States_t handleState(void){
 			// Procesar datos UART
 			processUartData();
 
-			// Procesar comandos de velocidad si hay alguno disponible
-			if (cmd_received_ack) {
-				if (processSpeedCommand()) {
-					// Si se procesó correctamente un comando de velocidad
-					cmd_received_ack = 0;
-				} else {
-					// Ignorar otros comandos en este estado
-					cmd_received_ack = 1;
-				}
-			}
+
 		}
 
 		break;
@@ -127,16 +120,6 @@ App_States_t handleState(void){
 			// Procesar datos UART
 			processUartData();
 
-			// Procesar comandos de velocidad si hay alguno disponible
-			if (cmd_received_ack) {
-				if (processSpeedCommand()) {
-					// Si se procesó correctamente un comando de velocidad
-					cmd_received_ack = 0;
-				} else {
-					// Ignorar otros comandos en este estado
-					cmd_received_ack = 1;
-				}
-			}
 		}
 		//closedLoop();
 		break;
