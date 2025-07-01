@@ -1,4 +1,4 @@
-# Install script for directory: /home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/PRUEBAS_ASINCRONO/funcionando_sincronico_v2/cmake/stm32cubemx
+# Install script for directory: /home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/PRUEBAS_ASINCRONO/funcionando_sincronico_v2_002/cmake/stm32cubemx
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

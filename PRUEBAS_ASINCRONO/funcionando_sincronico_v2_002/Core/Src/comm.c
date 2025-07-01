@@ -29,6 +29,9 @@ static uint8_t cmd_index = 0;
 ConfigStatus executeCommand(CommandAction action, CommandParam param, char* value);
 volatile App_States_t cmd_origin_state = IDLE;
 const char* configStatusToString(ConfigStatus status);
+volatile uint16_t loggin_rate_ms = 1000;
+static LoggingQueue logging_queue = { .count = 0 };
+
 void commInit(void){
 	memset((void*)rx_buffer,0,BUFFER_SIZE);
 	rx_head = 0;
@@ -158,6 +161,7 @@ const char *configStatusToString(ConfigStatus status){
 }
 ConfigStatus executeCommand(CommandAction action, CommandParam param,  char* value){
 	ConfigStatus result = CONFIG_OK;
+	if(action != ACTION_LOGGING){
 	switch(param){
 	case PARAM_PWM_FREQ:
 		switch(action){
@@ -216,14 +220,134 @@ ConfigStatus executeCommand(CommandAction action, CommandParam param,  char* val
 				break;
 			}
 			break;
+		case PARAM_SPEED:
+			switch(action){
+				case ACTION_LOGGING:
+
+			}
+	}
+}
+	switch(action){
+		case ACTION_LOGGING:
+			switch(param){
+				case PARAM_START:
+					if(value == NULL){
+						transmitirUART("ERROR: No parameter specified for logging\r\n");
+					}else{
+						CommandParam log_param = parseParameter(value);
+						if(log_param != PARAM_UNKNOWN){
+							startLoggingParam(log_param);
+						}else{
+							transmitirUART("ERROR: Invalid parameter for logging\r\n");
+						}
+					}
+					break;
+				case PARAM_STOP:
+					if(value == NULL){
+						transmitirUART("ERROR: No parameter specified for stopping logging\r\n");	
+					}else{
+						CommandParam log_param = parseParameter(value);
+						if(log_param != PARAM_UNKNOWN){
+							stopLoggingParam(log_param);	
+						}else{
+							log_param = PARAM_ALL;
+							stopLoggingParam(log_param);
+						}
+					}
+					break;
+    			case PARAM_RATE:
+					if(value != NULL) {
+						uint16_t new_rate = atoi(value);
+						if(new_rate >= 100 && new_rate <= 5000) {
+							loggin_rate_ms = new_rate;
+							transmitirUART("Logging rate set to %d ms\r\n", new_rate);
+						}
+					}
+                	break;
+				default:
+					transmitirUART("ERROR: Invalid logging command\r\n");
+					break;
+			}
+			break;
 	}
 	return result;
 }
 
+void processLoggingQueue(void) {
+    static uint32_t last_log_tick = 0;
+    uint32_t now = HAL_GetTick();
+    
+    if (now - last_log_tick < loggin_rate_ms) {
+        return;
+    }
+    last_log_tick = now;
+    
+    for (int i = 0; i < logging_queue.count; i++) {
+        CommandParam param = logging_queue.params[i];
+        switch(param) {
+            case PARAM_PWM_FREQ: {
+                uint16_t freq = get_pwm_freq();
+                transmitirUART("[LOG] PWM_FREQ: %d Hz\r\n", freq);
+                break;
+            }
+            case PARAM_SPEED: {
+                uint16_t speed = getActualSpeed();
+                transmitirUART("[LOG] SPEED: %d RPM\r\n", speed);
+                break;
+            }
+            case PARAM_CURRENT_LIMIT: {
+                // Obtener valor actual del límite de corriente
+                float current = get_current_limit();
+                transmitirUART("[LOG] CURRENT_LIMIT: %.2f A\r\n", current);
+                break;
+            }
+            case PARAM_TEMP_LIMIT: {
+                // Obtener valor actual del límite de temperatura
+                float temp = get_temperature();
+                transmitirUART("[LOG] TEMP: %.2f C\r\n", temp);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+}
+void startLoggingParam(CommandParam param){
+	if (logging_queue.count >= MAX_LOGGED_PARAMS) {
+		transmitirUART("ERROR: Logging queue full\r\n");
+		return;
+	}
+	for(int i = 0; i < logging_queue.count; i++){
+		if(logging_queue.params[i] == param){
+			return;
+		}
+	}
+	logging_queue.params[logging_queue.count++] = param;
+	transmitirUART("Logging started for parameter: %d\r\n", param);
+}
+void stopLoggingParam(CommandParam param) {
+    for (int i = 0; i < logging_queue.count; i++) {
+        if (logging_queue.params[i] == param) {
+            // Mover los elementos restantes
+            for (int j = i; j < logging_queue.count - 1; j++) {
+                logging_queue.params[j] = logging_queue.params[j+1];
+            }
+            logging_queue.count--;
+            transmitirUART("Logging stopped for param: %d\r\n", param);
+            break;
+        }
+    }
+}
 CommandParam parseParameter(char *param_str){
 	if(strcmp(param_str, "PWM_FREQ") == 0) return PARAM_PWM_FREQ;
 	if(strcmp(param_str, "CURRENT_LIMIT") == 0) return PARAM_CURRENT_LIMIT;
 	if(strcmp(param_str, "TEMP_LIMIT") == 0) return PARAM_TEMP_LIMIT;
+	if(strcmp(param_str, "ALL") == 0) return PARAM_ALL;
+	if(strcmp(param_str, "SPEED") == 0) return PARAM_SPEED;
+	if(strcmp(param_str, "START") == 0) return PARAM_START;
+    if(strcmp(param_str, "STOP") == 0) return PARAM_STOP;
+    if(strcmp(param_str, "RATE") == 0) return PARAM_RATE;
+	
 	return PARAM_UNKNOWN;
 
 }
@@ -234,6 +358,7 @@ CommandAction parseAction(char* action_str){
 	if(strcmp (action_str, "RUN") == 0) return ACTION_RUN;
 	if(strcmp(action_str, "STOP") == 0) return ACTION_STOP;
 	if(strcmp(action_str, "ESTOP") == 0) return ACTION_EMERGENCY;
+	if(strcmp(action_str, "LOG") == 0) return ACTION_LOGGING;
 	return ACTION_UNKNOWN;
 }
 void transmitirUART(const char* formato, ...) {
@@ -273,7 +398,7 @@ uint8_t processSpeedCommand(void) {
 }
 uint16_t getActualSpeed(void){
 
-	return (uint16_t)diff_speed;
+	return (uint16_t)filtered_speed;
 }
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){

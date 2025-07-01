@@ -1,0 +1,6 @@
+/home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/definitivo/CMakeFiles/funcionando_23-05_002.dir
+/home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/definitivo/CMakeFiles/edit_cache.dir
+/home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/definitivo/CMakeFiles/rebuild_cache.dir
+/home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/definitivo/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
+/home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/definitivo/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+/home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/definitivo/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir

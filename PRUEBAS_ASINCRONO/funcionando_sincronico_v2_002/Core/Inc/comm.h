@@ -15,6 +15,7 @@
 
 #define BUFFER_SIZE 128
 #define MAX_CMD_LEN 64
+#define MAX_LOGGED_PARAMS 5
 
 //variables
 extern uint8_t rx_data[1];
@@ -28,6 +29,8 @@ extern volatile uint8_t set_cmd_received_ack;
 extern volatile uint8_t running_cmd_ack;
 extern volatile uint8_t stop_cmd_ack;
 extern volatile uint8_t emergency_cmd_ack;
+extern volatile uint8_t logger_config_done;
+
  //types
 
  typedef struct {
@@ -43,6 +46,11 @@ extern volatile uint8_t emergency_cmd_ack;
 	 CMD_OVF_ERR = 0x03,
 
  }CommandStatus;
+typedef struct{
+	CommandParam params[MAX_LOGGED_PARAMS]; // Array de parámetros a loggear
+	uint8_t count;
+
+ }LoggingQueue;
 
  typedef enum{
  	PARAM_PWM_FREQ,
@@ -53,8 +61,13 @@ extern volatile uint8_t emergency_cmd_ack;
 	PARAM_KD,
 	PARAM_MAXSPEED,
 	PARAM_MINSPEED,
-
+	PARAM_ALL,
+	PARAM_SPEED,
 	PARAM_UNKNOWN,
+	PARAM_LOG_RATE,
+	PARAM_START,
+	PARAM_STOP,
+	PARAM_RATE,
 
  }CommandParam;
 
@@ -67,6 +80,7 @@ extern volatile uint8_t emergency_cmd_ack;
 	ACTION_RUN,
 	ACTION_STOP,
 	ACTION_EMERGENCY,
+	ACTION_LOGGING,
  }CommandAction;
  // functions
 
@@ -84,7 +98,11 @@ extern void handleCommandEffects(void);
  void transmitirUART(const char *formato, ...);
  // const
  extern const Command commandTable[];
-
-
+extern volatile uint16_t logging_rate_ms;
+ 
+extern void parameterLogging(CommandParam *parameter, uint16_t rate_ms){
+void startLoggingParam(CommandParam param);
+void stopLoggingParam(CommandParam param);
+extern void processLoggingQueue(void);
 
 #endif /* INC_COMM_H_ */

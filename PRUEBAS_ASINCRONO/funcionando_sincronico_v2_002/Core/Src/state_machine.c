@@ -39,7 +39,9 @@ App_States_t handleState(void){
 		motor_stalled = false;
 	}
 
-
+	if(app_state != IDLE && app_state != HARD_ERROR) {
+        processLoggingQueue();
+    }
 	if(cmd_received_ack && (app_state == IDLE || app_state == RUNNING || app_state == CLOSEDLOOP)){
 		if(processSpeedCommand()){
 			cmd_speed_received_ack = 0;
