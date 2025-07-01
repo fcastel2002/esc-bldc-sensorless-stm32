@@ -32,6 +32,8 @@ const char* configStatusToString(ConfigStatus status);
 volatile uint16_t loggin_rate_ms = 1000;
 static LoggingQueue logging_queue = { .count = 0 };
 static const char* paramToString(CommandParam param);
+static TxQueue tx_queue = { .head = 0, .tail = 0, .count = 0, .busy = 0 };
+
 void commInit(void){
 	memset((void*)rx_buffer,0,BUFFER_SIZE);
 	rx_head = 0;
@@ -336,7 +338,7 @@ void startLoggingParam(CommandParam param){
 		}
 	}
 	logging_queue.params[logging_queue.count++] = param;
-	transmitirUART("Logging started for parameter: %d\r\n", param);
+	transmitirUART("Logging started for parameter: %s\r\n", paramToString(param));
 }
 void stopLoggingParam(CommandParam param) {
     for (int i = 0; i < logging_queue.count; i++) {
@@ -346,8 +348,8 @@ void stopLoggingParam(CommandParam param) {
                 logging_queue.params[j] = logging_queue.params[j+1];
             }
             logging_queue.count--;
-            transmitirUART("Logging stopped for param: %d\r\n", paramToString(param));
-            break;
+            transmitirUART("Logging stopped for param: %s\r\n", paramToString(param));
+            return;
         }
     }
 	transmitirUART("ERROR: Parameter not found in logging queue\r\n");
@@ -376,18 +378,36 @@ CommandAction parseAction(char* action_str){
 	return ACTION_UNKNOWN;
 }
 void transmitirUART(const char* formato, ...) {
-    va_list args;
+        __disable_irq();
+    
+    // Verificar si hay espacio en la cola
+    if (tx_queue.count >= TX_QUEUE_SIZE) {
+        __enable_irq();
+        return; // Cola llena - descartar mensaje
+    }   
+	
+	va_list args;
     va_start(args, formato);
-    static char buffer[64];
-    vsnprintf(buffer, sizeof(buffer), formato, args);
-
-    // Esperar a que termine transmisión anterior
-    uint32_t timeout = HAL_GetTick() + 100;  // 100ms timeout
-    while (tx_busy && HAL_GetTick() < timeout);
-
-    tx_busy = 1;
-    HAL_UART_Transmit_IT(&huart1, (uint8_t*)buffer, strlen(buffer));
+    char* target = tx_queue.buffers[tx_queue.head];
+    int len = vsnprintf(target, TX_BUFFER_SIZE, formato, args);
     va_end(args);
+
+
+	if (len >= TX_BUFFER_SIZE) {
+        strcpy(&target[TX_BUFFER_SIZE - 6], "...\r\n"); // Indicar truncamiento
+    }
+	    // Actualizar cola
+    tx_queue.head = (tx_queue.head + 1) % TX_QUEUE_SIZE;
+    tx_queue.count++;
+    
+    // Iniciar transmisión si no está activa
+    if (!tx_queue.busy) {
+        tx_queue.busy = 1;
+        char* msg = tx_queue.buffers[tx_queue.tail];
+        HAL_UART_Transmit_IT(&huart1, (uint8_t*)msg, strlen(msg));
+    }
+    
+    __enable_irq();
 }
 // Procesar comando de velocidad
 uint8_t processSpeedCommand(void) {
@@ -417,7 +437,21 @@ uint16_t getActualSpeed(void){
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
 	if(huart->Instance == USART1){
-		tx_busy = 0;
+		__disable_irq();
+        
+        // Eliminar mensaje completado
+        tx_queue.tail = (tx_queue.tail + 1) % TX_QUEUE_SIZE;
+        tx_queue.count--;
+        
+        // Transmitir siguiente si hay mensajes
+        if (tx_queue.count > 0) {
+            char* next_msg = tx_queue.buffers[tx_queue.tail];
+            HAL_UART_Transmit_IT(&huart1, (uint8_t*)next_msg, strlen(next_msg));
+        } else {
+            tx_queue.busy = 0;
+        }
+        
+        __enable_irq();
 	}
 }
 

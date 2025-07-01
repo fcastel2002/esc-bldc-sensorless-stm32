@@ -16,7 +16,8 @@
 #define BUFFER_SIZE 128
 #define MAX_CMD_LEN 64
 #define MAX_LOGGED_PARAMS 5
-
+#define TX_QUEUE_SIZE 10
+#define TX_BUFFER_SIZE 128
 //variables
 extern uint8_t rx_data[1];
 extern volatile char rx_buffer[BUFFER_SIZE];
@@ -37,6 +38,7 @@ extern volatile uint8_t logger_config_done;
      char *command;               // Texto del comando
      void (*execute)();
  } Command;
+
 
  typedef enum {
 
@@ -64,6 +66,13 @@ extern volatile uint8_t logger_config_done;
 	PARAM_RATE,
 
  }CommandParam;
+typedef struct {
+    char buffers[TX_QUEUE_SIZE][TX_BUFFER_SIZE];
+    uint8_t head;
+    uint8_t tail;
+    uint8_t count;
+    volatile uint8_t busy;
+} TxQueue;
 
 typedef struct{
 	CommandParam params[MAX_LOGGED_PARAMS]; // Array de parámetros a loggear
