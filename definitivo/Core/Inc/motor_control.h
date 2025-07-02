@@ -32,6 +32,7 @@ static volatile uint16_t min_limit_pwm;
 static volatile float pwm_speed_range_relation;
 extern volatile uint16_t max_pwm;
 extern volatile uint16_t speed_setpoint;
+extern volatile uint16_t speed_setpoint_rpm;
 extern volatile uint16_t speed_command;
 extern volatile uint16_t pwmVal;
 extern volatile uint16_t commutationTime;
@@ -49,15 +50,20 @@ extern volatile int32_t diff_speed;
 extern volatile uint8_t direction;
 extern volatile uint16_t filtered_speed;
 // RUNTIME FUNCTIONS
-extern void update_all_motor_control(void);
-void pi_control(void);
-extern void motor_detection(void);
+extern void updateAllMotorControl(void);
+void PIcontrol(void);
+extern void motorDetection(void);
 //void commutation(int8_t step);
-extern void zero_crossing(uint8_t fase);
+extern void zeroCrossing(uint8_t fase);
+extern uint16_t convertSpeedValue(uint16_t value, bool to_ticks);
+extern void checkMotorStatus(void);
+extern void stopMotor(uint8_t mode);
 
-extern void check_motor_status(void);
-extern void stop_motor(uint8_t mode);
+extern uint16_t periodToPwm(uint16_t period);
+extern uint16_t periodToRpm(uint16_t period);
+extern uint16_t rpmToPeriod(uint16_t rpm);
 
+extern uint16_t getActualSpeed(void);
 // MACROS PARA MEDICION DE VELOCIDAD 
 #define PHASE_COUNT 3
 #define ZCP_BUFFER_SIZE 4

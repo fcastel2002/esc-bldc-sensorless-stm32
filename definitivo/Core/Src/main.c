@@ -110,7 +110,7 @@ int main(void)
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_2);
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_3);
   
-  motor_detection();
+  motorDetection();
   volatile uint32_t last_led_tick = 0;
   /* USER CODE END 2 */
 
@@ -119,7 +119,7 @@ int main(void)
   while (1)
   {
 	  handleState();
-	  check_motor_status();
+	  checkMotorStatus();
     if ((uint32_t)(led_tick - last_led_tick) >= 200) {
       HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
       last_led_tick = led_tick;

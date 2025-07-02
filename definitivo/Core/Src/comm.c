@@ -138,13 +138,13 @@ void handleCommandEffects(void) {
     else if(stop_cmd_ack) {
         // Transición a estado IDLE
         stop_cmd_ack = 0;
-        stop_motor(0);
+        stopMotor(0);
         app_state = IDLE;
     }
     else if(emergency_cmd_ack) {
         // Transición de emergencia a IDLE
         emergency_cmd_ack = 0;
-        stop_motor(1);
+        stopMotor(1);
         app_state = IDLE;
     }
 
@@ -215,10 +215,27 @@ ConfigStatus executeCommand(CommandAction action, CommandParam param,  char* val
 					break;
 
 				case ACTION_STOP:
-					stop_motor(0);
+					stopMotor(0);
 					break;
 				case ACTION_EMERGENCY:
-					stop_motor(1);
+					stopMotor(1);
+					break;
+				}
+				break;
+			case PARAM_POLEP:
+				switch(action){
+				case ACTION_SET:
+					if(value != NULL) {
+						uint8_t new_pole_pairs = atoi(value);
+						result = set_pole_pairs(new_pole_pairs);
+					} else {
+						transmitirUART("ERROR: No pole pairs specified\r\n");
+					}
+					break;
+				case ACTION_GET:
+					transmitirUART("POLE PAIRS: %d\r\n", current_esc_params.pole_pairs);
+					break;
+				case ACTION_RESET:
 					break;
 				}
 				break;
@@ -291,6 +308,7 @@ void processLoggingQueue(void) {
             
             case PARAM_SPEED: 
                 uint16_t speed = getActualSpeed();
+				speed = periodToRpm(speed); // Convertir a RPM
                 transmitirUART("[LOG] SPEED: %d RPM\r\n", speed);
                 break;
             
@@ -356,6 +374,7 @@ void stopLoggingParam(CommandParam param) {
 }
 CommandParam parseParameter(char *param_str){
 	if(strcmp(param_str, "PWM_FREQ") == 0) return PARAM_PWM_FREQ;
+	if(strcmp(param_str, "POLEP") == 0) return PARAM_POLEP;
 	if(strcmp(param_str, "CURRENT_LIMIT") == 0) return PARAM_CURRENT_LIMIT;
 	if(strcmp(param_str, "TEMP_LIMIT") == 0) return PARAM_TEMP_LIMIT;
 	if(strcmp(param_str, "ALL") == 0) return PARAM_ALL;
@@ -416,23 +435,24 @@ uint8_t processSpeedCommand(void) {
     if (strncmp(cmd_buffer, ":SPEED:", 7) == 0) {
         cmd_speed_received_ack = 1;
 
-    	int speed_value;
+    	uint16_t speed_value;
         if (sscanf(cmd_buffer, ":SPEED:%d", &speed_value) == 1) {
             // Validar y aplicar nueva velocidad
             if (speed_value >= 0) {
-            	if(speed_value > 50)speed_setpoint = speed_value;
-            	else speed_setpoint = 0;
-                processed = 1;
+            	if(speed_value > 100){
+					speed_setpoint_rpm = speed_value;
+					//speed_setpoint_rpm = periodToPwm(speed_setpoint);
+				}else{
+					speed_setpoint_rpm = 100;
+					//speed_setpoint_rpm =periodToPwm(speed_setpoint);
+				}
+				processed = 1;
                 transmitirUART("SPEED set to %d\r\n", speed_value);
             }
         }
     }
 
     return processed;
-}
-uint16_t getActualSpeed(void){
-
-	return (uint16_t)filtered_speed;
 }
 
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){

@@ -47,6 +47,7 @@ typedef struct{
 	uint16_t speed_max_rpm;
 
 	uint32_t crc32;
+	uint8_t pole_pairs;
 }ESCparams;
 
 #pragma pack(pop)
@@ -85,11 +86,12 @@ extern void update_all_esc();
 extern ConfigStatus set_pwm_freq(uint16_t new_freq);
 extern ConfigStatus set_max_speed(uint16_t new_speed);
 extern ConfigStatus set_current_limit(uint16_t new_current);
+extern ConfigStatus set_pole_pairs(uint8_t new_pole_pairs);
 
 extern uint16_t get_max_speed();
 extern uint16_t get_pwm_freq();
 extern uint16_t get_current_limit();
-
+extern uint8_t get_pole_pairs();
 uint32_t compute_crc32(ESCparams *params);
 
 

@@ -9,21 +9,21 @@
 #include "hard_config.h"
 
 
-ESCparams current_esc_params;
 ConfigStatus current_config_status = CONFIG_OK;
 volatile uint8_t esc_config_done = 0;
-
+ESCparams current_esc_params = {0};
 void set_default_esc_params(){
 	current_esc_params.signature = 0x50415055;
 	current_esc_params.pwm_freq_hz = 18000;
 	current_esc_params.current_limit = 10;
 	current_esc_params.temp_limit = 70;
 	current_esc_params.deadtime_ns = 100;
-	current_esc_params.speed_kp = 1.40f;
-	current_esc_params.speed_ki = 0.4f;
+	current_esc_params.speed_kp = 0.75f;
+	current_esc_params.speed_ki = 1.35f;
 	current_esc_params.speed_kd = 0.0f;
 	current_esc_params.speed_max_rpm = 5400;
-
+	current_esc_params.pole_pairs = 2; // Default pole pairs
+	
 	current_esc_params.crc32 = compute_crc32(&current_esc_params);
 
 }
@@ -85,6 +85,14 @@ ConfigStatus set_pwm_freq(uint16_t new_freq){
 	if(new_freq < ESC_min_pwm_freq) return CONFIG_ERROR_UNDERLIMIT;
 	if(new_freq > ESC_max_pwm_freq) return CONFIG_ERROR_OVERLIMIT;
 	current_esc_params.pwm_freq_hz = new_freq;
+	flash_config_parameter_changed();
+	return CONFIG_OK;
+}
+ConfigStatus set_pole_pairs(uint8_t new_pole_pairs) {
+	if (new_pole_pairs < 1)return CONFIG_ERROR_UNDERLIMIT; // Arbitrary limits
+	if (new_pole_pairs > 48)return CONFIG_ERROR_OVERLIMIT; // Arbitrary limits
+
+	current_esc_params.pole_pairs = new_pole_pairs;
 	flash_config_parameter_changed();
 	return CONFIG_OK;
 }

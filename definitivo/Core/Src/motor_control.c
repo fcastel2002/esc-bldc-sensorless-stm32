@@ -27,7 +27,7 @@
  *
  */
 
-#define SPEED_MAX 500	//pwm
+#define SPEED_MAX 200	//pwm
 #define SPEED_MIN 14000
 #define SPEED_RANGE (SPEED_MIN - SPEED_MAX)
 ////////////
@@ -66,6 +66,7 @@ volatile bool motor_stalled = false;
 
 // VARIABLES PARA CONTROL PI DE VELOCIDAD
 volatile uint16_t speed_setpoint =  0;
+volatile uint16_t speed_setpoint_rpm = 0; // RPM
 static volatile int32_t speed_prev_error = 0;
 static volatile uint16_t max_limit_pwm = 0;
 static volatile uint16_t min_limit_pwm = 0;
@@ -110,10 +111,10 @@ volatile uint8_t speed_measurement_ready = 0;
 
 // FUNCIONES PARA MEDICION DE VELOCIDAD
 
-static void process_phase_measurement(uint8_t phase_idx, uint16_t current_timestamp);
-static void calculate_consensus_speed(void);
+static void processPhaseMeasurement(uint8_t phase_idx, uint16_t current_timestamp);
+static void calculateConsensusSpeed(void);
 
-int8_t safe_mod(int8_t value, int8_t mod) {
+int8_t safeMod(int8_t value, int8_t mod) {
     return (value % mod + mod) % mod;
 }
 
@@ -249,17 +250,64 @@ static void commutation(int8_t step) {
 
 
 
-void update_all_motor_control(){
+void updateAllMotorControl(){
 	max_limit_pwm = TIM1 -> ARR;
 	max_pwm = max_limit_pwm;
 	min_limit_pwm = max_limit_pwm * 0.05f;
 	pwm_speed_range_relation = (float)(max_limit_pwm - min_limit_pwm)/(float)SPEED_RANGE;
-	speed_setpoint = max_limit_pwm *0.8f;
+	speed_setpoint_rpm = 1000;
 	motor_control_config_done = 1;
 
 
 }
-uint16_t filtro_media_movil(uint16_t measurement){
+uint8_t motor_pole_pairs = 2;
+#define TIMER_CLOCK 72000000 // 72 MHz
+uint16_t convertSpeedValue(uint16_t value, bool to_ticks)
+{
+    if (to_ticks) {
+        // Conversión RPM -> setpoint (valor para speed_setpoint)
+        if (value == 0) return 0;
+        
+        // Calcular el período entre cruces por cero (en segundos)
+        double rpm_mechanical = (double)value;
+        double rpm_electrical = rpm_mechanical * motor_pole_pairs;
+        double frequency = rpm_electrical / 60.0;  // Hz eléctricos
+        double period = 1.0 / frequency;           // Período eléctrico total (s)
+        double zc_period = period / 6.0;           // Período entre cruces por cero (s)
+        
+        // Convertir a ticks del timer de captura (TIM2)
+        double timer_ticks = zc_period * (TIMER_CLOCK / (TIM2->PSC + 1));
+        
+        // Mapear al rango de setpoint usando la misma lógica que mapSpeed()
+        if (timer_ticks > SPEED_MIN) timer_ticks = SPEED_MIN;
+        else if (timer_ticks < SPEED_MAX) timer_ticks = SPEED_MAX;
+        
+        uint16_t setpoint = (uint16_t)((SPEED_MIN - timer_ticks) * pwm_speed_range_relation + min_limit_pwm);
+        
+        return setpoint;
+    } else {
+        // Conversión setpoint -> RPM
+        if (value == 0) return 0;
+        
+        // Revertir el mapeo de mapSpeed()
+        double timer_ticks = SPEED_MIN - ((double)value - min_limit_pwm) / pwm_speed_range_relation;
+        
+        // Convertir ticks a tiempo real
+        double zc_period = timer_ticks / (TIMER_CLOCK / (TIM2->PSC + 1));
+        double period = zc_period * 6.0;           // Período eléctrico total (s)
+        double frequency = 1.0 / period;           // Hz eléctricos
+        
+        // Convertir a RPM mecánicos
+        double rpm_electrical = frequency * 60.0;
+        double rpm_mechanical = rpm_electrical / motor_pole_pairs;
+        
+        // Limitar a rango operativo del motor
+        if (rpm_mechanical < 100) return 100;
+        if (rpm_mechanical > 7000) return 7000;
+        return (uint16_t)rpm_mechanical;
+    }
+}
+uint16_t filtroMediaMovil(uint16_t measurement){
 	int32_t new_speed = 0;
 	static uint16_t prev_speed = 0;
 	static volatile uint8_t speed_index = 0;
@@ -288,16 +336,16 @@ uint16_t filtro_media_movil(uint16_t measurement){
 	return (uint16_t)new_speed;
 }
 
-void zero_crossing(uint8_t fase){
+void zeroCrossing(uint8_t fase){
 	static uint8_t speed_calc_counter = 0;
 
 	switch(fase){
 	case 1:  // Fase W
 		if(app_state == RUNNING || app_state == CLOSEDLOOP){
 			if (direction == 0) {
-				commutationStep = safe_mod(commutationStep + 1, NUM_POS);
+				commutationStep = safeMod(commutationStep + 1, NUM_POS);
 			} else {
-				commutationStep = safe_mod(commutationStep - 1, NUM_POS);
+				commutationStep = safeMod(commutationStep - 1, NUM_POS);
 			}
 			last_zc_timestamp = HAL_GetTick();
 			commutation(commutationStep);
@@ -306,7 +354,7 @@ void zero_crossing(uint8_t fase){
 		// Procesar medición de velocidad para fase W
 		if(app_state == RUNNING || app_state == CLOSEDLOOP || app_state == FOC_STARTUP){
 			uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
-			process_phase_measurement(0, current_timestamp);  // Fase W = índice 0
+			processPhaseMeasurement(0, current_timestamp);  // Fase W = índice 0
 			
 			if(last_W_timestamp != 0){
 				uint16_t period;
@@ -355,12 +403,12 @@ void zero_crossing(uint8_t fase){
 		if(app_state == CLOSEDLOOP){
 		    speed_calc_counter++;
 		    if(speed_calc_counter >= 2) {  // Cada 2 zero-crossings
-		        calculate_consensus_speed();
+		        calculateConsensusSpeed();
 		        
 		        // Usar velocidad por consenso si está disponible, sino usar método original
 		        if(speed_measurement_ready && consensus_speed > 0) {
 		            diff_speed = consensus_speed;
-		            filtered_speed = filtro_media_movil(diff_speed);
+		            filtered_speed = filtroMediaMovil(diff_speed);
 		        } else {
 		            // Fallback al método original
 		            uint16_t current_capture = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
@@ -372,7 +420,7 @@ void zero_crossing(uint8_t fase){
 		                    speed_period = current_capture - last_speed_capture;
 		                }
 		                diff_speed = speed_period;
-		                filtered_speed = filtro_media_movil(diff_speed);
+		                filtered_speed = filtroMediaMovil(diff_speed);
 		            }
 		            last_speed_capture = current_capture;
 		        }
@@ -384,9 +432,9 @@ void zero_crossing(uint8_t fase){
 	case 2:  // Fase V
 		if(app_state == RUNNING || app_state == CLOSEDLOOP){
 			if (direction == 0) {
-				commutationStep = safe_mod(commutationStep + 1, NUM_POS);
+				commutationStep = safeMod(commutationStep + 1, NUM_POS);
 			} else {
-				commutationStep = safe_mod(commutationStep - 1, NUM_POS);
+				commutationStep = safeMod(commutationStep - 1, NUM_POS);
 			}
 			commutation(commutationStep);
 		}
@@ -394,16 +442,16 @@ void zero_crossing(uint8_t fase){
 		// Procesar medición de velocidad para fase V
 		if(app_state == RUNNING || app_state == CLOSEDLOOP || app_state == FOC_STARTUP){
 			uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
-			process_phase_measurement(1, current_timestamp);  // Fase V = índice 1
+			processPhaseMeasurement(1, current_timestamp);  // Fase V = índice 1
 		}
 		break;
 		
 	case 3:  // Fase U
 		if(app_state == RUNNING || app_state == CLOSEDLOOP){
 			if (direction == 0) {
-				commutationStep = safe_mod(commutationStep + 1, NUM_POS);
+				commutationStep = safeMod(commutationStep + 1, NUM_POS);
 			} else {
-				commutationStep = safe_mod(commutationStep - 1, NUM_POS);
+				commutationStep = safeMod(commutationStep - 1, NUM_POS);
 			}
 			commutation(commutationStep);
 		}
@@ -411,13 +459,13 @@ void zero_crossing(uint8_t fase){
 		// Procesar medición de velocidad para fase U
 		if(app_state == RUNNING || app_state == CLOSEDLOOP || app_state == FOC_STARTUP){
 			uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_3);
-			process_phase_measurement(2, current_timestamp);  // Fase U = índice 2
+			processPhaseMeasurement(2, current_timestamp);  // Fase U = índice 2
 		}
 		break;
 	}
 }
 
-void motor_detection(){
+void motorDetection(){
 	TIM1 -> PSC = 7;
 	uint16_t arr_pwm = 0;
 	arr_pwm = 1000;
@@ -430,7 +478,7 @@ void motor_detection(){
 		PWM_INIT();
 		for (int i = 0; i < 140; i++){
 			commutation(step);
-			step = safe_mod(step + 1, NUM_POS);
+			step = safeMod(step + 1, NUM_POS);
 
 			HAL_Delay(1);
 		}
@@ -441,7 +489,7 @@ void motor_detection(){
 	pwmVal = 0;
 }
 
-void check_motor_status(){
+void checkMotorStatus(){
 	static uint32_t last_check_time = 0;
 	static uint8_t stall_counter = 0;
 	static uint8_t running_counter = 0;
@@ -474,7 +522,7 @@ void check_motor_status(){
 	}
 }
 
-static inline uint16_t map_speed(uint16_t raw_speed){
+static inline uint16_t mapSpeed(uint16_t raw_speed){
 	if(raw_speed == 0){
 		raw_speed = SPEED_MIN;
 	}
@@ -499,7 +547,7 @@ static inline uint16_t map_speed(uint16_t raw_speed){
  * necesaria basándose en el error entre la velocidad deseada y la velocidad medida.
  *
  * @details Algoritmo del controlador PI:
- * 1. Mapea la velocidad filtrada a unidades PWM usando map_speed()
+ * 1. Mapea la velocidad filtrada a unidades PWM usando mapSpeed()
  * 2. Calcula el error: error = setpoint - velocidad_medida
  * 3. Término proporcional: P = KP * error / SCALE
  * 4. Término integral: I += KI * (error + error_previo) * dt
@@ -529,10 +577,15 @@ static inline uint16_t map_speed(uint16_t raw_speed){
  * @note Solo opera cuando app_state == CLOSEDLOOP
  * @warning No utiliza protección de interrupciones, debe ser llamada desde contexto seguro
  */
-void pi_control(){
-	speed_measure =  map_speed(filtered_speed);
+void PIcontrol(){
+
+	//speed_measure =  mapSpeed(filtered_speed);
+	speed_measure = periodToPwm(filtered_speed);
 	if(app_state == CLOSEDLOOP){
-		speed_error = speed_setpoint - speed_measure;
+		uint16_t target_period = rpmToPeriod(speed_setpoint_rpm);
+        uint16_t target_pwm = periodToPwm(target_period);
+		//speed_error = speed_setpoint - speed_measure;
+		speed_error = target_pwm - speed_measure;
 		speed_proportional = (KP * speed_error)/SCALE;
 		speed_integral += KI * (speed_error+speed_prev_error)*dt;
 		speed_prev_error = speed_error;
@@ -570,7 +623,7 @@ static inline void pwm_break(void){
 	__HAL_TIM_SET_COMPARE(&htim1, IN_W, max_pwm);
 
 }
-void stop_motor(uint8_t mode){
+void stopMotor(uint8_t mode){
 	filtered_speed = 0;
 	switch(mode){
 		case 0:
@@ -629,7 +682,7 @@ void stop_motor(uint8_t mode){
  * @warning Esta función debe ser llamada desde contexto de interrupción
  * @warning Los datos son válidos solo después de ZCP_BUFFER_SIZE mediciones
  */
-static void process_phase_measurement(uint8_t phase_idx, uint16_t current_timestamp) {
+static void processPhaseMeasurement(uint8_t phase_idx, uint16_t current_timestamp) {
     phase_measurement_t* phase = &phase_measurements[phase_idx];
     
     if(phase->last_timestamp != 0) {
@@ -705,7 +758,7 @@ static void process_phase_measurement(uint8_t phase_idx, uint16_t current_timest
  *
  * @warning Esta función debe ser llamada periódicamente para mantener mediciones actuales
  */
-static void calculate_consensus_speed(void) {
+static void calculateConsensusSpeed(void) {
     uint16_t valid_speeds[PHASE_COUNT];
     uint8_t valid_count = 0;
     
@@ -777,4 +830,48 @@ void get_phase_diagnostics(uint16_t* phase_speeds, uint8_t* phase_status) {
         phase_speeds[i] = phase_measurements[i].avg_period;
         phase_status[i] = phase_measurements[i].is_consistent ? 1 : 0;
     }
+}
+
+uint16_t getActualSpeed(void){
+
+	return (uint16_t)filtered_speed;
+}
+uint16_t rpmToPeriod(uint16_t rpm) {
+    if (rpm == 0) return 0xFFFF;
+    
+    // Calcular frecuencia eléctrica (Hz)
+    double f_elec = (rpm * motor_pole_pairs) / 60.0;
+    
+    // Calcular período entre cruces por cero (segundos)
+    double T_zc = 1.0 / (2.0f*f_elec);
+    
+    // Convertir a ticks (considerando prescaler)
+    double ticks = T_zc * (TIMER_CLOCK / (TIM2->PSC + 1));
+    
+    // Aplicar límites del sistema
+    if (ticks < SPEED_MAX) return SPEED_MAX;
+    if (ticks > SPEED_MIN) return SPEED_MIN;
+    
+    return (uint16_t)ticks;
+}
+uint16_t periodToRpm(uint16_t period) {
+    if (period == 0 || period == 0xFFFF) return 0;
+    
+    // Convertir ticks a segundos
+    double T_zc = (double)period / (TIMER_CLOCK / (TIM2->PSC + 1));
+    
+    // Calcular frecuencia eléctrica (Hz)
+    double f_elec = 1.0 / (2.0f*T_zc);
+    
+    // Calcular RPM mecánicos
+    double rpm = (f_elec * 60.0) / motor_pole_pairs;
+    
+    // Aplicar límites del motor
+    if (rpm < 100) return 100;
+    if (rpm > 7000) return 7000;
+    
+    return (uint16_t)rpm;
+}
+uint16_t periodToPwm(uint16_t period) {
+    return mapSpeed(period);  // Usa tu función existente
 }

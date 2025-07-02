@@ -1,6 +1,7 @@
 {
     "files.associations": {
         "state_machine.h": "c",
-        "motor_control.h": "c"
+        "motor_control.h": "c",
+        "main.h": "c"
     }
 }

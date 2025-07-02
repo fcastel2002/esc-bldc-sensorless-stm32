@@ -64,6 +64,7 @@ extern volatile uint8_t logger_config_done;
 	PARAM_START,
 	PARAM_STOP,
 	PARAM_RATE,
+	PARAM_POLEP,
 
  }CommandParam;
 typedef struct {
@@ -102,7 +103,6 @@ typedef struct{
  void processUartData(void);
  extern uint8_t processSpeedCommand(void);
 extern void handleCommandEffects(void);
- extern uint16_t getActualSpeed(void);
  CommandParam parseParameter(char* param_str);
  CommandAction parseAction(char* action_str);
  void transmitirUART(const char *formato, ...);

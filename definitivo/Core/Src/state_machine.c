@@ -29,17 +29,14 @@ App_States_t handleState(void){
 		FlashResultCode result = flash_config_init();
 		if(result == FLASH_RESULT_OK || result == FLASH_RESULT_EMPTY){
 			update_all_esc();
-			update_all_motor_control();
+			updateAllMotorControl();
 			flash_initialized = 1;
 		}else{
 			app_state = HARD_ERROR;
 			flash_initialized = 0;
 		}
 	}
-	if(motor_stalled && speed_setpoint > 200){
-		foc_startup();
-		motor_stalled = false;
-	}
+
 
 	if(app_state != IDLE && app_state != HARD_ERROR) {
         processLoggingQueue();
@@ -71,7 +68,10 @@ App_States_t handleState(void){
 	case FOC_STARTUP:
 		break;
 	case RUNNING:
-
+		if(motor_stalled){
+		foc_startup();
+		motor_stalled = false;
+		}	
 		if (current_time - last_uart_check > 50) {
 			last_uart_check = current_time;
 			// Procesar datos UART
@@ -82,12 +82,16 @@ App_States_t handleState(void){
 
 	case CONFIG:
 		if(!esc_config_done && !motor_control_config_done)update_all_esc();
-		if(esc_config_done  && !motor_control_config_done)update_all_motor_control();
+		if(esc_config_done  && !motor_control_config_done)updateAllMotorControl();
 		if(esc_config_done && motor_control_config_done) app_state = IDLE;
 		break;
 	case CLOSEDLOOP:
 		HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
 		current_time = HAL_GetTick();
+		if(motor_stalled){
+		foc_startup();
+		motor_stalled = false;
+		}
 		if (current_time - last_uart_check > 50) {
 			last_uart_check = current_time;
 

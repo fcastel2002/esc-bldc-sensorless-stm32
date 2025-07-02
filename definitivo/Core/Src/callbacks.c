@@ -14,15 +14,15 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef *htim){
 			uint8_t channel = 0;
 			if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1 && float_W ) {
 				channel = 1;
-				zero_crossing(channel);
+				zeroCrossing(channel);
 			}
 			else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2 && float_U) {
 				channel = 2;
-				zero_crossing(channel);
+				zeroCrossing(channel);
 			}
 			else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3 && float_V) {
 				channel = 3;
-				zero_crossing(channel);
+				zeroCrossing(channel);
 			}
 			__enable_irq();
 		}
@@ -41,7 +41,7 @@ void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim) {
 
 	}
 	if (htim->Instance == TIM4 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1 && CLOSEDLOOP == app_state) {
-		pi_control();
+		PIcontrol();
 	}
 
 }
