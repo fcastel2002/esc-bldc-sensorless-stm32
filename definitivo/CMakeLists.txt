@@ -40,10 +40,14 @@ add_executable(${CMAKE_PROJECT_NAME})
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 
+add_compile_options(
+    -specs=nano.specs
+    -specs=nosys.specs
+)
+
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    # Add user defined library search paths
-)
+    "-u _printf_float")
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE

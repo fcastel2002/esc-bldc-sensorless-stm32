@@ -86,12 +86,18 @@ extern void update_all_esc();
 extern ConfigStatus set_pwm_freq(uint16_t new_freq);
 extern ConfigStatus set_max_speed(uint16_t new_speed);
 extern ConfigStatus set_current_limit(uint16_t new_current);
-extern ConfigStatus set_pole_pairs(uint8_t new_pole_pairs);
+extern ConfigStatus setPolePairs(uint8_t new_pole_pairs);
+extern ConfigStatus setKP(float new_kp);
+extern ConfigStatus setKI(float new_ki);
+extern ConfigStatus setKD(float new_kd);
 
 extern uint16_t get_max_speed();
 extern uint16_t get_pwm_freq();
 extern uint16_t get_current_limit();
-extern uint8_t get_pole_pairs();
+extern uint8_t getPolePairs();
+extern float getKP();
+extern float getKI();
+extern float getKD();
 uint32_t compute_crc32(ESCparams *params);
 
 

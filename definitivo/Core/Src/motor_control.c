@@ -43,6 +43,9 @@
 #define  ZCP_TO_CHECK 4
 #define SPEED_TOLERANCE_PCT 25
 
+///
+#define MAX_RPM	5600
+#define MIN_RPM 400
 
 
 // MANEJO DE CONMUTACION
@@ -107,7 +110,9 @@ volatile uint16_t consensus_speed = 0;
 volatile uint8_t active_phases_count = 0;
 volatile uint8_t speed_measurement_ready = 0;
 //====================================================
-
+static float kp = 0;
+static float ki = 0;
+static float kd = 0;
 
 // FUNCIONES PARA MEDICION DE VELOCIDAD
 
@@ -256,6 +261,9 @@ void updateAllMotorControl(){
 	min_limit_pwm = max_limit_pwm * 0.05f;
 	pwm_speed_range_relation = (float)(max_limit_pwm - min_limit_pwm)/(float)SPEED_RANGE;
 	speed_setpoint_rpm = 1000;
+	kp = getKP();
+	ki = getKI();
+	kd = getKD();
 	motor_control_config_done = 1;
 
 
@@ -474,7 +482,7 @@ void motorDetection(){
 	uint8_t step = POS_UV;
 	for(int k = 0; k <3; k++){
 		PWM_STOP();
-		HAL_Delay(60);
+		HAL_Delay(20);
 		PWM_INIT();
 		for (int i = 0; i < 140; i++){
 			commutation(step);
@@ -586,8 +594,8 @@ void PIcontrol(){
         uint16_t target_pwm = periodToPwm(target_period);
 		//speed_error = speed_setpoint - speed_measure;
 		speed_error = target_pwm - speed_measure;
-		speed_proportional = (KP * speed_error)/SCALE;
-		speed_integral += KI * (speed_error+speed_prev_error)*dt;
+		speed_proportional = (kp * speed_error)/SCALE;
+		speed_integral += ki * (speed_error+speed_prev_error)*dt;
 		speed_prev_error = speed_error;
 		if(max_limit_pwm > speed_proportional){
 			max_speed_integral = (max_limit_pwm - speed_proportional);
@@ -867,8 +875,8 @@ uint16_t periodToRpm(uint16_t period) {
     double rpm = (f_elec * 60.0) / motor_pole_pairs;
     
     // Aplicar límites del motor
-    if (rpm < 100) return 100;
-    if (rpm > 7000) return 7000;
+    if (rpm < MIN_RPM) return MIN_RPM;
+    if (rpm > MAX_RPM) return MAX_RPM;
     
     return (uint16_t)rpm;
 }

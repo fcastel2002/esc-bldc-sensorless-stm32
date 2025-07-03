@@ -17,7 +17,7 @@
 #define MAX_CMD_LEN 64
 #define MAX_LOGGED_PARAMS 5
 #define TX_QUEUE_SIZE 10
-#define TX_BUFFER_SIZE 128
+#define TX_BUFFER_SIZE 256
 //variables
 extern uint8_t rx_data[1];
 extern volatile char rx_buffer[BUFFER_SIZE];
@@ -65,8 +65,17 @@ extern volatile uint8_t logger_config_done;
 	PARAM_STOP,
 	PARAM_RATE,
 	PARAM_POLEP,
+	PARAM_TEMP,
+	PARAM_CURRENT,
+
 
  }CommandParam;
+ typedef enum {
+	VAR_TEMP,
+	VAR_CURRENT,
+	VAR_SPEED,
+ }LoggeableVariable;
+
 typedef struct {
     char buffers[TX_QUEUE_SIZE][TX_BUFFER_SIZE];
     uint8_t head;
@@ -76,7 +85,7 @@ typedef struct {
 } TxQueue;
 
 typedef struct{
-	CommandParam params[MAX_LOGGED_PARAMS]; // Array de parámetros a loggear
+	LoggeableVariable params[MAX_LOGGED_PARAMS]; // Array de parámetros a loggear
 	uint8_t count;
 
  }LoggingQueue;
@@ -92,6 +101,7 @@ typedef struct{
 	ACTION_STOP,
 	ACTION_EMERGENCY,
 	ACTION_LOGGING,
+	ACTION_HELP,
  }CommandAction;
  // functions
 
@@ -111,8 +121,8 @@ extern void handleCommandEffects(void);
 extern volatile uint16_t logging_rate_ms;
  
 extern void parameterLogging(CommandParam *parameter, uint16_t rate_ms);
-void startLoggingParam(CommandParam param);
-void stopLoggingParam(CommandParam param);
+void startLoggingParam(LoggeableVariable variable);
+void stopLoggingParam(LoggeableVariable variable);
 extern void processLoggingQueue(void);
 
 #endif /* INC_COMM_H_ */

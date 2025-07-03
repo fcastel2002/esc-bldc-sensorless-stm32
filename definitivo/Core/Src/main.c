@@ -113,7 +113,18 @@ int main(void)
   motorDetection();
   volatile uint32_t last_led_tick = 0;
   /* USER CODE END 2 */
-
+  for (int i = 0; i < 4; i++) {
+    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    uint32_t start_tick = led_tick;
+    while ((uint32_t)(led_tick - start_tick) < 50) {
+      // Espera activa de 50 ms
+    }
+    HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    start_tick = led_tick;
+    while ((uint32_t)(led_tick - start_tick) < 50) {
+      // Espera activa de 50 ms
+    }
+  }
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)

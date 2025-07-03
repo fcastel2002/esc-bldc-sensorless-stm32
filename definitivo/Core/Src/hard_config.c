@@ -88,11 +88,50 @@ ConfigStatus set_pwm_freq(uint16_t new_freq){
 	flash_config_parameter_changed();
 	return CONFIG_OK;
 }
-ConfigStatus set_pole_pairs(uint8_t new_pole_pairs) {
+ConfigStatus setPolePairs(uint8_t new_pole_pairs) {
 	if (new_pole_pairs < 1)return CONFIG_ERROR_UNDERLIMIT; // Arbitrary limits
 	if (new_pole_pairs > 48)return CONFIG_ERROR_OVERLIMIT; // Arbitrary limits
 
 	current_esc_params.pole_pairs = new_pole_pairs;
 	flash_config_parameter_changed();
 	return CONFIG_OK;
+}
+
+uint8_t getPolePairs() {
+	return current_esc_params.pole_pairs;
+}
+
+ConfigStatus setKP(float new_kp) {
+	if (new_kp < 0.0f) return CONFIG_ERROR_UNDERLIMIT; // Arbitrary limits
+	if (new_kp > 10.0f) return CONFIG_ERROR_OVERLIMIT; // Arbitrary limits
+
+	current_esc_params.speed_kp = new_kp;
+	flash_config_parameter_changed();
+	return CONFIG_OK;
+}
+float getKP() {
+	return current_esc_params.speed_kp;
+}
+ConfigStatus setKI(float new_ki) {
+	if (new_ki < 0.0f) return CONFIG_ERROR_UNDERLIMIT; // Arbitrary limits
+	if (new_ki > 10.0f) return CONFIG_ERROR_OVERLIMIT; // Arbitrary limits
+
+	current_esc_params.speed_ki = new_ki;
+	flash_config_parameter_changed();
+	return CONFIG_OK;
+}	
+float getKI() {
+	return current_esc_params.speed_ki;
+}	
+
+ConfigStatus setKD(float new_kd) {
+	if (new_kd < 0.0f) return CONFIG_ERROR_UNDERLIMIT; 
+	if (new_kd > 10.0f) return CONFIG_ERROR_OVERLIMIT; 
+
+	current_esc_params.speed_kd = new_kd;
+	flash_config_parameter_changed();
+	return CONFIG_OK;
+}
+float getKD() {
+	return current_esc_params.speed_kd;
 }
