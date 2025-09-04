@@ -31,6 +31,7 @@ volatile App_States_t cmd_origin_state = IDLE;
 const char* configStatusToString(ConfigStatus status);
 volatile uint16_t loggin_rate_ms = 1000;
 static LoggingQueue logging_queue = { .count = 0 };
+static const char* paramToString(CommandParam param);
 static TxQueue tx_queue = { .head = 0, .tail = 0, .count = 0, .busy = 0 };
 
 void commInit(void){
@@ -38,7 +39,6 @@ void commInit(void){
 	rx_head = 0;
 	rx_tail = 0;
 	cmd_index = 0;
-
 	HAL_UART_Receive_IT(&huart1, (uint8_t*)&rx_buffer[rx_head],1);
 }
 void processCurrentCommand(void){
@@ -61,7 +61,7 @@ void processUartData(void){
 			cmd_buffer[cmd_index++] = byte;
 		}else{
 			cmd_index  = 0;
-			transmitirUART("ERROR: Comando muy largo\r\n");
+			transmitirUART("ERROR: Command too long\r\n");
 		}
 	}
 }
@@ -73,7 +73,7 @@ void clearRxBuffer(void) {
 void processCommand(char *cmd) {
 	CommandStatus status = CMD_UNKNOWN;
 	if(cmd[0] != ':'){
-		transmitirUART("ERROR: Formato invalido\r\nTodos los comandos deben comenzar con ':', escribe \":HELP\" para mas informacion\r\n");
+		transmitirUART("ERROR: Invalid format\r\n");
 		return;
 	}
 
@@ -84,24 +84,25 @@ void processCommand(char *cmd) {
 	int parsed = sscanf(cmd, ":%[^:]:%[^:]:%s", action_str, param_str, value_str);
 
 	// Permitir comandos con solo action (parsed == 1) para RUN, STOP, EMERGENCY_STOP
-	if(parsed < 1 || (parsed < 2 && (strcmp(action_str,"RUN")!=0 && strcmp(action_str,"STOP")!=0 && strcmp(action_str,"ESTOP")!=0&& strcmp(action_str,"HELP")!=0))){
-		transmitirUART("ERROR: Comando invalido\r\n");
+	if(parsed < 1 || (parsed < 2 && (strcmp(action_str,"RUN")!=0 && strcmp(action_str,"STOP")!=0 && strcmp(action_str,"ESTOP")!=0))){
+		transmitirUART("ERROR: Invalid command\r\n");
 		if(app_state != RUNNING && app_state != CLOSEDLOOP)app_state = IDLE;
 		return;
 	}
 	CommandAction action = parseAction(action_str);
 	if(action == ACTION_UNKNOWN){
-		transmitirUART("ERROR: Accion desconocida\r\n");
+		transmitirUART("ERROR: Unknown action\r\n");
 		if(app_state != RUNNING && app_state != CLOSEDLOOP)app_state = IDLE;
 		return;
 	}
 	
 	// Solo parsear parámetro si hay más de 1 parte en el comando
 	CommandParam param = PARAM_UNKNOWN;
-	if(parsed >= 2 && !(action == ACTION_RUN || action == ACTION_STOP || action == ACTION_EMERGENCY || action == ACTION_HELP)) {
+	if(parsed >= 2) {
 		param = parseParameter(param_str);
 	}
-	if(param == PARAM_UNKNOWN && (action != ACTION_RUN && action != ACTION_STOP && action != ACTION_EMERGENCY && action != ACTION_HELP)){
+	
+	if(param == PARAM_UNKNOWN && (action != ACTION_RUN && action != ACTION_STOP && action != ACTION_EMERGENCY)){
 		transmitirUART("ERROR: Parametro desconocido\r\n");
 		app_state = IDLE;
 		return;
@@ -160,87 +161,29 @@ const char *configStatusToString(ConfigStatus status){
 	}
 	return "CONFIG_UNKNOWN\r\n";
 }
-static inline void printHelp(void){
-    const char* help_fragments[] = {
-        "\r\n====== Sistema de Control ESC Sensorless ======\r\n"
-        "Autor: Francisco Castel\r\n"
-        "=================================================\r\n"
-        "Formato de Comando: :ACCION[:PARAMETRO[:VALOR]]\r\n"
-        "Terminar comandos con <CR> o <LF>\r\n\r\n",
-
-        "--- CONTROL BASICO ---\r\n"
-        ":RUN               Iniciar operacion del motor\r\n"
-        ":STOP              Detener motor suavemente\r\n"
-        ":ESTOP             Parada de emergencia (inmediata)\r\n"
-        ":SPEED:<valor>     Establecer velocidad (RPM)\r\n\r\n",
-
-        "--- CONFIGURACION ---\r\n"
-        ":SET:<PARAM>:<VAL> Establecer valor de parametro\r\n"
-        ":GET:<PARAM>       Obtener valor actual de parametro\r\n"
-        ":RESET:<PARAM>     Restablecer parametro a valor por defecto\r\n"
-        "Parámetros disponibles:\r\n",
-
-        "  PWM_FREQ    Frecuencia PWM [Hz]\r\n"
-        "  POLEP       Pares de polos del motor\r\n"
-        "  KP          Ganancia proporcional\r\n"
-        "  KI          Ganancia integral\r\n"
-        "  KD          Ganancia derivativa\r\n"
-        "  CURRENT_LIMIT  Limite de corriente [mA]\r\n"
-        "  TEMP_LIMIT     Limite de temperatura [C]\r\n"
-        "  MAXSPEED    Velocidad maxima [RPM]\r\n"
-        "  MINSPEED    Velocidad minima [RPM]\r\n\r\n",
-
-        "--- REGISTRO DE DATOS (LOGGING) ---\r\n"
-        ":LOG:START:<PARAM>  Iniciar registro de parametro\r\n"
-        ":LOG:STOP:<PARAM>   Detener registro de parametro\r\n"
-        ":LOG:RATE:<ms>      Establecer intervalo de registro (100-5000ms)\r\n"
-        "Parametros registrables:\r\n",
-
-        "  SPEED       Velocidad del motor\r\n"
-        "  TEMP        Temperatura\r\n"
-        "  CRRT        Corriente\r\n"
-        "  ALL         Todos los parametros\r\n\r\n",
-
-        "--- EJEMPLOS ---\r\n"
-        ":SET:POLEP:7        Establecer pares de polos a 7\r\n"
-        ":GET:KP             Obtener valor actual de Kp\r\n"
-        ":LOG:START:SPEED    Registrar velocidad del motor\r\n",
-
-        ":LOG:RATE:500       Establecer registro cada 500ms\r\n"
-        ":SPEED:3500         Establecer velocidad a 3500 RPM\r\n"
-        ":RUN                Iniciar motor\r\n"
-        "=================================================\r\n"
-    };
-
-    // Enviar fragmentos con pausas para permitir procesamiento
-    for(int i = 0; i < sizeof(help_fragments)/sizeof(help_fragments[0]); i++) {
-        transmitirUART(help_fragments[i]);
-        HAL_Delay(4); // Pequeña pausa para dar tiempo al UART
-    }
-}
 ConfigStatus executeCommand(CommandAction action, CommandParam param,  char* value){
 	ConfigStatus result = CONFIG_OK;
 	if(action != ACTION_LOGGING){
 		switch(param){
-			case PARAM_PWM_FREQ:
-				switch(action){
-				case ACTION_SET:
-				
-						uint16_t new_freq = atoi(value);
-						result = set_pwm_freq(new_freq);
-					break;
-				
-				case ACTION_GET:
-				
-						uint16_t act_freq = get_pwm_freq();
-						transmitirUART("PWM FREQ: %d Hz\r\n",act_freq);
-					break;
-				
-				case ACTION_RESET:
-					break;
-
-				}
+		case PARAM_PWM_FREQ:
+			switch(action){
+			case ACTION_SET:
+			{
+					uint16_t new_freq = atoi(value);
+					result = set_pwm_freq(new_freq);
 				break;
+			}
+			case ACTION_GET:
+			{
+					uint16_t act_freq = get_pwm_freq();
+					transmitirUART("PWM FREQ: %d Hz\r\n",act_freq);
+				break;
+			}
+			case ACTION_RESET:
+				break;
+
+			}
+			break;
 			case PARAM_CURRENT_LIMIT:
 
 				switch(action){
@@ -277,10 +220,6 @@ ConfigStatus executeCommand(CommandAction action, CommandParam param,  char* val
 				case ACTION_EMERGENCY:
 					stopMotor(1);
 					break;
-				case ACTION_HELP:
-					printHelp();
-
-					break;
 				}
 				break;
 			case PARAM_POLEP:
@@ -288,89 +227,21 @@ ConfigStatus executeCommand(CommandAction action, CommandParam param,  char* val
 				case ACTION_SET:
 					if(value != NULL) {
 						uint8_t new_pole_pairs = atoi(value);
-						result = setPolePairs(new_pole_pairs);
+						result = set_pole_pairs(new_pole_pairs);
 					} else {
 						transmitirUART("ERROR: No pole pairs specified\r\n");
 					}
 					break;
 				case ACTION_GET:
-				uint8_t pole_pairs = getPolePairs();
-					transmitirUART("POLE PAIRS: %d\r\n", pole_pairs);
+					transmitirUART("POLE PAIRS: %d\r\n", current_esc_params.pole_pairs);
 					break;
 				case ACTION_RESET:
 					break;
 				}
 				break;
-			case PARAM_KP:
-				switch(action){
-				case ACTION_SET:
-					if(value != NULL) {
-						float new_kp = atof(value);
-						result = setKP(new_kp);
-					} else {
-						transmitirUART("ERROR: No Kp value specified\r\n");
-					}
-					break;
-				case ACTION_GET:
-					float kp = getKP();;
-                // Convertir a entero (ej: 36.4°C -> 3640 centésimas)
-               		 int16_t kp_cent = (int16_t)(kp * 100);
-               		transmitirUART("Kp: %d.%02d \r\n", 
-                              kp_cent / 100, 
-                              abs(kp_cent % 100)); // Usar abs() para evitar negativos		
 
-					break;
-				case ACTION_RESET:
-					setKP(1.35f);
-					transmitirUART("Kp reset to default value\r\n");
-					break;
-				}
-				break;
-
-			case PARAM_KI:
-				switch(action){
-				case ACTION_SET:
-					if(value != NULL) {
-						float new_ki = atof(value);
-						result = setKI(new_ki);
-					} else {
-						transmitirUART("ERROR: No KI value specified\r\n");
-					}
-					break;
-				case ACTION_GET:
-					float ki = getKI();;
-                // Convertir a entero (ej: 36.4°C -> 3640 centésimas)
-               		 int16_t ki_cent = (int16_t)(ki * 100);
-               		transmitirUART("Ki: %d.%02d \r\n", 
-                              ki_cent / 100, 
-                              abs(ki_cent % 100)); // Usar abs() para evitar negativos		
-
-					break;
-				}
-				break;
-			case PARAM_KD:
-				switch(action){
-				case ACTION_SET:
-					if(value != NULL) {
-						float new_kd = atof(value);
-						result = setKD(new_kd);
-					} else {	
-						transmitirUART("ERROR: No KD value specified\r\n");
-					}
-					break;
-				case ACTION_GET:
-					float kd = getKD();;
-				// Convertir a entero (ej: 36.4°C -> 3640 centésimas)
-			   		 int16_t kd_cent = (int16_t)(kd * 100);
-					 transmitirUART("Kd: %d.%02d \r\n", 
-							  kd_cent / 100, 
-							  abs(kd_cent % 100)); // Usar abs() para evitar negativos
-					break;
-					 }
-			break;
-	
+		}
 	}
-}
 	switch(action){
 		case ACTION_LOGGING:
 			switch(param){
@@ -379,28 +250,17 @@ ConfigStatus executeCommand(CommandAction action, CommandParam param,  char* val
 						transmitirUART("ERROR: No parameter specified for logging\r\n");
 					}else{
 						CommandParam log_param = parseParameter(value);
-						if(log_param == PARAM_ALL) {
-							// Start logging all available variables
-							LoggeableVariable all_vars[] = {VAR_SPEED, VAR_TEMP, VAR_CURRENT};
-							uint8_t num_vars = sizeof(all_vars) / sizeof(all_vars[0]);
-							
-							for(int i = 0; i < num_vars; i++) {
-								startLoggingParam(all_vars[i]);
-							}
-							transmitirUART("Started logging all parameters\r\n");
-						} else {
-							LoggeableVariable log_var;
-							// Map CommandParam to LoggeableVariable
-							switch(log_param) {
-								case PARAM_SPEED: log_var = VAR_SPEED; break;
-								case PARAM_TEMP: log_var = VAR_TEMP; break;
-								case PARAM_CURRENT: log_var = VAR_CURRENT; break;
-								default: 
-									transmitirUART("ERROR: Parameter not loggeable\r\n");
-									return result;
-							}
-							startLoggingParam(log_var);
+						LoggeableVariable log_var;
+						// Map CommandParam to LoggeableVariable
+						switch(log_param) {
+							case PARAM_SPEED: log_var = PARAM_SPEED; break;
+							case PARAM_TEMP: log_var = PARAM_TEMP; break;
+							case PARAM_CURRENT: log_var = PARAM_CURRENT; break;
+							default: 
+								transmitirUART("ERROR: Parameter not loggeable\r\n");
+								return result;
 						}
+						startLoggingParam(log_var);
 					}
 					break;
 				case PARAM_STOP:
@@ -408,23 +268,22 @@ ConfigStatus executeCommand(CommandAction action, CommandParam param,  char* val
 						transmitirUART("ERROR: No parameter specified for stopping logging\r\n");	
 					}else{
 						CommandParam log_param = parseParameter(value);
-						if(log_param == PARAM_ALL) {
-							// Stop all logging
-							logging_queue.count = 0;
-							transmitirUART("All logging stopped\r\n");
-						} else {
-							LoggeableVariable log_var;
-							// Map CommandParam to LoggeableVariable
-							switch(log_param) {
-								case PARAM_SPEED: log_var = VAR_SPEED; break;
-								case PARAM_TEMP: log_var = VAR_TEMP; break;
-								case PARAM_CURRENT: log_var = VAR_CURRENT; break;
-								default: 
-									transmitirUART("ERROR: Parameter not loggeable\r\n");
-									return result;
-							}
-							stopLoggingParam(log_var);
+						LoggeableVariable log_var;
+						// Map CommandParam to LoggeableVariable
+						switch(log_param) {
+							case PARAM_SPEED: log_var = PARAM_SPEED; break;
+							case PARAM_TEMP: log_var = PARAM_TEMP; break;
+							case PARAM_CURRENT: log_var = PARAM_CURRENT; break;
+							case PARAM_ALL:
+								// Stop all logging
+								logging_queue.count = 0;
+								transmitirUART("All logging stopped\r\n");
+								return result;
+							default: 
+								transmitirUART("ERROR: Parameter not loggeable\r\n");
+								return result;
 						}
+						stopLoggingParam(log_var);
 					}
 					break;
     			case PARAM_RATE:
@@ -458,24 +317,19 @@ void processLoggingQueue(void) {
     for (int i = 0; i < logging_queue.count; i++) {
         LoggeableVariable var = logging_queue.params[i];
         switch(var) {
-            case VAR_SPEED: 
+            case PARAM_SPEED: 
                 uint16_t speed = getActualSpeed();
 				speed = periodToRpm(speed); // Convertir a RPM
                 transmitirUART("[LOG] SPEED: %d RPM\r\n", speed);
                 break;
             
-            case VAR_TEMP:
-				float temp = 36.4f;
-                // Convertir a entero (ej: 36.4°C -> 3640 centésimas)
-                int16_t temp_cent = (int16_t)(temp * 100);
-                transmitirUART("[LOG] TEMP: %d.%02d C\r\n", 
-                              temp_cent / 100, 
-                              abs(temp_cent % 100)); // Usar abs() para evitar negativos		
+            case PARAM_TEMP:
+				float temp = 36.4;
+				transmitirUART("[LOG] TEMP: %.2f °C\r\n", temp);				
 				break;
-
-			case VAR_CURRENT:
-				  float current = 1230.5f;
-                transmitirUART("[LOG] CURRENT: %d mA\r\n", (int)current);
+			case PARAM_CURRENT:
+				float current = 1230.5;
+				transmitirUART("[LOG] CURRENT: %.2f mA\r\n", current);
 			break;
             default:
                 break;
@@ -485,9 +339,9 @@ void processLoggingQueue(void) {
 
 static const char* loggeableVarToString(LoggeableVariable var){
 	switch(var){
-		case VAR_SPEED: return "SPEED";
-		case VAR_TEMP: return "TEMP";
-		case VAR_CURRENT: return "CURRENT";
+		case PARAM_SPEED: return "SPEED";
+		case PARAM_TEMP: return "TEMP";
+		case PARAM_CURRENT: return "CURRENT";
 		default: return "UNKNOWN";
 	}
 }
@@ -525,11 +379,6 @@ CommandParam parseParameter(char *param_str){
 	if(strcmp(param_str, "POLEP") == 0) return PARAM_POLEP;
 	if(strcmp(param_str, "CURRENT_LIMIT") == 0) return PARAM_CURRENT_LIMIT;
 	if(strcmp(param_str, "TEMP_LIMIT") == 0) return PARAM_TEMP_LIMIT;
-	if(strcmp(param_str, "KP") == 0) return PARAM_KP;
-	if(strcmp(param_str, "KI") == 0) return PARAM_KI;
-	if(strcmp(param_str, "KD") == 0) return PARAM_KD;
-	if(strcmp(param_str, "MAXSPEED") == 0) return PARAM_MAXSPEED;
-	if(strcmp(param_str, "MINSPEED") == 0) return PARAM_MINSPEED;
 	if(strcmp(param_str, "ALL") == 0) return PARAM_ALL;
 	if(strcmp(param_str, "SPEED") == 0) return PARAM_SPEED;
 	if(strcmp(param_str, "TEMP") == 0) return PARAM_TEMP;
@@ -545,11 +394,10 @@ CommandAction parseAction(char* action_str){
 	if(strcmp( action_str, "SET") == 0) return ACTION_SET;
 	if(strcmp( action_str, "GET") == 0) return ACTION_GET;
 	if(strcmp( action_str, "RESET") == 0) return ACTION_RESET;
-	if(strcmp (action_str, "RUN") == 0 ) return ACTION_RUN;
-	if(strcmp(action_str, "STOP") == 0 ) return ACTION_STOP;
-	if(strcmp(action_str, "ESTOP") == 0 ) return ACTION_EMERGENCY;
+	if(strcmp (action_str, "RUN") == 0) return ACTION_RUN;
+	if(strcmp(action_str, "STOP") == 0) return ACTION_STOP;
+	if(strcmp(action_str, "ESTOP") == 0) return ACTION_EMERGENCY;
 	if(strcmp(action_str, "LOG") == 0) return ACTION_LOGGING;
-	if(strcmp(action_str, "HELP") == 0) return ACTION_HELP;
 	return ACTION_UNKNOWN;
 }
 void transmitirUART(const char* formato, ...) {
@@ -631,6 +479,21 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
 	}
 }
 
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
+    if (huart->Instance == USART1) {
+    	rx_head = (rx_head + 1) % BUFFER_SIZE;
+
+    	HAL_UART_Receive_IT(&huart1, (uint8_t*)&rx_buffer[rx_head], 1);    }
+}
+            char* next_msg = tx_queue.buffers[tx_queue.tail];
+            HAL_UART_Transmit_IT(&huart1, (uint8_t*)next_msg, strlen(next_msg));
+        } else {
+            tx_queue.busy = 0;
+        }
+        
+        __enable_irq();
+	}
+}
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     if (huart->Instance == USART1) {

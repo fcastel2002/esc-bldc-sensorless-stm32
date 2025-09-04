@@ -1,6 +1,0 @@
-/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/pruebas_cmake/CMakeFiles/funcionando_conmutacion_sincrona2.dir
-/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/pruebas_cmake/CMakeFiles/edit_cache.dir
-/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/pruebas_cmake/CMakeFiles/rebuild_cache.dir
-/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/pruebas_cmake/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
-/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/pruebas_cmake/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
-/home/pachibuntu/Documentos/Repositorio proyecto micro/sensorlessESC_MyEP_CASTEL/pruebas_cmake/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir

@@ -1,9 +1,0 @@
-{
-    "files.associations": {
-        "crc.h": "c",
-        "tim.h": "c",
-        "gpio.h": "c",
-        "usart.h": "c",
-        "main.h": "c"
-    }
-}
