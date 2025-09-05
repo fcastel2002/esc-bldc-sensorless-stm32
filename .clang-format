@@ -1,0 +1,23 @@
+# .clang-format
+BasedOnStyle: LLVM
+Language: Cpp
+IndentWidth: 2
+TabWidth: 2
+UseTab: Never
+ColumnLimit: 100
+BreakBeforeBraces: Linux
+AllowShortFunctionsOnASingleLine: Empty
+PointerAlignment: Left
+SpaceBeforeParens: ControlStatements
+AlignConsecutiveAssignments: true
+AlignConsecutiveDeclarations: Consecutive
+AlignOperands: true
+SortIncludes: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^<.*>$'              # headers del sistema
+    Priority: 1
+  - Regex: '^"stm32.*"|^"hal/.*' # HAL/vendor
+    Priority: 2
+  - Regex: '^".*"$'              # headers del proyecto
+    Priority: 3

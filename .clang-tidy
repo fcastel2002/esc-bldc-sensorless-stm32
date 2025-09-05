@@ -1,0 +1,20 @@
+# .clang-tidy
+Checks: >
+  clang-analyzer-*,
+  bugprone-*,
+  readability-*,
+  performance-*,
+  portability-*,
+  misc-*, 
+  -readability-identifier-naming,     # opcional: desactiva reglas de nombres estrictas
+  -clang-analyzer-osx*,
+  -modernize-*                         # la mayoría son C++ (desactivados)
+
+WarningsAsErrors: '*'
+
+HeaderFilterRegex: '^(src|middleware|control|app|cfg)/.*'
+AnalyzeTemporaryDtors: false
+FormatStyle: none
+UseColor: true
+
+# Sugerencia: puedes usar NOLINT/NOLINTNEXTLINE para excepciones justificadas.
