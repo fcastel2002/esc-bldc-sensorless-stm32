@@ -1,4 +1,4 @@
-# Install script for directory: /home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/definitivo/cmake/stm32cubemx
+# Install script for directory: /home/pachi/Documents/Proyectos/ESC Sensorless/esc-bldc/esc-bldc-sensorless-stm32/firmware/cmake/stm32cubemx
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)

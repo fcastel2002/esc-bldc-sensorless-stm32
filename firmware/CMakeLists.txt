@@ -19,7 +19,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Set the project name
-set(CMAKE_PROJECT_NAME funcionando_23-05_002)
+set(CMAKE_PROJECT_NAME firmware_esc_bldc_v1)
 
 # Include toolchain file
 include("cmake/gcc-arm-none-eabi.cmake")
@@ -40,41 +40,52 @@ add_executable(${CMAKE_PROJECT_NAME})
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 
-add_compile_options(
-    -specs=nano.specs
-    -specs=nosys.specs
-)
-
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
-    "-u _printf_float")
+    # Add user defined library search paths
+
+)
 
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    Core/Src/main.c
-    Core/Src/callbacks.c 
-    Core/Src/comm.c
-    Core/Src/flash_config.c
-    Core/Src/hard_config.c
-    Core/Src/motor_control.c
-    Core/Src/state_machine.c
-    Core/Src/startup.c
     # Add user sources here
+    Core/Src/callbacks.c
+    Core/Src/comm.c
+    Core/Src/hard_config.c
+    Core/Src/flash_config.c
+    Core/Src/main.c
+    Core/Src/motor_control.c
+    Core/Src/startup.c
+    Core/Src/state_machine.c
+    Core/Src/vel_routines.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
-    Core/Inc
     Core/Inc/Drivers
-    
+    Core/Inc
+    Drivers/STM32F1xx_HAL_Driver/Inc
+    Drivers/STM32F1xx_HAL_Driver/Inc/Legacy
+    Drivers/CMSIS/Include
+    Drivers/CMSIS/Device/ST/STM32F1xx/Include
 )
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined symbols
+    USE_HAL_DRIVER
+    STM32F103xB
+    # Suppress warnings (example for GCC)
+    # You cannot suppress all warnings via compile definitions, but you can add flags to ignore warnings.
+    # For GCC, you can add flags like -w or specific -Wno-... flags using target_compile_options:
 )
 
+
+# Suppress warnings for GCC
+target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE
+    -w
+)
 # Add linked libraries
 target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx

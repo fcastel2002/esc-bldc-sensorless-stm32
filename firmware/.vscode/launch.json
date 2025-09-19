@@ -34,7 +34,7 @@
         },
          {
           "cwd": "${workspaceRoot}",
-          "executable": "build/Debug/funcionando_23-05_002.elf",
+          "executable": "build/Debug/firmware_esc_bldc.elf",
           "name": "Debug with OpenOCD",
           "request": "launch",
           "type": "cortex-debug",

@@ -1,9 +1,9 @@
-set(CMAKE_HOST_SYSTEM "Linux-6.8.0-60-generic")
+set(CMAKE_HOST_SYSTEM "Linux-6.8.0-79-generic")
 set(CMAKE_HOST_SYSTEM_NAME "Linux")
-set(CMAKE_HOST_SYSTEM_VERSION "6.8.0-60-generic")
+set(CMAKE_HOST_SYSTEM_VERSION "6.8.0-79-generic")
 set(CMAKE_HOST_SYSTEM_PROCESSOR "x86_64")
 
-include("/home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/definitivo/cmake/gcc-arm-none-eabi.cmake")
+include("/home/pachi/Documents/Proyectos/ESC Sensorless/esc-bldc/esc-bldc-sensorless-stm32/firmware/cmake/gcc-arm-none-eabi.cmake")
 
 set(CMAKE_SYSTEM "Generic")
 set(CMAKE_SYSTEM_NAME "Generic")

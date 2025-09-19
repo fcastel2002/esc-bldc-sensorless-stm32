@@ -1,4 +1,4 @@
-# Install script for directory: /home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/definitivo
+# Install script for directory: /home/pachi/Documents/Proyectos/ESC Sensorless/esc-bldc/esc-bldc-sensorless-stm32/firmware
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -39,7 +39,7 @@ endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
   # Include the install script for the subdirectory.
-  include("/home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/definitivo/build/Debug/cmake/stm32cubemx/cmake_install.cmake")
+  include("/home/pachi/Documents/Proyectos/ESC Sensorless/esc-bldc/esc-bldc-sensorless-stm32/firmware/build/Debug/cmake/stm32cubemx/cmake_install.cmake")
 endif()
 
 if(CMAKE_INSTALL_COMPONENT)
@@ -50,5 +50,5 @@ endif()
 
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
-file(WRITE "/home/pachi/Documents/Proyectos/ESC Sensorless/sensorlessESC_MyEP_CASTEL/definitivo/build/Debug/${CMAKE_INSTALL_MANIFEST}"
+file(WRITE "/home/pachi/Documents/Proyectos/ESC Sensorless/esc-bldc/esc-bldc-sensorless-stm32/firmware/build/Debug/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")

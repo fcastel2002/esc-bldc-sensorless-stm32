@@ -10,113 +10,119 @@
 
 #include "usart.h"
 
-// defines
+
+//defines
 
 #define BUFFER_SIZE 128
 #define MAX_CMD_LEN 64
 #define MAX_LOGGED_PARAMS 5
 #define TX_QUEUE_SIZE 10
-#define TX_BUFFER_SIZE 128
-// variables
-extern uint8_t           rx_data[1];
-extern volatile char     rx_buffer[BUFFER_SIZE];
+#define TX_BUFFER_SIZE 256
+//variables
+extern uint8_t rx_data[1];
+extern volatile char rx_buffer[BUFFER_SIZE];
 extern volatile uint16_t rx_head;
 extern volatile uint16_t rx_tail;
-extern uint8_t           rx_index;
-extern volatile uint8_t  cmd_received_ack;
-extern volatile uint8_t  cmd_speed_received_ack;
-extern volatile uint8_t  set_cmd_received_ack;
-extern volatile uint8_t  running_cmd_ack;
-extern volatile uint8_t  stop_cmd_ack;
-extern volatile uint8_t  emergency_cmd_ack;
-extern volatile uint8_t  logger_config_done;
+extern uint8_t rx_index;
+extern volatile uint8_t cmd_received_ack;
+extern volatile uint8_t cmd_speed_received_ack;
+extern volatile uint8_t set_cmd_received_ack;
+extern volatile uint8_t running_cmd_ack;
+extern volatile uint8_t stop_cmd_ack;
+extern volatile uint8_t emergency_cmd_ack;
+extern volatile uint8_t logger_config_done;
 
-// types
+ //types
+
+ typedef struct {
+     char *command;               // Texto del comando
+     void (*execute)();
+ } Command;
+
+
+ typedef enum {
+
+	 CMD_OK		= 0x00,
+	 CMD_UNKNOWN = 0x01,
+	 CMD_CRC_ERR = 0x02,
+	 CMD_OVF_ERR = 0x03,
+
+ }CommandStatus;
+  typedef enum{
+ 	PARAM_PWM_FREQ,
+ 	PARAM_CURRENT_LIMIT,
+ 	PARAM_TEMP_LIMIT,
+	PARAM_KP,
+	PARAM_KI,
+	PARAM_KD,
+	PARAM_MAXSPEED,
+	PARAM_MINSPEED,
+	PARAM_ALL,
+	PARAM_SPEED,
+	PARAM_UNKNOWN,
+	PARAM_LOG_RATE,
+	PARAM_START,
+	PARAM_STOP,
+	PARAM_RATE,
+	PARAM_POLEP,
+	PARAM_TEMP,
+	PARAM_CURRENT,
+
+
+ }CommandParam;
+ typedef enum {
+	VAR_TEMP,
+	VAR_CURRENT,
+	VAR_SPEED,
+ }LoggeableVariable;
 
 typedef struct {
-  char* command; // Texto del comando
-  void (*execute)();
-} Command;
-
-typedef enum {
-
-  CMD_OK      = 0x00,
-  CMD_UNKNOWN = 0x01,
-  CMD_CRC_ERR = 0x02,
-  CMD_OVF_ERR = 0x03,
-
-} CommandStatus;
-typedef enum {
-  PARAM_PWM_FREQ,
-  PARAM_CURRENT_LIMIT,
-  PARAM_TEMP_LIMIT,
-  PARAM_KP,
-  PARAM_KI,
-  PARAM_KD,
-  PARAM_MAXSPEED,
-  PARAM_MINSPEED,
-  PARAM_ALL,
-  PARAM_SPEED,
-  PARAM_UNKNOWN,
-  PARAM_LOG_RATE,
-  PARAM_START,
-  PARAM_STOP,
-  PARAM_RATE,
-  PARAM_POLEP,
-  PARAM_TEMP,
-  PARAM_CURRENT,
-
-} CommandParam;
-typedef enum {
-  PARAM_TEMP,
-  PARAM_CURRENT,
-  PARAM_SPEED,
-} LoggeableVariable;
-
-typedef struct {
-  char             buffers[TX_QUEUE_SIZE][TX_BUFFER_SIZE];
-  uint8_t          head;
-  uint8_t          tail;
-  uint8_t          count;
-  volatile uint8_t busy;
+    char buffers[TX_QUEUE_SIZE][TX_BUFFER_SIZE];
+    uint8_t head;
+    uint8_t tail;
+    uint8_t count;
+    volatile uint8_t busy;
 } TxQueue;
 
-typedef struct {
-  CommandParam params[MAX_LOGGED_PARAMS]; // Array de parámetros a loggear
-  uint8_t      count;
+typedef struct{
+	LoggeableVariable params[MAX_LOGGED_PARAMS]; // Array de parámetros a loggear
+	uint8_t count;
 
-} LoggingQueue;
+ }LoggingQueue;
 
-typedef enum {
-  ACTION_SET,
-  ACTION_GET,
-  ACTION_RESET,
-  ACTION_UNKNOWN,
-  ACTION_RUN,
-  ACTION_STOP,
-  ACTION_EMERGENCY,
-  ACTION_LOGGING,
-} CommandAction;
-// functions
 
-void        processCommand(char* cmd);
-extern void processCurrentCommand(void);
-void        clearRxBuffer(void);
 
-void           commInit(void);
-void           processUartData(void);
-extern uint8_t processSpeedCommand(void);
-extern void    handleCommandEffects(void);
-CommandParam   parseParameter(char* param_str);
-CommandAction  parseAction(char* action_str);
-void           transmitirUART(const char* formato, ...);
-// const
-extern const Command     commandTable[];
+ typedef enum{
+ 	ACTION_SET,
+ 	ACTION_GET,
+ 	ACTION_RESET,
+ 	ACTION_UNKNOWN,
+	ACTION_RUN,
+	ACTION_STOP,
+	ACTION_EMERGENCY,
+	ACTION_LOGGING,
+	ACTION_HELP,
+ }CommandAction;
+ // functions
+
+ void processCommand(char *cmd);
+ extern void processCurrentCommand(void);
+ void clearRxBuffer(void);
+
+ void commInit(void);
+ void processUartData(void);
+ extern uint8_t processSpeedCommand(void);
+extern void handleCommandEffects(void);
+ CommandParam parseParameter(char* param_str);
+ CommandAction parseAction(char* action_str);
+ void transmitirUART(const char *formato, ...);
+ // const
+ extern const Command commandTable[];
 extern volatile uint16_t logging_rate_ms;
-
-extern void parameterLogging(CommandParam* parameter, uint16_t rate_ms);
-void        startLoggingParam(LoggeableVariable variable);
-void        stopLoggingParam(LoggeableVariable variable);
+ 
+extern void parameterLogging(CommandParam *parameter, uint16_t rate_ms);
+void startLoggingParam(LoggeableVariable variable);
+void stopLoggingParam(LoggeableVariable variable);
 extern void processLoggingQueue(void);
 
 #endif /* INC_COMM_H_ */

@@ -58,8 +58,8 @@
 
 /* USER CODE END 0 */
 /**
- * Initializes the Global MSP.
- */
+  * Initializes the Global MSP.
+  */
 void HAL_MspInit(void)
 {
 
@@ -73,7 +73,7 @@ void HAL_MspInit(void)
   /* System interrupt init*/
 
   /** NOJTAG: JTAG-DP Disabled and SW-DP Enabled
-   */
+  */
   //__HAL_AFIO_REMAP_SWJ_NOJTAG();
 
   /* USER CODE BEGIN MspInit 1 */
