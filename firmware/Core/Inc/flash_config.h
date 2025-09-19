@@ -8,9 +8,6 @@
 #ifndef INC_FLASH_CONFIG_H_
 #define INC_FLASH_CONFIG_H_
 
-//#include "stm32f1xx_hal_flash.h"
-
-//#include "hard_config.h"
 #include "main.h"
 
 #define FLASH_CONFIG_PAGES 2 // nro de paginas rotativas
