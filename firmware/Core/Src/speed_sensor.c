@@ -1,18 +1,9 @@
 #include "speed_sensor.h"
 #include "hard_config.h"
 
-#define ZCP_VALID_MAX_THRESHOLD 50000
-#define ZCP_VALID_MIN_THRESHOLD 50
-#define SPEED_MAX 200 // pwm
-#define SPEED_MIN 14000
-#define SPEED_RANGE (SPEED_MIN - SPEED_MAX)
-#define ZCP_TO_CHECK 4
 
-//sensado de velocidad
-#define SPEED_TOLERANCE_PCT 25
 
 // DECLARACION DE FUNCIONES PRIVADAS
-static void process_phase_measurement(uint8_t phase_idx, uint16_t current_timestamp);
 static void calculate_consensus_speed(void);
 
 // VARIABLES PARA MEDICION DE VELOCIDAD DE CONSENSO TRIFASICO
@@ -39,6 +30,8 @@ static volatile uint16_t last_speed_capture  = 1;
 //====================================================
 static void reset_phase_measurements(void);
 static void get_phase_diagnostics(uint16_t* phase_speeds, uint8_t* phase_status);
+
+
 
 /**
  * @brief Procesa mediciones de una fase específica para el sistema de consenso tri-fase
@@ -74,7 +67,7 @@ static void get_phase_diagnostics(uint16_t* phase_speeds, uint8_t* phase_status)
  * @warning Esta función debe ser llamada desde contexto de interrupción
  * @warning Los datos son válidos solo después de ZCP_BUFFER_SIZE mediciones
  */
-static void process_phase_measurement(uint8_t phase_idx, uint16_t current_timestamp)
+void speed_sensor_process_phase_measurement(uint8_t phase_idx, uint16_t current_timestamp)
 {
   PhaseMeasurementThreePhase* phase = &phase_measurements[phase_idx];
 
@@ -277,10 +270,7 @@ uint16_t period_to_rpm(uint16_t period)
 
   return (uint16_t)rpm;
 }
-uint16_t period_to_pwm(uint16_t period)
-{
-  return map_speed(period); // Usa tu función existente
-}
+
 
 
 uint16_t filtro_media_movil_zc(uint16_t measurement)
@@ -315,7 +305,7 @@ uint16_t filtro_media_movil_zc(uint16_t measurement)
 void speed_sensor_handle_W_measurement(void)
 {
     uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
-    process_phase_measurement(0, current_timestamp); // Fase W = índice 0
+    speed_sensor_process_phase_measurement(0, current_timestamp); // Fase W = índice 0
 
     if (last_W_timestamp != 0) {
         uint16_t period;
@@ -363,9 +353,6 @@ void speed_sensor_handle_consensus(void)
 {
     static uint8_t speed_calc_counter = 0;
 
-    if (!state_allows_consensus())
-        return;
-
     speed_calc_counter++;
     if (speed_calc_counter < 2)
         return;
@@ -398,3 +385,4 @@ uint16_t speed_sensor_get_speed_range()
 
   return (SPEED_MIN - SPEED_MAX);
 }
+

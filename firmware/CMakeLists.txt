@@ -58,8 +58,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/startup.c
     Core/Src/state_machine.c
     Core/Src/vel_routines.c
-        Core/Src/speed_sensor.c
-        Core/Src/bldc_driver.c
+    Core/Src/speed_sensor.c
+    Core/Src/bldc_driver.c
+    Core/Src/utilities.c
 )
 
 # Add include paths

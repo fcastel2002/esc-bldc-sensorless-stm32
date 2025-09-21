@@ -18,7 +18,8 @@
         "compare": "c",
         "speed_sensor.h": "c",
         "basic_config.h": "c",
-        "tim.h": "c"
+        "tim.h": "c",
+        "utilities.h": "c"
     },
     "C_Cpp.default.compilerArgs": [
         "-Wno-unused-variable"

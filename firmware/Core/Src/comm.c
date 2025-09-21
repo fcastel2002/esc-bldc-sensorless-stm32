@@ -597,10 +597,8 @@ uint8_t process_speed_command(void) {
             if (speed_value >= 0) {
             	if(speed_value > 100){
 					speed_setpoint_rpm = speed_value;
-					//speed_setpoint_rpm = period_to_pwm(speed_setpoint);
 				}else{
 					speed_setpoint_rpm = 100;
-					//speed_setpoint_rpm =period_to_pwm(speed_setpoint);
 				}
 				processed = 1;
                 transmitir_UART("SPEED set to %d\r\n", speed_value);

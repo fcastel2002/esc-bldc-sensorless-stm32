@@ -84,8 +84,22 @@ volatile uint8_t consistent_zero_crossing = 0; // flag
 static float kp = 0;
 static float ki = 0;
 static float kd = 0;
-uint8_t motor_pole_pairs = 2;
-#define TIMER_CLOCK 72000000 // 72 MHz
+
+// MAPEO PERIODO a PWM
+static inline uint16_t map_speed(uint16_t raw_speed)
+{
+  if (raw_speed == 0) {
+    raw_speed = SPEED_MIN;
+  }
+
+  if (raw_speed > SPEED_MIN) {
+    raw_speed = SPEED_MIN;
+  } else if (raw_speed < SPEED_MAX) {
+    raw_speed = SPEED_MAX;
+  }
+  uint16_t mapped_speed = (SPEED_MIN - raw_speed) * pwm_speed_range_relation + min_limit_pwm;
+  return mapped_speed;
+}
 // FUNCIONES PARA MEDICION DE VELOCIDAD
 
 void updateAllMotorControl()
@@ -130,7 +144,7 @@ void zero_crossing_handler(uint8_t fase)
     if (state_allows_speed_measurement()) {
       speed_sensor_handle_W_measurement();
     }
-    speed_sensor_handle_consensus();
+    if(state_allows_speed_update()) speed_sensor_handle_consensus();
     break;
 
   case 2: // Fase V
@@ -139,7 +153,7 @@ void zero_crossing_handler(uint8_t fase)
     // Procesar medición de velocidad para fase V
     if (state_allows_speed_measurement()) {
       uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
-      process_phase_measurement(1, current_timestamp); // Fase V = índice 1
+      speed_sensor_process_phase_measurement(1, current_timestamp); // Fase V = índice 1
     }
     break;
 
@@ -149,7 +163,7 @@ void zero_crossing_handler(uint8_t fase)
     // Procesar medición de velocidad para fase U
     if (state_allows_speed_measurement()) {
       uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_3);
-      process_phase_measurement(2, current_timestamp); // Fase U = índice 2
+      speed_sensor_process_phase_measurement(2, current_timestamp); // Fase U = índice 2
     }
     break;
   }
@@ -210,6 +224,12 @@ void check_motor_status()
       stall_counter   = 0;
     }
   }
+}
+
+
+uint16_t period_to_pwm(uint16_t period)
+{
+  return map_speed(period); // Usa tu función existente
 }
 
 
@@ -313,7 +333,49 @@ void stop_motor(uint8_t mode)
     break;
   }
 }
+uint16_t convert_speed_ticks(uint16_t value, bool to_ticks)
+{
+  if (to_ticks) {
+    // RPM -> setpoint (PWM units): reuse speed_sensor helpers
+    if (value == 0)
+      return 0;
+    uint16_t period = rpm_to_period(value);
+    return period_to_pwm(period);
+  } else {
+    // setpoint (PWM units) -> RPM
+    if (value == 0)
+      return 0;
 
+    // Ensure mapping params available
+    if (pwm_speed_range_relation == 0.0f) {
+      // protect division by zero: compute from current limits
+      pwm_speed_range_relation = (float)(max_limit_pwm - min_limit_pwm) / (float)speed_sensor_get_speed_range();
+    }
+
+    // Revertir el mapeo lineal que usamos para mapear periodo->pwm
+    double timer_ticks = SPEED_MIN - (((double)value - (double)min_limit_pwm) / pwm_speed_range_relation);
+
+    // Clamp al rango válido
+    if (timer_ticks < SPEED_MAX)
+      timer_ticks = SPEED_MAX;
+    if (timer_ticks > SPEED_MIN)
+      timer_ticks = SPEED_MIN;
+
+    // Convertir ticks -> periodo eléctrico y luego a RPM mecánicos
+    double zc_period = timer_ticks / (HAL_RCC_GetHCLKFreq() / (TIM2->PSC + 1));
+    double period    = zc_period * 6.0; // período eléctrico total (s)
+    double frequency = 1.0 / period;    // Hz eléctricos
+    double rpm_electrical = frequency * 60.0;
+    double rpm_mechanical = rpm_electrical / get_motor_pole_pairs();
+
+    // Limitar a rango razonable
+    if (rpm_mechanical < get_min_speed_rpm())
+      return get_min_speed_rpm();
+    if (rpm_mechanical > get_max_speed_rpm())
+      return get_max_speed_rpm();
+    return (uint16_t)rpm_mechanical;
+  }
+}
 
 
 

@@ -38,7 +38,8 @@ extern void detect_motor(void);
 extern void     zero_crossing_handler(uint8_t fase);
 extern void     check_motor_status(void);
 extern void     stop_motor(uint8_t mode);
-
+extern uint16_t convert_speed_ticks(uint16_t value, bool to_ticks);
+extern uint16_t period_to_pwm(uint16_t period);
 
 // MACROS PARA MEDICION DE VELOCIDAD
 
