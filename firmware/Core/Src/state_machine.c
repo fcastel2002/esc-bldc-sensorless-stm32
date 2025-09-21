@@ -35,11 +35,11 @@ App_States_t handleState(void)
   }
 
   if (app_state != IDLE && app_state != HARD_ERROR) {
-    processLoggingQueue();
+    process_logging_queue();
   }
 
   if (cmd_received_ack && (app_state == IDLE || app_state == RUNNING || app_state == CLOSEDLOOP)) {
-    if (processSpeedCommand()) {
+    if (process_speed_command()) {
       cmd_speed_received_ack = 0;
     } else {
       processCurrentCommand();

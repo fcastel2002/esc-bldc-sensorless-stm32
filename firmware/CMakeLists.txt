@@ -49,7 +49,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
-    Core/Src/callbacks.c
+    Core/Src/isr_callbacks.c
     Core/Src/comm.c
     Core/Src/hard_config.c
     Core/Src/flash_config.c
@@ -58,6 +58,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/startup.c
     Core/Src/state_machine.c
     Core/Src/vel_routines.c
+        Core/Src/speed_sensor.c
+        Core/Src/bldc_driver.c
 )
 
 # Add include paths

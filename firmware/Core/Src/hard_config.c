@@ -7,20 +7,34 @@
 
 #include "hard_config.h"
 
+static volatile uint16_t pwm_freq_arr      = 0;
+static volatile uint16_t current_limit_adc = 0;
+static volatile uint16_t max_speed_arr     = 0;
+
+static const uint16_t ESC_max_pwm_freq = 24000; // hz
+static const uint16_t ESC_min_pwm_freq = 5000;
+static const float    ESC_max_current  = 3;     // amp
+static const uint16_t ESC_max_speed    = 12000; // rpm
+static const uint16_t ESC_min_speed    = 600;
+
+
 ConfigStatus     current_config_status = CONFIG_OK;
 volatile uint8_t esc_config_done       = 0;
 ESCparams        current_esc_params    = {0};
+
+// ==========================
+
 void             set_default_esc_params()
 {
   current_esc_params.signature     = 0x50415055;
   current_esc_params.pwm_freq_hz   = 18000;
   current_esc_params.current_limit = 10;
   current_esc_params.temp_limit    = 70;
-  current_esc_params.deadtime_ns   = 100;
   current_esc_params.speed_kp      = 0.75f;
   current_esc_params.speed_ki      = 1.35f;
   current_esc_params.speed_kd      = 0.0f;
   current_esc_params.speed_max_rpm = 5400;
+  current_esc_params.speed_min_rpm = 200; // Default minimum speed
   current_esc_params.pole_pairs    = 2; // Default pole pairs
 
   current_esc_params.crc32 = compute_crc32(&current_esc_params);
@@ -92,7 +106,7 @@ ConfigStatus set_pwm_freq(uint16_t new_freq)
   flash_config_parameter_changed();
   return CONFIG_OK;
 }
-ConfigStatus setPolePairs(uint8_t new_pole_pairs)
+ConfigStatus set_pole_pairs(uint8_t new_pole_pairs)
 {
   if (new_pole_pairs < 1)
     return CONFIG_ERROR_UNDERLIMIT; // Arbitrary limits
@@ -104,12 +118,12 @@ ConfigStatus setPolePairs(uint8_t new_pole_pairs)
   return CONFIG_OK;
 }
 
-uint8_t getPolePairs()
+uint8_t get_pole_pairs()
 {
   return current_esc_params.pole_pairs;
 }
 
-ConfigStatus setKP(float new_kp)
+ConfigStatus set_KP(float new_kp)
 {
   if (new_kp < 0.0f)
     return CONFIG_ERROR_UNDERLIMIT; // Arbitrary limits
@@ -120,11 +134,11 @@ ConfigStatus setKP(float new_kp)
   flash_config_parameter_changed();
   return CONFIG_OK;
 }
-float getKP()
+float get_KP()
 {
   return current_esc_params.speed_kp;
 }
-ConfigStatus setKI(float new_ki)
+ConfigStatus set_KI(float new_ki)
 {
   if (new_ki < 0.0f)
     return CONFIG_ERROR_UNDERLIMIT; // Arbitrary limits
@@ -135,12 +149,12 @@ ConfigStatus setKI(float new_ki)
   flash_config_parameter_changed();
   return CONFIG_OK;
 }
-float getKI()
+float get_KI()
 {
   return current_esc_params.speed_ki;
 }
 
-ConfigStatus setKD(float new_kd)
+ConfigStatus set_KD(float new_kd)
 {
   if (new_kd < 0.0f)
     return CONFIG_ERROR_UNDERLIMIT;
@@ -151,7 +165,37 @@ ConfigStatus setKD(float new_kd)
   flash_config_parameter_changed();
   return CONFIG_OK;
 }
-float getKD()
+float get_KD()
 {
   return current_esc_params.speed_kd;
+}
+
+uint16_t get_min_speed()
+{
+  return current_esc_params.speed_min_rpm;
+}
+uint16_t get_max_speed()
+{
+  return current_esc_params.speed_max_rpm;
+}
+ConfigStatus set_max_speed(uint16_t new_speed)
+{
+  if (new_speed < ESC_min_speed)
+    return CONFIG_ERROR_UNDERLIMIT;
+  if (new_speed > ESC_max_speed)
+    return CONFIG_ERROR_OVERLIMIT;
+  current_esc_params.speed_max_rpm = new_speed;
+  flash_config_parameter_changed();   
+  return CONFIG_OK;
+}
+
+ConfigStatus set_min_speed(uint16_t new_speed)
+{
+  if (new_speed < ESC_min_speed)
+    return CONFIG_ERROR_UNDERLIMIT;
+  if (new_speed > ESC_max_speed)
+    return CONFIG_ERROR_OVERLIMIT;
+  current_esc_params.speed_min_rpm = new_speed;
+  flash_config_parameter_changed();
+  return CONFIG_OK;
 }

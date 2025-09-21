@@ -45,19 +45,19 @@
 			{
 				"command" : 2,
 				"file" : 0,
-				"line" : 86,
+				"line" : 88,
 				"parent" : 0
 			},
 			{
 				"command" : 3,
 				"file" : 0,
-				"line" : 75,
+				"line" : 77,
 				"parent" : 0
 			},
 			{
 				"command" : 4,
 				"file" : 0,
-				"line" : 64,
+				"line" : 66,
 				"parent" : 0
 			},
 			{
@@ -156,7 +156,9 @@
 				14,
 				15,
 				16,
-				17
+				17,
+				18,
+				19
 			]
 		},
 		{
@@ -271,7 +273,9 @@
 				14,
 				15,
 				16,
-				17
+				17,
+				18,
+				19
 			]
 		},
 		{
@@ -285,8 +289,6 @@
 			"name" : "Object Libraries",
 			"sourceIndexes" : 
 			[
-				18,
-				19,
 				20,
 				21,
 				22,
@@ -300,7 +302,9 @@
 				30,
 				31,
 				32,
-				33
+				33,
+				34,
+				35
 			]
 		}
 	],
@@ -369,7 +373,7 @@
 		{
 			"backtrace" : 8,
 			"compileGroupIndex" : 0,
-			"path" : "Core/Src/callbacks.c",
+			"path" : "Core/Src/isr_callbacks.c",
 			"sourceGroupIndex" : 0
 		},
 		{
@@ -412,6 +416,18 @@
 			"backtrace" : 8,
 			"compileGroupIndex" : 0,
 			"path" : "Core/Src/vel_routines.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "Core/Src/speed_sensor.c",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 8,
+			"compileGroupIndex" : 0,
+			"path" : "Core/Src/bldc_driver.c",
 			"sourceGroupIndex" : 0
 		},
 		{

@@ -6,6 +6,7 @@
  */
 
 #include "startup.h"
+#include "bldc_driver.h"
 #define Q15_ONE 32768U
 #define Q15_MAX 32760U
 
@@ -81,7 +82,7 @@ SineDriveController   sine_ctrl   = {
  *
  * @note Variables globales inicializadas:
  * - app_state: Cambia a FOC_STARTUP
- * - float_U, float_V, float_W: Todas configuradas como true
+ * - floating_U, floating_V, floating_W: Todas configuradas como true
  * - sine_ctrl.startup_counter: Resetea a 0
  * - sine_ctrl.timer_arr: Configurado con valor inicial
  *
@@ -107,9 +108,9 @@ void foc_startup(void)
   GPIOB->ODR |= EN_V;
   GPIOA->ODR |= EN_W;
   __HAL_TIM_ENABLE_IT(&htim4, TIM_IT_UPDATE);
-  float_U = true;
-  float_V = true;
-  float_W = true;
+  floating_U = true;
+  floating_V = true;
+  floating_W = true;
 
   // Reset startup counter
   sine_ctrl.startup_counter = 0;
@@ -216,7 +217,7 @@ volatile bool ready_for_running = false;
 static void executeTransition(void)
 {
   // Configurar para six-step
-  pwmVal = max_pwm * 0.45f; // 30% duty cycle inicial
+  bldc_set_pwm(max_pwm * 0.45f); // 30% duty cycle inicial
   // Desactivar salidas temporalmente
   GPIOB->ODR &= ~EN_U;
   GPIOB->ODR &= ~EN_V;
@@ -229,9 +230,9 @@ static void executeTransition(void)
   PWM_INIT();
 
   // Configurar estado de las fases
-  float_U = true;
-  float_V = true;
-  float_W = true;
+  floating_U = true;
+  floating_V = true;
+  floating_W = true;
 
   // Cambiar estado de la aplicación
   app_state = RUNNING;

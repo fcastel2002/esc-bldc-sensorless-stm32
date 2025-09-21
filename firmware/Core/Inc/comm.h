@@ -111,18 +111,18 @@ typedef struct{
 
  void commInit(void);
  void processUartData(void);
- extern uint8_t processSpeedCommand(void);
+ extern uint8_t process_speed_command(void);
 extern void handleCommandEffects(void);
- CommandParam parseParameter(char* param_str);
- CommandAction parseAction(char* action_str);
- void transmitirUART(const char *formato, ...);
+ CommandParam parse_parameter(char* param_str);
+ CommandAction parse_action(char* action_str);
+ void transmitir_UART(const char *formato, ...);
  // const
  extern const Command commandTable[];
 extern volatile uint16_t logging_rate_ms;
  
 extern void parameterLogging(CommandParam *parameter, uint16_t rate_ms);
-void startLoggingParam(LoggeableVariable variable);
-void stopLoggingParam(LoggeableVariable variable);
-extern void processLoggingQueue(void);
+void start_logging_param(LoggeableVariable variable);
+void stop_logging_param(LoggeableVariable variable);
+extern void process_logging_queue(void);
 
 #endif /* INC_COMM_H_ */
