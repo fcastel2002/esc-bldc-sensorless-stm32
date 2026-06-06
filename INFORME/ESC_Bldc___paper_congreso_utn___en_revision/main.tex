@@ -1,0 +1,47 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+% *** PACKAGES ***
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{siunitx}
+\usepackage{float}
+\usepackage{geometry}
+\usepackage[spanish,english]{babel}  % Añade soporte para español
+\usepackage[utf8]{inputenc}  % Soporte para caracteres especiales
+\usepackage{fancyhdr}
+\usepackage{graphicx}
+\usepackage{indentfirst}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}
+\usepackage{enumitem}
+\usepackage{siunitx}
+\usepackage{hyperref}
+\graphicspath{{./}{imagenes ensayo de ingenieria/}{imagenes_circuitos/}{imagenes_placa/}{imagenes_potencia/}{imagenes_varias/}}
+
+
+\begin{document}
+
+\title{Desarrollo de \textit{ESC} para motores \textit{BLDC} sin sensores de posición, basado en microcontrolador de la gama \textit{STM32}}
+
+\author{Francisco Castel\\\normalsize Facultad de Ingeniería - UNCUYO \\\normalsize Mendoza, Argentina\\\normalsize castel.francisco@uncuyo.edu.ar \\\normalsize\url{https://github.com/fcastel2002}}
+
+\maketitle
+
+
+\begin{abstract}
+Este trabajo presenta el desarrollo e implementación de un Controlador Electrónico de Velocidad (ESC) \textit{sensorless} para motores \textit{BLDC/PMSM} utilizando microcontroladores STM32. El diseño se centra en un enfoque de bajo costo y complejidad reducida, basado en la detección de cruces por cero (ZCP) de la fuerza contraelectromotriz mediante comparadores analógicos, complementado con un control PI para la regulación de velocidad. La arquitectura propuesta aprovecha periféricos nativos del STM32F103C8T6 (\textit{timers} avanzados, ADC, \textit{UART} y memoria \textit{Flash}), lo que minimiza la carga computacional y aumenta la robustez del sistema. Se implementó una estrategia de arranque basada en modulación SPWM trifásica en lazo abierto, que asegura una transición estable hacia el régimen \textit{sensorless}. Asimismo, se desarrolló una máquina de estados modular que gestiona los distintos modos de operación (IDLE, RUNNING, CLOSED-LOOP, CONFIG, entre otros), mejorando la escalabilidad y confiabilidad del \textit{firmware}. Los ensayos experimentales con motores \textit{BLDC} extraídos de discos rígidos demostraron un rango de operación entre 100 y 5500 rpm, estabilidad térmica en la etapa de potencia basada en L298N, y un control adecuado bajo condiciones de carga predecible. El prototipo constituye una base funcional para aplicaciones donde la simplicidad y la eficiencia prevalecen sobre la necesidad de control dinámico avanzado, tales como ventiladores, sistemas de bombeo y pequeños vehículos eléctricos. Finalmente, se discuten limitaciones del enfoque reactivo y posibles mejoras mediante técnicas predictivas o híbridas, apuntando hacia futuras implementaciones con mayor robustez e integración industrial.
+\end{abstract}
+
+\input{body_content.tex}
+
+%% Bibliography
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

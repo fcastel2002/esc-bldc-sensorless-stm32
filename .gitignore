@@ -1,0 +1,33 @@
+# IDE and workspace metadata
+.metadata/
+.idea/
+.vscode/
+*.log
+
+# CMake and embedded build outputs
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+build.ninja
+*.elf
+*.map
+*.o
+*.obj
+*.bin
+*.hex
+
+# LaTeX generated files
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# OS files
+Thumbs.db
+.DS_Store
