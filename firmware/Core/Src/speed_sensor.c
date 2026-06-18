@@ -231,14 +231,14 @@ uint16_t rpm_to_period(uint16_t rpm)
   if (rpm == 0)
     return 0xFFFF;
 
-  // Calcular frecuencia eléctrica (Hz)
-  double f_elec = (rpm * get_pole_pairs()) / 60.0;
+  // Calcular ticks entre cruces por cero con aritmetica entera.
+  uint8_t pole_pairs = get_pole_pairs();
+  if (pole_pairs == 0)
+    return SPEED_MIN;
 
-  // Calcular período entre cruces por cero (segundos)
-  double T_zc = 1.0 / (2.0f * f_elec);
+  uint32_t timer_hz = HAL_RCC_GetHCLKFreq() / (TIM2->PSC + 1u);
 
-  // Convertir a ticks (considerando prescaler)
-  double ticks = T_zc * (HAL_RCC_GetHCLKFreq() / (TIM2->PSC + 1));
+  uint32_t ticks = (timer_hz * 30u) / ((uint32_t)rpm * pole_pairs);
 
   // Aplicar límites del sistema
   if (ticks < SPEED_MAX)
@@ -253,14 +253,14 @@ uint16_t period_to_rpm(uint16_t period)
   if (period == 0 || period == 0xFFFF)
     return 0;
 
-  // Convertir ticks a segundos
-  double T_zc = (double)period / (HAL_RCC_GetHCLKFreq() / (TIM2->PSC + 1));
+  // Convertir ticks entre cruces por cero a RPM mecanicos.
+  uint8_t pole_pairs = get_pole_pairs();
+  if (pole_pairs == 0)
+    return 0;
 
-  // Calcular frecuencia eléctrica (Hz)
-  double f_elec = 1.0 / (2.0f * T_zc);
+  uint32_t timer_hz = HAL_RCC_GetHCLKFreq() / (TIM2->PSC + 1u);
 
-  // Calcular RPM mecánicos
-  double rpm = (f_elec * 60.0) / get_pole_pairs();
+  uint32_t rpm = (timer_hz * 30u) / ((uint32_t)period * pole_pairs);
 
   // Aplicar límites del motor
   if (rpm < get_min_speed())

@@ -34,12 +34,19 @@ La maqueta separa la etapa logica y la etapa de potencia para facilitar pruebas,
 
 El firmware STM32 se encuentra en [firmware/](firmware/). Esta carpeta contiene el proyecto embebido, configuracion de perifericos, control del motor, maquina de estados, comunicacion UART y rutinas de arranque/control.
 
+## Documentacion del codigo
+
+- Flujo actual del firmware: [docs/PROJECT_FLOW.md](docs/PROJECT_FLOW.md)
+- Configuracion Doxygen: [docs/Doxyfile](docs/Doxyfile)
+- Salida HTML generada localmente: `docs/api/html/index.html`
+
 ## Estructura del repositorio
 
 ```text
 .
 |-- firmware/   Proyecto embebido STM32F103C8T6
 |-- INFORME/    Paper, proyecto Overleaf, esquematicos e imagenes
+|-- docs/       Documentacion del codigo y guia de flujo
 |-- out/        Diagramas y salidas auxiliares del proyecto
 |-- README.md   Resumen visual y tecnico del repositorio
 ```

@@ -1,0 +1,66 @@
+# Doxygen configuration for the ESC BLDC STM32 repository.
+# Run from the repository root:
+#   doxygen docs/Doxyfile
+
+PROJECT_NAME           = "ESC BLDC STM32"
+PROJECT_BRIEF          = "Firmware STM32F103C8T6 and host helpers for a sensorless BLDC/PMSM ESC"
+OUTPUT_DIRECTORY       = docs/api
+CREATE_SUBDIRS         = NO
+
+INPUT                  = README.md \
+                         firmware/COMM_PROTOCOL.md \
+                         docs/code-docs-main.md \
+                         firmware/Core/Inc \
+                         firmware/Core/Src \
+                         gui
+INPUT_ENCODING         = UTF-8
+RECURSIVE              = YES
+FILE_PATTERNS          = *.c *.h *.py *.md
+USE_MDFILE_AS_MAINPAGE = docs/code-docs-main.md
+
+EXCLUDE                = firmware/Core/Src/vel_routines.c \
+                         firmware/Core/Inc/vel_routines.h
+EXCLUDE_PATTERNS       = */build/* \
+                         */Drivers/* \
+                         */Middlewares/* \
+                         */.vscode/* \
+                         */__pycache__/*
+
+EXTRACT_ALL            = YES
+EXTRACT_STATIC         = YES
+EXTRACT_LOCAL_CLASSES  = YES
+HIDE_UNDOC_MEMBERS     = NO
+HIDE_UNDOC_CLASSES     = NO
+OPTIMIZE_OUTPUT_FOR_C  = YES
+MARKDOWN_SUPPORT       = YES
+AUTOLINK_SUPPORT       = YES
+
+FULL_PATH_NAMES        = NO
+STRIP_FROM_PATH        = firmware gui
+INLINE_SOURCES         = NO
+SOURCE_BROWSER         = YES
+REFERENCED_BY_RELATION = YES
+REFERENCES_RELATION    = YES
+
+GENERATE_HTML          = YES
+HTML_OUTPUT            = html
+HTML_DYNAMIC_MENUS     = YES
+GENERATE_TREEVIEW      = YES
+DISABLE_INDEX          = NO
+SEARCHENGINE           = YES
+SERVER_BASED_SEARCH    = NO
+
+GENERATE_LATEX         = NO
+GENERATE_XML           = NO
+GENERATE_MAN           = NO
+GENERATE_RTF           = NO
+
+QUIET                  = NO
+WARNINGS               = YES
+WARN_IF_UNDOCUMENTED   = NO
+WARN_IF_DOC_ERROR      = YES
+WARN_LOGFILE           = docs/api/doxygen_warnings.log
+
+HAVE_DOT               = NO
+CALL_GRAPH             = NO
+CALLER_GRAPH           = NO

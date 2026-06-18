@@ -1,0 +1,154 @@
+@using Esc.Protocol
+@using System.Globalization
+
+<div class="chart-shell">
+    <svg class="speed-chart" viewBox="0 0 720 300" preserveAspectRatio="none" role="img" aria-label="Grafico de velocidad">
+        <rect x="0" y="0" width="720" height="300" class="chart-bg" />
+        @for (var i = 0; i < 6; i++)
+        {
+            var y = PlotTop + i * (PlotHeight / 5.0);
+            <line x1="@PlotLeft" y1="@Invariant(y)" x2="@PlotRight" y2="@Invariant(y)" class="chart-grid" />
+            <svg:text x="54" y="@Invariant(y - 5)" class="chart-label">@YTickLabel(i)</svg:text>
+        }
+        @for (var i = 0; i < 5; i++)
+        {
+            var x = PlotLeft + i * (PlotWidth / 4.0);
+            <line x1="@Invariant(x)" y1="@PlotTop" x2="@Invariant(x)" y2="@PlotBottom" class="chart-grid vertical" />
+        }
+        <line x1="@PlotLeft" y1="@PlotTop" x2="@PlotLeft" y2="@PlotBottom" class="chart-axis" />
+        <line x1="@PlotLeft" y1="@PlotBottom" x2="@PlotRight" y2="@PlotBottom" class="chart-axis" />
+        @if (Points.Length > 0)
+        {
+            <polyline points="@Points" class="chart-line" />
+            <circle cx="@LastPointX" cy="@LastPointY" r="4" class="chart-dot" />
+        }
+        else
+        {
+            <svg:text x="360" y="150" text-anchor="middle" class="chart-empty">Sin muestras de velocidad</svg:text>
+        }
+        <svg:text x="360" y="286" text-anchor="middle" class="chart-label">Tiempo (s)</svg:text>
+        <svg:text x="18" y="150" text-anchor="middle" transform="rotate(-90 18 150)" class="chart-label">Velocidad (rpm)</svg:text>
+        <svg:text x="@PlotLeft" y="270" class="chart-label">@StartTimeLabel</svg:text>
+        <svg:text x="@PlotRight" y="270" text-anchor="end" class="chart-label">@EndTimeLabel</svg:text>
+    </svg>
+</div>
+
+@code {
+    private const double PlotLeft = 72;
+    private const double PlotRight = 700;
+    private const double PlotTop = 24;
+    private const double PlotBottom = 244;
+    private const double PlotWidth = PlotRight - PlotLeft;
+    private const double PlotHeight = PlotBottom - PlotTop;
+
+    [Parameter]
+    public IReadOnlyList<TelemetrySample> Samples { get; set; } = Array.Empty<TelemetrySample>();
+
+    private IReadOnlyList<TelemetrySample> OrderedSamples => Samples
+        .OrderBy(sample => sample.TargetTickMs)
+        .ToArray();
+
+    private string Points
+    {
+        get
+        {
+            if (Samples.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            IReadOnlyList<TelemetrySample> samples = OrderedSamples;
+            double minTick = samples.Min(sample => sample.TargetTickMs);
+            double maxTick = samples.Max(sample => sample.TargetTickMs);
+            double tickRange = Math.Max(1, maxTick - minTick);
+            (double yMin, double yMax) = YRange;
+
+            return string.Join(
+                " ",
+                samples.Select(sample =>
+                {
+                    double x = PlotLeft + ((sample.TargetTickMs - minTick) / tickRange) * PlotWidth;
+                    double y = PlotBottom - ((sample.DisplayValue - yMin) / (yMax - yMin)) * PlotHeight;
+                    return string.Create(CultureInfo.InvariantCulture, $"{x:0.###},{y:0.###}");
+                }));
+        }
+    }
+
+    private (double Min, double Max) YRange
+    {
+        get
+        {
+            if (Samples.Count == 0)
+            {
+                return (0, 1);
+            }
+
+            double minValue = Samples.Min(sample => sample.DisplayValue);
+            double maxValue = Samples.Max(sample => sample.DisplayValue);
+            double valueRange = maxValue - minValue;
+            double margin = valueRange < 1
+                ? Math.Max(50, Math.Abs(maxValue) * 0.02)
+                : Math.Max(10, valueRange * 0.15);
+
+            double yMin = Math.Max(0, minValue - margin);
+            double yMax = maxValue + margin;
+            if (yMax <= yMin)
+            {
+                yMax = yMin + 1;
+            }
+
+            return (yMin, yMax);
+        }
+    }
+
+    private string LastPointX => LastPoint.x;
+    private string LastPointY => LastPoint.y;
+
+    private (string x, string y) LastPoint
+    {
+        get
+        {
+            if (Samples.Count == 0)
+            {
+                return ("0", "0");
+            }
+
+            TelemetrySample last = OrderedSamples[^1];
+            double minTick = Samples.Min(sample => sample.TargetTickMs);
+            double maxTick = Samples.Max(sample => sample.TargetTickMs);
+            double tickRange = Math.Max(1, maxTick - minTick);
+            (double yMin, double yMax) = YRange;
+            double x = PlotLeft + ((last.TargetTickMs - minTick) / tickRange) * PlotWidth;
+            double y = PlotBottom - ((last.DisplayValue - yMin) / (yMax - yMin)) * PlotHeight;
+            return (Invariant(x), Invariant(y));
+        }
+    }
+
+    private string StartTimeLabel => "0.0 s";
+
+    private string EndTimeLabel
+    {
+        get
+        {
+            if (Samples.Count < 2)
+            {
+                return "0.0 s";
+            }
+
+            double durationSeconds = (Samples.Max(sample => sample.TargetTickMs) - Samples.Min(sample => sample.TargetTickMs)) / 1000.0;
+            return $"{durationSeconds:0.0} s";
+        }
+    }
+
+    private string YTickLabel(int index)
+    {
+        (double yMin, double yMax) = YRange;
+        double value = yMax - index * ((yMax - yMin) / 5.0);
+        return $"{value:0} rpm";
+    }
+
+    private static string Invariant(double value)
+    {
+        return value.ToString("0.###", CultureInfo.InvariantCulture);
+    }
+}

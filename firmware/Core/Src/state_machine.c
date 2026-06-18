@@ -6,6 +6,7 @@
  */
 
 #include "state_machine.h"
+#include "usart.h"
 
 volatile App_States_t app_state = IDLE;
 
@@ -13,7 +14,7 @@ App_States_t handleState(void)
 {
 
   static uint8_t  comm_initialized  = 0;
-  static uint32_t last_uart_check   = 0;
+  static uint32_t last_comm_check   = 0;
   static uint8_t  flash_initialized = 0;
   uint32_t        current_time      = HAL_GetTick();
 
@@ -34,6 +35,11 @@ App_States_t handleState(void)
     }
   }
 
+  if (app_state != HARD_ERROR && (uint32_t)(current_time - last_comm_check) >= 5U) {
+    processUartData();
+    last_comm_check = current_time;
+  }
+
   if (app_state != IDLE && app_state != HARD_ERROR) {
     process_logging_queue();
   }
@@ -47,12 +53,9 @@ App_States_t handleState(void)
     }
     cmd_received_ack = 0;
   }
+
   switch (app_state) {
   case IDLE:
-    if (current_time - last_uart_check > 50) {
-      processUartData();
-      last_uart_check = current_time;
-    }
     break;
 
   case STARTUP:
@@ -64,11 +67,6 @@ App_States_t handleState(void)
     if (motor_stalled) {
       foc_startup();
       motor_stalled = false;
-    }
-    if (current_time - last_uart_check > 50) {
-      last_uart_check = current_time;
-      // Procesar datos UART
-      processUartData();
     }
     if (consistent_zero_crossing)
       app_state = READY;
@@ -88,12 +86,6 @@ App_States_t handleState(void)
     if (motor_stalled) {
       foc_startup();
       motor_stalled = false;
-    }
-    if (current_time - last_uart_check > 50) {
-      last_uart_check = current_time;
-
-      // Procesar datos UART
-      processUartData();
     }
     if (0 == consistent_zero_crossing)
       app_state = RUNNING;

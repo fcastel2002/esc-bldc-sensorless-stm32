@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Esc.Bridge/Esc.Bridge.csproj" />
+    <Project Path="src/Esc.Protocol/Esc.Protocol.csproj" />
+    <Project Path="src/Esc.Transport/Esc.Transport.csproj" />
+    <Project Path="src/Esc.Web/Esc.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Esc.Tests/Esc.Tests.csproj" />
+  </Folder>
+</Solution>

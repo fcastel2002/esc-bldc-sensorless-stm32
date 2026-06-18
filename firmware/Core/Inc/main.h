@@ -92,6 +92,8 @@ void Error_Handler(void);
 #define EN_W_GPIO_Port GPIOA
 #define EN_V_Pin GPIO_PIN_1
 #define EN_V_GPIO_Port GPIOB
+#define COMM_MODE_Pin GPIO_PIN_8
+#define COMM_MODE_GPIO_Port GPIOB
 #define V_Pin GPIO_PIN_10
 #define V_GPIO_Port GPIOB
 #define EN_U_Pin GPIO_PIN_13

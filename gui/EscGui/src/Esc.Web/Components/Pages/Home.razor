@@ -1,0 +1,404 @@
+@page "/"
+@implements IDisposable
+@inject EscBridgeService Bridge
+@inject ModularControlProvider ControlProvider
+
+<PageTitle>ESC Bridge</PageTitle>
+
+<main class="dashboard">
+    <section class="topbar">
+        <div>
+            <p class="eyebrow">ESC BLDC STM32</p>
+            <h1>ESC Bridge</h1>
+        </div>
+
+        <div class="connection-state @StateClass">
+            <span>@Snapshot.State</span>
+            <strong>@ConnectionLabel</strong>
+        </div>
+    </section>
+
+    <section class="device-band">
+        <label>
+            Dispositivo HID
+            <select @bind="_selectedDevicePath" disabled="@(!Snapshot.Devices.Any())">
+                @if (!Snapshot.Devices.Any())
+                {
+                    <option value="">0x3232:0xEC32 no detectado</option>
+                }
+                else
+                {
+                    @foreach (var device in Snapshot.Devices)
+                    {
+                        <option value="@device.DevicePath">@DeviceLabel(device)</option>
+                    }
+                }
+            </select>
+        </label>
+
+        <div class="button-row">
+            <button @onclick="RefreshDevicesAsync">Refrescar</button>
+            <button class="primary" @onclick="ConnectAsync" disabled="@(!Snapshot.Devices.Any() || Snapshot.State == DeviceConnectionState.Connected)">Conectar</button>
+            <button @onclick="DisconnectAsync" disabled="@(Snapshot.State != DeviceConnectionState.Connected)">Desconectar</button>
+        </div>
+    </section>
+
+    @if (!string.IsNullOrWhiteSpace(Snapshot.LastError))
+    {
+        <section class="alert">@Snapshot.LastError</section>
+    }
+
+    <section class="mode-band">
+        <label>
+            Modo
+            <select value="@Snapshot.Mode" @onchange="SetModeAsync">
+                <option value="@ControlMode.GuiControl">GUI control</option>
+                <option value="@ControlMode.SimulinkControl">Simulink control</option>
+                <option value="@ControlMode.MonitorOnly">Monitor only</option>
+            </select>
+        </label>
+        <p>@ModeHint</p>
+    </section>
+
+    <section class="grid">
+        <article class="panel status-panel">
+            <div class="panel-title">
+                <h2>Estado</h2>
+                <button @onclick="RefreshStatusAsync" disabled="@(!IsConnected)">Actualizar</button>
+            </div>
+            <div class="status-grid">
+                <span>App state</span><strong>@(Snapshot.Status?.AppStateName ?? "-")</strong>
+                <span>Transporte</span><strong>@(Snapshot.Status?.Transport ?? "-")</strong>
+                <span>Setpoint</span><strong>@(Snapshot.Status?.SpeedSetpointRpm.ToString() ?? "-") rpm</strong>
+                <span>Velocidad</span><strong>@(Snapshot.Status?.ActualSpeedRpm.ToString() ?? "-") rpm</strong>
+                <span>Max PWM</span><strong>@(Snapshot.Status?.MaxPwm.ToString() ?? "-")</strong>
+                <span>Stall</span><strong>@BoolText(Snapshot.Status?.MotorStalled)</strong>
+                <span>Cruces consistentes</span><strong>@BoolText(Snapshot.Status?.ConsistentZeroCrossing)</strong>
+            </div>
+        </article>
+
+        <article class="panel command-panel">
+            <div class="panel-title">
+                <h2>Control</h2>
+            </div>
+            <div class="action-grid">
+                <button class="run" @onclick="RunAsync" disabled="@(!CanSendControl)">RUN</button>
+                <button @onclick="StopAsync" disabled="@(!CanSendControl)">STOP</button>
+                <button class="estop" @onclick="EmergencyStopAsync" disabled="@(!IsConnected)">ESTOP</button>
+            </div>
+            <p class="result">@_lastCommandResult</p>
+        </article>
+    </section>
+
+    <section class="panel">
+        <div class="panel-title">
+            <h2>Controles modulares</h2>
+            <span>controls.json</span>
+        </div>
+        <div class="controls-grid">
+            @foreach (var control in _controls)
+            {
+                <div class="control-item">
+                    <label for="@control.Id">@control.Label</label>
+                    @if (control.Kind.Equals("slider", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <input id="@control.Id" type="range" min="@control.Min" max="@control.Max" step="@control.Step" value="@ControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
+                        <div class="inline-input">
+                            <input type="number" min="@control.Min" max="@control.Max" step="@control.Step" value="@ControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
+                            <span>@control.Unit</span>
+                            <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">Aplicar</button>
+                            @if (CanPersistControl(control))
+                            {
+                                <button class="icon-button save-button" @onclick="() => SaveControlAsync(control)" disabled="@ControlDisabled(control)" title="Guardar en flash" aria-label="Guardar @control.Label en flash">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path d="M5 3h12l2 2v16H5V3zm2 2v5h9V5H7zm1 11v3h8v-3H8zm8-11v4h1V6l-1-1z" />
+                                    </svg>
+                                </button>
+                            }
+                        </div>
+                    }
+                    else if (control.Kind.Equals("button", StringComparison.OrdinalIgnoreCase))
+                    {
+                        <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">@control.Label</button>
+                    }
+                    else
+                    {
+                        <div class="inline-input">
+                            <input id="@control.Id" type="number" min="@control.Min" max="@control.Max" step="@control.Step" value="@ControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
+                            <span>@control.Unit</span>
+                            <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">Aplicar</button>
+                            @if (CanPersistControl(control))
+                            {
+                                <button class="icon-button save-button" @onclick="() => SaveControlAsync(control)" disabled="@ControlDisabled(control)" title="Guardar en flash" aria-label="Guardar @control.Label en flash">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path d="M5 3h12l2 2v16H5V3zm2 2v5h9V5H7zm1 11v3h8v-3H8zm8-11v4h1V6l-1-1z" />
+                                    </svg>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </section>
+
+    <section class="panel telemetry-panel">
+        <div class="panel-title">
+            <h2>Adquisicion</h2>
+            <span>@Snapshot.SpeedTelemetry.SampleCount muestras</span>
+        </div>
+        <div class="telemetry-toolbar">
+            <label>
+                Tasa
+                <input type="number" min="100" max="5000" step="50" @bind="_logRateMs" />
+                <span>ms</span>
+            </label>
+            <button @onclick="SetLogRateAsync" disabled="@(!IsConnected)">Aplicar tasa</button>
+            <button class="primary" @onclick="StartSpeedLogAsync" disabled="@(!IsConnected || Snapshot.SpeedLoggingEnabled)">Start velocidad</button>
+            <button @onclick="StopSpeedLogAsync" disabled="@(!IsConnected || !Snapshot.SpeedLoggingEnabled)">Stop velocidad</button>
+        </div>
+        <SpeedChart Samples="@_speedSamples" />
+        <div class="telemetry-stats">
+            <span>Ultima: @(Snapshot.SpeedTelemetry.LastValue?.ToString("0.0") ?? "-") @Snapshot.SpeedTelemetry.Unit</span>
+            <span>Rate efectivo: @Snapshot.SpeedTelemetry.EffectiveRateHz.ToString("0.0") Hz</span>
+            <span>Descartadas: @Snapshot.SpeedTelemetry.DroppedSamples</span>
+        </div>
+    </section>
+</main>
+
+@code {
+    private BridgeSnapshot Snapshot { get; set; } = default!;
+    private IReadOnlyList<DashboardControl> _controls = Array.Empty<DashboardControl>();
+    private IReadOnlyList<TelemetrySample> _speedSamples = Array.Empty<TelemetrySample>();
+    private readonly Dictionary<string, double> _controlValues = new(StringComparer.OrdinalIgnoreCase);
+    private string? _selectedDevicePath;
+    private ushort _logRateMs = 500;
+    private string _lastCommandResult = "Listo.";
+
+    private bool IsConnected => Snapshot.State == DeviceConnectionState.Connected;
+    private bool CanSendControl => IsConnected && Snapshot.Mode == ControlMode.GuiControl;
+    private string StateClass => Snapshot.State.ToString().ToLowerInvariant();
+    private string ConnectionLabel => Snapshot.CurrentDevice?.DisplayName ?? "VID 0x3232 / PID 0xEC32";
+    private string ModeHint => Snapshot.Mode switch
+    {
+        ControlMode.GuiControl => "La GUI puede enviar comandos al ESC.",
+        ControlMode.SimulinkControl => "La GUI monitorea; los comandos quedan reservados para Simulink salvo ESTOP.",
+        ControlMode.MonitorOnly => "Solo adquisicion y monitoreo.",
+        _ => string.Empty
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        Snapshot = Bridge.Snapshot;
+        _controls = await ControlProvider.GetControlsAsync();
+        foreach (DashboardControl control in _controls)
+        {
+            _controlValues[control.Id] = control.DefaultValue;
+        }
+
+        if (Snapshot.State == DeviceConnectionState.Connected)
+        {
+            await LoadConfigValuesAsync();
+        }
+
+        _logRateMs = Snapshot.LogRateMs;
+        PickDefaultDevice();
+        Bridge.SnapshotChanged += HandleSnapshotChanged;
+    }
+
+    private void HandleSnapshotChanged(object? sender, EventArgs args)
+    {
+        Snapshot = Bridge.Snapshot;
+        _speedSamples = Bridge.SpeedSamples;
+        PickDefaultDevice();
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RefreshDevicesAsync()
+    {
+        await Bridge.ScanAsync();
+        Snapshot = Bridge.Snapshot;
+        PickDefaultDevice();
+    }
+
+    private async Task ConnectAsync()
+    {
+        CommandResult result = await Bridge.ConnectAsync(_selectedDevicePath);
+        _lastCommandResult = result.Message;
+        Snapshot = Bridge.Snapshot;
+        if (result.Success)
+        {
+            await LoadConfigValuesAsync();
+        }
+    }
+
+    private async Task DisconnectAsync()
+    {
+        await Bridge.DisconnectAsync();
+        _lastCommandResult = "Desconectado.";
+        Snapshot = Bridge.Snapshot;
+    }
+
+    private async Task SetModeAsync(ChangeEventArgs args)
+    {
+        if (Enum.TryParse(args.Value?.ToString(), out ControlMode mode))
+        {
+            await Bridge.SetModeAsync(mode);
+            Snapshot = Bridge.Snapshot;
+        }
+    }
+
+    private async Task RefreshStatusAsync()
+    {
+        await Bridge.RefreshStatusAsync();
+        Snapshot = Bridge.Snapshot;
+    }
+
+    private async Task RunAsync() => await StoreResultAsync(Bridge.RunAsync());
+    private async Task StopAsync() => await StoreResultAsync(Bridge.StopAsync());
+    private async Task EmergencyStopAsync() => await StoreResultAsync(Bridge.EmergencyStopAsync());
+
+    private async Task SetLogRateAsync()
+    {
+        await StoreResultAsync(Bridge.SetLogRateAsync(_logRateMs));
+    }
+
+    private async Task StartSpeedLogAsync()
+    {
+        await StoreResultAsync(Bridge.StartSpeedLogAsync());
+    }
+
+    private async Task StopSpeedLogAsync()
+    {
+        await StoreResultAsync(Bridge.StopSpeedLogAsync());
+    }
+
+    private async Task ApplyControlAsync(DashboardControl control)
+    {
+        double value = ControlValue(control);
+        Task<CommandResult> operation = control.Command switch
+        {
+            "set_speed_rpm" => Bridge.SetSpeedRpmAsync((int)Math.Round(value)),
+            "set_config" when TryParseConfig(control.Param, out ConfigParam parameter) => Bridge.SetConfigAsync(parameter, value),
+            "reset_config" when TryParseConfig(control.Param, out ConfigParam parameter) => Bridge.ResetConfigAsync(parameter),
+            "log_speed_start" => Bridge.StartSpeedLogAsync(),
+            "log_speed_stop" => Bridge.StopSpeedLogAsync(),
+            _ => Task.FromResult(CommandResult.Failed($"Comando modular no soportado: {control.Command}."))
+        };
+
+        await StoreResultAsync(operation);
+    }
+
+    private async Task SaveControlAsync(DashboardControl control)
+    {
+        if (!CanPersistControl(control) || !TryParseConfig(control.Param, out ConfigParam parameter))
+        {
+            _lastCommandResult = $"El control {control.Label} no tiene persistencia en flash.";
+            return;
+        }
+
+        await StoreResultAsync(Bridge.SaveConfigAsync(parameter));
+    }
+
+    private async Task LoadConfigValuesAsync()
+    {
+        foreach (DashboardControl control in _controls)
+        {
+            if (!CanPersistControl(control) || !TryParseConfig(control.Param, out ConfigParam parameter))
+            {
+                continue;
+            }
+
+            try
+            {
+                object? value = await Bridge.GetConfigAsync(parameter);
+                if (value is not null)
+                {
+                    _controlValues[control.Id] = Convert.ToDouble(value);
+                }
+            }
+            catch
+            {
+                _lastCommandResult = $"No se pudo leer {control.Label} desde el ESC.";
+            }
+        }
+
+        Snapshot = Bridge.Snapshot;
+    }
+
+    private async Task StoreResultAsync(Task<CommandResult> operation)
+    {
+        CommandResult result = await operation;
+        _lastCommandResult = result.Message;
+        Snapshot = Bridge.Snapshot;
+    }
+
+    private void UpdateControlValue(DashboardControl control, ChangeEventArgs args)
+    {
+        if (double.TryParse(args.Value?.ToString(), out double value))
+        {
+            _controlValues[control.Id] = value;
+        }
+    }
+
+    private double ControlValue(DashboardControl control)
+    {
+        return _controlValues.TryGetValue(control.Id, out double value) ? value : control.DefaultValue;
+    }
+
+    private bool ControlDisabled(DashboardControl control)
+    {
+        if (!IsConnected)
+        {
+            return true;
+        }
+
+        return control.Command is not ("log_speed_start" or "log_speed_stop") && Snapshot.Mode != ControlMode.GuiControl;
+    }
+
+    private static bool CanPersistControl(DashboardControl control)
+    {
+        return control.Command is "set_config" or "reset_config";
+    }
+
+    private static bool TryParseConfig(string? value, out ConfigParam parameter)
+    {
+        return Enum.TryParse(value, true, out parameter);
+    }
+
+    private static string BoolText(bool? value)
+    {
+        return value switch
+        {
+            true => "Si",
+            false => "No",
+            null => "-"
+        };
+    }
+
+    private static string DeviceLabel(HidDeviceDescriptor device)
+    {
+        string serial = string.IsNullOrWhiteSpace(device.SerialNumber) ? "sin serial" : device.SerialNumber;
+        return $"{device.DisplayName} - VID 0x{device.VendorId:X4} PID 0x{device.ProductId:X4} - {serial}";
+    }
+
+    private void PickDefaultDevice()
+    {
+        if (Snapshot.Devices.Count == 0)
+        {
+            _selectedDevicePath = null;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_selectedDevicePath) ||
+            Snapshot.Devices.All(device => !string.Equals(device.DevicePath, _selectedDevicePath, StringComparison.Ordinal)))
+        {
+            _selectedDevicePath = Snapshot.Devices[0].DevicePath;
+        }
+    }
+
+    public void Dispose()
+    {
+        Bridge.SnapshotChanged -= HandleSnapshotChanged;
+    }
+}

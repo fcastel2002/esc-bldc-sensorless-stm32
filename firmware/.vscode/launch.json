@@ -80,6 +80,30 @@
             ],
             /* If you use external loader, add additional arguments */
             //"serverArgs": ["--extload", "path/to/ext/loader.stldr"],
+        },
+        {
+          "cwd": "${workspaceFolder}",
+          "executable": "build/Debug/blink-ejemplo.elf",
+          "name": "Debug with OpenOCD",
+          "request": "launch",
+          "type": "cortex-debug",
+          "servertype": "openocd",
+          "configFiles": [
+            "interface/stlink.cfg",
+            "target/stm32f1x_clon.cfg"
+          ],
+          "searchDir": [
+            "C:/Utilities/openocd-20260302/OpenOCD-20260302-0.12.0/share/openocd/scripts"
+          ],
+          "runToEntryPoint": "main",
+          "liveWatch": {
+            "enabled": true,
+            "samplesPerSecond": 4
+          },
+          "showDevDebugOutput": "none",
+          "gdbPath": "arm-none-eabi-gdb.exe"
         }
-            ]
+
+        
+    ]
 }

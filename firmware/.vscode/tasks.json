@@ -95,6 +95,42 @@
             ],
             "group": "build",
             "detail": "compiler: /opt/st/stm32cubeclt_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc"
+        },
+        {
+            "type": "shell",
+            "label": "OpenOCD: Flash project (SWD) DEBUG",
+            "command": "C:\\Utilities\\openocd-20260302\\OpenOCD-20260302-0.12.0\\bin\\openocd.exe",
+            "args": [
+                "-f",
+                "interface/stlink.cfg",
+                "-f",
+                "target/stm32f1x_clon.cfg",
+                "-c",
+                "program build/Debug/firmware_esc_bldc_v1.elf verify reset exit"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": []
+        },
+                {
+            "type": "shell",
+            "label": "OpenOCD: Flash project (SWD) RELEASE",
+            "command": "C:\\Utilities\\openocd-20260302\\OpenOCD-20260302-0.12.0\\bin\\openocd.exe",
+            "args": [
+                "-f",
+                "interface/stlink.cfg",
+                "-f",
+                "target/stm32f1x_clon.cfg",
+                "-c",
+                "program build/Release/firmware_esc_bldc_v1.elf verify reset exit"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": []
         }
     ]
 }

@@ -13,7 +13,7 @@
 #define KP 0.75f
 #define KI 1.35f // real Ki = KI * 2/SCALE
 #define SCALE 1
-#define dt 0.002
+#define dt 0.002f
 
 /*
  *@brief: Macros para la medicion y mapeo de velocidad
@@ -346,14 +346,21 @@ uint16_t convert_speed_ticks(uint16_t value, bool to_ticks)
     if (value == 0)
       return 0;
 
-    // Ensure mapping params available
-    if (pwm_speed_range_relation == 0.0f) {
-      // protect division by zero: compute from current limits
-      pwm_speed_range_relation = (float)(max_limit_pwm - min_limit_pwm) / (float)speed_sensor_get_speed_range();
-    }
+    uint32_t pwm_range = (uint32_t)(max_limit_pwm - min_limit_pwm);
+    uint32_t speed_range = (uint32_t)speed_sensor_get_speed_range();
+    if (pwm_range == 0u)
+      return 0;
 
     // Revertir el mapeo lineal que usamos para mapear periodo->pwm
-    double timer_ticks = SPEED_MIN - (((double)value - (double)min_limit_pwm) / pwm_speed_range_relation);
+    uint32_t timer_ticks;
+    int32_t pwm_offset = (int32_t)value - (int32_t)min_limit_pwm;
+    if (pwm_offset <= 0) {
+      timer_ticks = SPEED_MIN;
+    } else if ((uint32_t)pwm_offset >= pwm_range) {
+      timer_ticks = SPEED_MAX;
+    } else {
+      timer_ticks = SPEED_MIN - (((uint32_t)pwm_offset * speed_range) / pwm_range);
+    }
 
     // Clamp al rango válido
     if (timer_ticks < SPEED_MAX)
@@ -361,19 +368,7 @@ uint16_t convert_speed_ticks(uint16_t value, bool to_ticks)
     if (timer_ticks > SPEED_MIN)
       timer_ticks = SPEED_MIN;
 
-    // Convertir ticks -> periodo eléctrico y luego a RPM mecánicos
-    double zc_period = timer_ticks / (HAL_RCC_GetHCLKFreq() / (TIM2->PSC + 1));
-    double period    = zc_period * 6.0; // período eléctrico total (s)
-    double frequency = 1.0 / period;    // Hz eléctricos
-    double rpm_electrical = frequency * 60.0;
-    double rpm_mechanical = rpm_electrical / get_motor_pole_pairs();
-
-    // Limitar a rango razonable
-    if (rpm_mechanical < get_min_speed_rpm())
-      return get_min_speed_rpm();
-    if (rpm_mechanical > get_max_speed_rpm())
-      return get_max_speed_rpm();
-    return (uint16_t)rpm_mechanical;
+    return period_to_rpm((uint16_t)timer_ticks);
   }
 }
 

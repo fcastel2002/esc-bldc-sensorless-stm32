@@ -73,6 +73,12 @@ void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(EN_W_GPIO_Port, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : COMM_MODE_Pin */
+  GPIO_InitStruct.Pin = COMM_MODE_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(COMM_MODE_GPIO_Port, &GPIO_InitStruct);
+
   /*Configure GPIO pins : EN_V_Pin EN_U_Pin */
   GPIO_InitStruct.Pin = EN_V_Pin|EN_U_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;

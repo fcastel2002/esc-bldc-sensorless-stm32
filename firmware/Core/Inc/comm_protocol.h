@@ -1,0 +1,73 @@
+#ifndef INC_COMM_PROTOCOL_H_
+#define INC_COMM_PROTOCOL_H_
+
+#include <stdbool.h>
+#include <stdint.h>
+
+#define COMM_FRAME_SIZE 64U
+#define COMM_MAGIC_0 0xECU
+#define COMM_MAGIC_1 0xB1U
+#define COMM_VERSION 0x01U
+#define COMM_PAYLOAD_MAX 52U
+#define COMM_PAYLOAD_OFFSET 10U
+#define COMM_CRC_OFFSET 62U
+
+#define COMM_TYPE_REQUEST 0x01U
+#define COMM_TYPE_RESPONSE 0x81U
+#define COMM_TYPE_EVENT 0x82U
+
+#define COMM_OPCODE_PING 0x01U
+#define COMM_OPCODE_GET_STATUS 0x02U
+#define COMM_OPCODE_RUN 0x10U
+#define COMM_OPCODE_STOP 0x11U
+#define COMM_OPCODE_ESTOP 0x12U
+#define COMM_OPCODE_SET_SPEED_RPM 0x13U
+#define COMM_OPCODE_GET_CONFIG 0x20U
+#define COMM_OPCODE_SET_CONFIG 0x21U
+#define COMM_OPCODE_RESET_CONFIG 0x22U
+#define COMM_OPCODE_SAVE_CONFIG 0x23U
+#define COMM_OPCODE_LOG_START 0x30U
+#define COMM_OPCODE_LOG_STOP 0x31U
+#define COMM_OPCODE_LOG_RATE 0x32U
+#define COMM_OPCODE_TELEMETRY_EVENT 0x33U
+
+#define COMM_PARAM_PWM_FREQ 0x01U
+#define COMM_PARAM_POLE_PAIRS 0x02U
+#define COMM_PARAM_KP 0x03U
+#define COMM_PARAM_KI 0x04U
+#define COMM_PARAM_KD 0x05U
+#define COMM_PARAM_MAX_SPEED 0x06U
+#define COMM_PARAM_MIN_SPEED 0x07U
+#define COMM_PARAM_CURRENT_LIMIT 0x08U
+#define COMM_PARAM_TEMP_LIMIT 0x09U
+#define COMM_PARAM_ALL 0xFFU
+
+#define COMM_LOG_PARAM_SPEED 0x01U
+#define COMM_LOG_PARAM_TEMP 0x02U
+#define COMM_LOG_PARAM_CURRENT 0x03U
+
+typedef enum {
+  COMM_STATUS_OK = 0x00,
+  COMM_STATUS_BAD_MAGIC = 0x01,
+  COMM_STATUS_BAD_VERSION = 0x02,
+  COMM_STATUS_BAD_CRC = 0x03,
+  COMM_STATUS_BAD_LENGTH = 0x04,
+  COMM_STATUS_UNKNOWN_OPCODE = 0x05,
+  COMM_STATUS_UNKNOWN_PARAM = 0x06,
+  COMM_STATUS_INVALID_STATE = 0x07,
+  COMM_STATUS_UNDERLIMIT = 0x08,
+  COMM_STATUS_OVERLIMIT = 0x09,
+  COMM_STATUS_NOT_IMPLEMENTED = 0x0A,
+  COMM_STATUS_FLASH_ERROR = 0x0B,
+} CommProtocolStatus;
+
+uint16_t comm_protocol_crc16(const uint8_t* data, uint16_t len);
+bool comm_protocol_handle_frame(const uint8_t request[COMM_FRAME_SIZE],
+                                uint8_t response[COMM_FRAME_SIZE]);
+void comm_protocol_build_event(uint8_t opcode,
+                               uint8_t param,
+                               const uint8_t* payload,
+                               uint16_t payload_len,
+                               uint8_t frame[COMM_FRAME_SIZE]);
+
+#endif /* INC_COMM_PROTOCOL_H_ */

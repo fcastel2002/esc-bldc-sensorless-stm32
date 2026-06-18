@@ -59,6 +59,7 @@ extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
 extern UART_HandleTypeDef huart1;
+extern PCD_HandleTypeDef hpcd_USB_FS;
 /* USER CODE BEGIN EV */
 
 /* USER CODE END EV */
@@ -254,6 +255,14 @@ void USART1_IRQHandler(void)
   /* USER CODE BEGIN USART1_IRQn 1 */
 
   /* USER CODE END USART1_IRQn 1 */
+}
+
+/**
+  * @brief This function handles USB low priority or CAN RX0 interrupts.
+  */
+void USB_LP_CAN1_RX0_IRQHandler(void)
+{
+  HAL_PCD_IRQHandler(&hpcd_USB_FS);
 }
 
 /* USER CODE BEGIN 1 */

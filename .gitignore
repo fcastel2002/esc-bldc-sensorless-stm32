@@ -10,12 +10,17 @@ CMakeCache.txt
 cmake_install.cmake
 compile_commands.json
 build.ninja
+docs/api/
 *.elf
 *.map
 *.o
 *.obj
 *.bin
 *.hex
+
+# .NET build outputs
+bin/
+obj/
 
 # LaTeX generated files
 *.aux

@@ -51,6 +51,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Core/Src/isr_callbacks.c
     Core/Src/comm.c
+    Core/Src/comm_protocol.c
+    Core/Src/comm_transport.c
     Core/Src/hard_config.c
     Core/Src/flash_config.c
     Core/Src/main.c
@@ -61,6 +63,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/speed_sensor.c
     Core/Src/bldc_driver.c
     Core/Src/utilities.c
+    Core/Src/usb_device.c
+    Core/Src/usbd_conf.c
+    Core/Src/usbd_customhid_if.c
+    Core/Src/usbd_desc.c
 )
 
 # Add include paths
@@ -72,6 +78,8 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     Drivers/STM32F1xx_HAL_Driver/Inc/Legacy
     Drivers/CMSIS/Include
     Drivers/CMSIS/Device/ST/STM32F1xx/Include
+    Middlewares/ST/STM32_USB_Device_Library/Core/Inc
+    Middlewares/ST/STM32_USB_Device_Library/Class/CustomHID/Inc
 )
 
 # Add project symbols (macros)
@@ -95,3 +103,19 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 
     # Add user defined libraries
 )
+
+option(ESC_BUILD_CODE_DOCS "Generate Doxygen code documentation after firmware builds" ON)
+
+if(ESC_BUILD_CODE_DOCS)
+    set(ESC_DOC_SCRIPT "${CMAKE_SOURCE_DIR}/../docs/GenerateCodeDocs.cmake")
+    add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} "-DREPO_ROOT=${CMAKE_SOURCE_DIR}/.." -P "${ESC_DOC_SCRIPT}"
+        COMMENT "Generating code documentation"
+        VERBATIM
+    )
+    add_custom_target(code_docs
+        COMMAND ${CMAKE_COMMAND} "-DREPO_ROOT=${CMAKE_SOURCE_DIR}/.." -P "${ESC_DOC_SCRIPT}"
+        COMMENT "Generating code documentation"
+        VERBATIM
+    )
+endif()

@@ -1,0 +1,62 @@
+; ESC BLDC STM32 HID identification INF
+; Uses the Windows inbox HID driver through input.inf.
+
+[Version]
+Signature   = "$WINDOWS NT$"
+Class       = HIDClass
+ClassGuid   = {745a17a0-74d3-11d0-b6fe-00a0c90f57da}
+Provider    = %ProviderName%
+CatalogFile = esc-bldc-stm32-hid.cat
+DriverVer   = 06/18/2026,1.0.0.0
+PnpLockdown = 1
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[Manufacturer]
+%ManufacturerName% = EscBldcDevices,NTamd64,NTarm64
+
+[EscBldcDevices.NTamd64]
+%EscUsb.DeviceDesc% = EscUsb_Install, USB\VID_3232&PID_EC32
+%EscHid.DeviceDesc% = EscHid_Install, HID\VID_3232&PID_EC32
+
+[EscBldcDevices.NTarm64]
+%EscUsb.DeviceDesc% = EscUsb_Install, USB\VID_3232&PID_EC32
+%EscHid.DeviceDesc% = EscHid_Install, HID\VID_3232&PID_EC32
+
+[EscUsb_Install.NT]
+Include = input.inf
+Needs   = HID_Inst.NT
+
+[EscUsb_Install.NT.HW]
+Include = input.inf
+Needs   = HID_Inst.NT.HW
+AddReg  = EscUsb_AddReg
+
+[EscUsb_Install.NT.Services]
+Include = input.inf
+Needs   = HID_Inst.NT.Services
+
+[EscHid_Install.NT]
+Include = input.inf
+Needs   = HID_Raw_Inst.NT
+
+[EscHid_Install.NT.HW]
+Include = input.inf
+AddReg  = EscHid_AddReg
+
+[EscHid_Install.NT.Services]
+Include = input.inf
+Needs   = HID_Raw_Inst.NT.Services
+
+[EscUsb_AddReg]
+HKR,,FriendlyName,,%EscUsb.DeviceDesc%
+
+[EscHid_AddReg]
+HKR,,FriendlyName,,%EscHid.DeviceDesc%
+
+[Strings]
+ProviderName     = "Francisco Castel"
+ManufacturerName = "Francisco Castel / UNCuyo"
+EscUsb.DeviceDesc = "ESC BLDC STM32 USB HID"
+EscHid.DeviceDesc = "ESC BLDC STM32 Control Interface"

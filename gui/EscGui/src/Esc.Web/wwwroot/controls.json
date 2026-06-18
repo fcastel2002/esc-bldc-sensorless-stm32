@@ -1,0 +1,97 @@
+[
+  {
+    "id": "speed_setpoint",
+    "label": "Velocidad consigna",
+    "kind": "slider",
+    "command": "set_speed_rpm",
+    "min": 200,
+    "max": 5400,
+    "step": 50,
+    "unit": "rpm",
+    "defaultValue": 1000
+  },
+  {
+    "id": "pwm_freq",
+    "label": "Frecuencia PWM",
+    "kind": "number",
+    "command": "set_config",
+    "param": "PwmFreq",
+    "min": 1000,
+    "max": 30000,
+    "step": 100,
+    "unit": "Hz",
+    "defaultValue": 18000
+  },
+  {
+    "id": "pole_pairs",
+    "label": "Pares de polos",
+    "kind": "number",
+    "command": "set_config",
+    "param": "PolePairs",
+    "min": 1,
+    "max": 20,
+    "step": 1,
+    "unit": "",
+    "defaultValue": 2
+  },
+  {
+    "id": "kp",
+    "label": "KP",
+    "kind": "number",
+    "command": "set_config",
+    "param": "Kp",
+    "min": 0,
+    "max": 20,
+    "step": 0.05,
+    "unit": "",
+    "defaultValue": 0.75
+  },
+  {
+    "id": "ki",
+    "label": "KI",
+    "kind": "number",
+    "command": "set_config",
+    "param": "Ki",
+    "min": 0,
+    "max": 20,
+    "step": 0.05,
+    "unit": "",
+    "defaultValue": 1.35
+  },
+  {
+    "id": "kd",
+    "label": "KD",
+    "kind": "number",
+    "command": "set_config",
+    "param": "Kd",
+    "min": 0,
+    "max": 20,
+    "step": 0.05,
+    "unit": "",
+    "defaultValue": 0
+  },
+  {
+    "id": "min_speed",
+    "label": "Velocidad minima",
+    "kind": "number",
+    "command": "set_config",
+    "param": "MinSpeed",
+    "min": 0,
+    "max": 5400,
+    "step": 50,
+    "unit": "rpm",
+    "defaultValue": 200
+  },
+  {
+    "id": "max_speed",
+    "label": "Velocidad maxima",
+    "kind": "number",
+    "command": "set_config",
+    "param": "MaxSpeed",
+    "min": 200,
+    "max": 12000,
+    "step": 50,
+    "unit": "rpm",
+    "defaultValue": 5400
+  }
+]

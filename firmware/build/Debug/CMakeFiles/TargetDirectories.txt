@@ -1,6 +1,7 @@
-/home/pachi/Documents/Proyectos/ESC Sensorless/esc-bldc/esc-bldc-sensorless-stm32/firmware/build/Debug/CMakeFiles/firmware_esc_bldc_v1.dir
-/home/pachi/Documents/Proyectos/ESC Sensorless/esc-bldc/esc-bldc-sensorless-stm32/firmware/build/Debug/CMakeFiles/edit_cache.dir
-/home/pachi/Documents/Proyectos/ESC Sensorless/esc-bldc/esc-bldc-sensorless-stm32/firmware/build/Debug/CMakeFiles/rebuild_cache.dir
-/home/pachi/Documents/Proyectos/ESC Sensorless/esc-bldc/esc-bldc-sensorless-stm32/firmware/build/Debug/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
-/home/pachi/Documents/Proyectos/ESC Sensorless/esc-bldc/esc-bldc-sensorless-stm32/firmware/build/Debug/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
-/home/pachi/Documents/Proyectos/ESC Sensorless/esc-bldc/esc-bldc-sensorless-stm32/firmware/build/Debug/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir
+D:/06. Proyectos/esc-bldc-stm32/firmware/build/Debug/CMakeFiles/firmware_esc_bldc_v1.dir
+D:/06. Proyectos/esc-bldc-stm32/firmware/build/Debug/CMakeFiles/code_docs.dir
+D:/06. Proyectos/esc-bldc-stm32/firmware/build/Debug/CMakeFiles/edit_cache.dir
+D:/06. Proyectos/esc-bldc-stm32/firmware/build/Debug/CMakeFiles/rebuild_cache.dir
+D:/06. Proyectos/esc-bldc-stm32/firmware/build/Debug/cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir
+D:/06. Proyectos/esc-bldc-stm32/firmware/build/Debug/cmake/stm32cubemx/CMakeFiles/edit_cache.dir
+D:/06. Proyectos/esc-bldc-stm32/firmware/build/Debug/cmake/stm32cubemx/CMakeFiles/rebuild_cache.dir
