@@ -8,6 +8,7 @@
 
 #include "comm_protocol.h"
 #include "comm_transport.h"
+#include "motor_control.h"
 #include "speed_sensor.h"
 
 uint8_t rx_index = 0;
@@ -86,7 +87,7 @@ static int32_t logging_value(LoggeableVariable variable)
 {
   switch (variable) {
   case VAR_SPEED:
-    return (int32_t)period_to_rpm(get_actual_speed());
+    return hil_is_active() ? (int32_t)hil_get_speed_rpm() : (int32_t)period_to_rpm(get_actual_speed());
   case VAR_TEMP:
     return 3640; /* centi-degrees C, placeholder until a real sensor exists. */
   case VAR_CURRENT:

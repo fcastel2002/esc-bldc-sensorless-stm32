@@ -161,3 +161,7 @@ void bldc_set_pwm(uint16_t new_pwm) {
 uint16_t bldc_get_pwm(void) {
   return g_pwm_val;
 }
+
+int8_t bldc_get_commutation_step(void) {
+  return commutation_step;
+}

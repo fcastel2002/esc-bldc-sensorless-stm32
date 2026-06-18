@@ -129,6 +129,42 @@ public static class EscProtocol
         };
     }
 
+    public static byte[] ControlModePayload(ControlRuntimeMode mode)
+    {
+        return [(byte)mode];
+    }
+
+    public static byte[] HilInputsPayload(HilInputs inputs)
+    {
+        var payload = new byte[8];
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(0, 2), inputs.SpeedRpm);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(2, 2), inputs.ZeroCrossingPeriod);
+        BinaryPrimitives.WriteInt16LittleEndian(payload.AsSpan(4, 2), inputs.LoadTorque);
+        payload[6] = inputs.Flags;
+        payload[7] = inputs.Enable ? (byte)1 : (byte)0;
+        return payload;
+    }
+
+    public static HilOutputs DecodeHilOutputs(EscFrame frame)
+    {
+        EnsureOkResponse(frame, CommOpcode.HilGetOutputs);
+        if (frame.Payload.Length < 15)
+        {
+            throw new EscProtocolException("HIL_GET_OUTPUTS response payload is shorter than 15 bytes.");
+        }
+
+        return new HilOutputs(
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(0, 4)),
+            frame.Payload[4],
+            (ControlRuntimeMode)frame.Payload[5],
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(6, 2)),
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(8, 2)),
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(10, 2)),
+            unchecked((sbyte)frame.Payload[12]),
+            frame.Payload[13],
+            frame.Payload[14] != 0);
+    }
+
     public static object DecodeConfigValue(ConfigParam parameter, ReadOnlySpan<byte> payload)
     {
         return parameter switch

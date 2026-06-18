@@ -228,17 +228,20 @@ h2 {
     font-size: 0.9rem;
 }
 
-.status-grid {
+.status-grid,
+.hil-grid {
     display: grid;
     grid-template-columns: minmax(160px, 0.7fr) minmax(100px, 1fr);
     gap: 10px 14px;
 }
 
-.status-grid span {
+.status-grid span,
+.hil-grid span {
     color: #586878;
 }
 
-.status-grid strong {
+.status-grid strong,
+.hil-grid strong {
     font-weight: 700;
 }
 

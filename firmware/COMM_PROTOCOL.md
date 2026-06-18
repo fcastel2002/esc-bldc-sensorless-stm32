@@ -58,6 +58,7 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 | `0x11` | `STOP` | ignored | empty | empty |
 | `0x12` | `ESTOP` | ignored | empty | empty |
 | `0x13` | `SET_SPEED_RPM` | ignored | `uint16 rpm` | empty |
+| `0x14` | `SET_CONTROL_MODE` | ignored | `uint8 mode` | empty |
 | `0x20` | `GET_CONFIG` | config param | empty | config value |
 | `0x21` | `SET_CONFIG` | config param | config value | empty |
 | `0x22` | `RESET_CONFIG` | config param or `0xFF` | empty | empty |
@@ -66,6 +67,10 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 | `0x31` | `LOG_STOP` | log param or `0xFF` | empty | empty |
 | `0x32` | `LOG_RATE` | ignored | `uint16 ms` | empty |
 | `0x33` | `TELEMETRY_EVENT` | log param | event only | event payload below |
+| `0x40` | `HIL_START` | ignored | empty | empty |
+| `0x41` | `HIL_STOP` | ignored | empty | empty |
+| `0x42` | `HIL_SET_INPUTS` | ignored | HIL input payload below | empty |
+| `0x43` | `HIL_GET_OUTPUTS` | ignored | empty | HIL output payload below |
 
 ### `GET_STATUS` response payload
 
@@ -118,6 +123,78 @@ Telemetry event payload:
 | 5..8 | `uint32` | `HAL_GetTick()` timestamp |
 
 Temperature and current telemetry currently use placeholders until real sensing logic exists.
+
+## HIL mode
+
+Control modes:
+
+| Value | Name |
+| --- | --- |
+| `0` | `NORMAL` |
+| `1` | `MONITOR_ONLY` |
+| `2` | `HIL_SIM` |
+
+In `HIL_SIM`, real TIM2 input-capture speed measurements and real commutation are ignored. The MCU keeps the PI control tick and uses the latest simulated speed received by `HIL_SET_INPUTS`. If no HIL input arrives for 50 ms, the firmware stops the logical HIL run and returns to `IDLE`.
+
+`HIL_SET_INPUTS` payload:
+
+| Offset | Type | Meaning |
+| --- | --- | --- |
+| 0..1 | `uint16` | simulated speed RPM |
+| 2..3 | `uint16` | simulated zero-crossing period, reserved for future use |
+| 4..5 | `int16` | load torque, reserved for future use |
+| 6 | `uint8` | input flags |
+| 7 | `uint8` | enable: `0=stop`, nonzero=start/update |
+
+`HIL_GET_OUTPUTS` payload:
+
+| Offset | Type | Meaning |
+| --- | --- | --- |
+| 0..3 | `uint32` | `HAL_GetTick()` timestamp |
+| 4 | `uint8` | `app_state` |
+| 5 | `uint8` | control mode |
+| 6..7 | `uint16` | speed setpoint RPM |
+| 8..9 | `uint16` | measured/simulated speed RPM |
+| 10..11 | `uint16` | logical PWM command |
+| 12 | `int8` | commutation step |
+| 13 | `uint8` | HIL flags |
+| 14 | `uint8` | HIL timeout |
+
+The ESC Bridge exposes a UDP loopback bridge for Simulink on `127.0.0.1:5055`. Send ASCII CSV:
+
+`seq,speed_rpm,zero_crossing_period,load_torque,flags,enable`
+
+The response is ASCII CSV:
+
+`ok,seq,tick_ms,app_state,mode,setpoint_rpm,measured_rpm,pwm_command,commutation_step,flags,timeout,rx_frames,lost_frames,effective_hz,avg_rtt_ms,jitter_ms`
+
+The bridge treats high-rate UDP values as latest-value signals, not as a command
+FIFO. If packets accumulate while the HID transaction is in progress, older
+`SETPOINT` and HIL input packets are coalesced and the newest packet is applied.
+This prevents stale Simulink samples from being replayed late. `ESTOP` keeps
+priority over coalesced packets. HIL outputs are polled for monitoring at a
+lower rate than HIL inputs, so the response may contain the latest cached output
+sample while the newest input sample is still applied immediately.
+
+The same UDP port also accepts real-motor commands that do not enter `HIL_SIM`.
+The GUI must be in `Simulink control` mode for these commands, except `ESTOP`,
+which is always allowed:
+
+| UDP ASCII command | Meaning | Response |
+| --- | --- | --- |
+| `SETPOINT,<rpm>` | Send `SET_SPEED_RPM` to the MCU | `ok,setpoint,0,setpoint_rpm,actual_rpm,app_state` |
+| `SETPOINT,<seq>,<rpm>` | Same, with sequence echoed in the response | `ok,setpoint,seq,setpoint_rpm,actual_rpm,app_state` |
+| `RUN` | Send real `RUN` command to the MCU | `ok,run,0,setpoint_rpm,actual_rpm,app_state` |
+| `MOTOR_STOP` or `REAL_STOP` | Send real `STOP` command to the MCU | `ok,stop,0,setpoint_rpm,actual_rpm,app_state` |
+| `ESTOP` | Send real emergency stop | `ok,estop,0,setpoint_rpm,actual_rpm,app_state` |
+| `HIL_START` or legacy `START` | Start HIL simulation mode | `ok,start` |
+| `HIL_STOP` or legacy `STOP` | Stop HIL simulation mode | `ok,stop` |
+
+For real-motor setpoint control from Simulink, use `SETPOINT,<seq>,<rpm>`.
+Receiving an `ok,setpoint,...` response means the bridge received the UDP packet,
+sent the binary HID command to the MCU, and received an OK response from the MCU.
+For latency, this path updates the bridge cached setpoint but does not issue a
+`GET_STATUS` after every packet.
 
 ## ASCII command equivalence
 

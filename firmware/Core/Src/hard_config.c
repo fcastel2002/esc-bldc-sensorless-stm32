@@ -45,15 +45,7 @@ void update_all_esc()
   uint32_t tim_arr = CPU_clock / (2 * current_esc_params.pwm_freq_hz);
   TIM1->PSC        = 0;
   TIM1->ARR        = tim_arr;
-  if (flash_config_has_pending_changes()) {
-    FlashResultCode result = flash_config_save();
-    if (result == FLASH_RESULT_OK) {
-      esc_config_done = 1;
-
-    } else {
-      esc_config_done = 0;
-    }
-  }
+  esc_config_done = 1;
 }
 
 uint32_t compute_crc32(ESCparams* params)

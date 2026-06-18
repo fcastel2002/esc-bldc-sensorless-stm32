@@ -31,6 +31,7 @@ public enum CommOpcode : byte
     Stop = 0x11,
     EmergencyStop = 0x12,
     SetSpeedRpm = 0x13,
+    SetControlMode = 0x14,
     GetConfig = 0x20,
     SetConfig = 0x21,
     ResetConfig = 0x22,
@@ -39,6 +40,10 @@ public enum CommOpcode : byte
     LogStop = 0x31,
     LogRate = 0x32,
     TelemetryEvent = 0x33,
+    HilStart = 0x40,
+    HilStop = 0x41,
+    HilSetInputs = 0x42,
+    HilGetOutputs = 0x43,
 }
 
 public enum CommStatus : byte
@@ -55,6 +60,13 @@ public enum CommStatus : byte
     OverLimit = 0x09,
     NotImplemented = 0x0A,
     FlashError = 0x0B,
+}
+
+public enum ControlRuntimeMode : byte
+{
+    Normal = 0,
+    MonitorOnly = 1,
+    HilSim = 2,
 }
 
 public enum ConfigParam : byte

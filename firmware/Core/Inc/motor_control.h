@@ -14,6 +14,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+typedef enum {
+  CONTROL_RUNTIME_NORMAL = 0,
+  CONTROL_RUNTIME_MONITOR_ONLY = 1,
+  CONTROL_RUNTIME_HIL_SIM = 2,
+} ControlRuntimeMode;
+
 
 
 
@@ -29,6 +35,7 @@ extern volatile uint8_t  motor_control_config_done;
 extern volatile uint8_t  consistent_zero_crossing;
 
 extern volatile uint8_t  direction;
+extern volatile ControlRuntimeMode control_runtime_mode;
 
 // RUNTIME FUNCTIONS
 extern void updateAllMotorControl(void);
@@ -40,6 +47,15 @@ extern void     check_motor_status(void);
 extern void     stop_motor(uint8_t mode);
 extern uint16_t convert_speed_ticks(uint16_t value, bool to_ticks);
 extern uint16_t period_to_pwm(uint16_t period);
+extern uint8_t  control_mode_set(uint8_t mode);
+extern uint8_t  hil_start(void);
+extern void     hil_stop(void);
+extern void     hil_set_inputs(uint16_t speed_rpm, uint16_t zero_crossing_period, int16_t load_torque, uint8_t flags);
+extern uint8_t  hil_is_active(void);
+extern uint8_t  hil_has_timeout(void);
+extern uint16_t hil_get_speed_rpm(void);
+extern uint16_t hil_get_pwm_command(void);
+extern uint8_t  hil_get_flags(void);
 
 // MACROS PARA MEDICION DE VELOCIDAD
 

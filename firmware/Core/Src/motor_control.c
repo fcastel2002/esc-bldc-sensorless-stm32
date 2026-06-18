@@ -35,6 +35,7 @@
 // STALL HANDLING
 #define TIMEOUT_MOTOR_STALL_MS 200
 #define STALL_CHECK_TIME_MS 25
+#define HIL_INPUT_TIMEOUT_MS 50
 ////////
 
 
@@ -49,6 +50,7 @@
 volatile uint8_t  motor_control_config_done = 0;
 volatile uint16_t max_pwm                   = 0;
 volatile bool     motor_stalled             = false;
+volatile ControlRuntimeMode control_runtime_mode = CONTROL_RUNTIME_NORMAL;
 
 static volatile uint32_t last_zc_timestamp = 0;
 static volatile uint16_t max_limit_pwm;
@@ -84,6 +86,24 @@ volatile uint8_t consistent_zero_crossing = 0; // flag
 static float kp = 0;
 static float ki = 0;
 static float kd = 0;
+static volatile uint16_t hil_speed_rpm = 0;
+static volatile uint16_t hil_zero_crossing_period = 0;
+static volatile int16_t  hil_load_torque = 0;
+static volatile uint8_t  hil_flags = 0;
+static volatile uint32_t hil_last_input_tick = 0;
+
+static inline bool hil_mode_active(void)
+{
+  return control_runtime_mode == CONTROL_RUNTIME_HIL_SIM;
+}
+
+static uint16_t measured_speed_period(void)
+{
+  if (hil_mode_active()) {
+    return rpm_to_period(hil_speed_rpm);
+  }
+  return get_actual_speed();
+}
 
 // MAPEO PERIODO a PWM
 static inline uint16_t map_speed(uint16_t raw_speed)
@@ -117,10 +137,12 @@ void updateAllMotorControl()
 
 
 static inline bool state_allows_commutation(void){
-  return (app_state == RUNNING || app_state == CLOSEDLOOP);
+  return !hil_mode_active() && control_runtime_mode != CONTROL_RUNTIME_MONITOR_ONLY &&
+         (app_state == RUNNING || app_state == CLOSEDLOOP);
 }
 static inline bool state_allows_speed_measurement(void){
-  return (app_state == RUNNING || app_state == CLOSEDLOOP || app_state == FOC_STARTUP);
+  return !hil_mode_active() &&
+         (app_state == RUNNING || app_state == CLOSEDLOOP || app_state == FOC_STARTUP);
 }
 static inline bool state_allows_speed_update(void){
   return (app_state == CLOSEDLOOP);
@@ -134,6 +156,9 @@ static void commutate(bool update_timestamp){
 void zero_crossing_handler(uint8_t fase)
 {
   static uint8_t speed_calc_counter = 0;
+  if (hil_mode_active()) {
+    return;
+  }
 
   switch (fase) {
   case 1: // Fase W
@@ -202,6 +227,16 @@ void check_motor_status()
   uint32_t current_time = HAL_GetTick();
   if (current_time - last_check_time >= STALL_CHECK_TIME_MS) {
     last_check_time = current_time;
+
+    if (hil_mode_active()) {
+      if (hil_has_timeout()) {
+        motor_stalled = true;
+        hil_stop();
+      } else {
+        motor_stalled = false;
+      }
+      return;
+    }
 
     if (app_state == RUNNING || app_state == CLOSEDLOOP) {
       if (last_zc_timestamp > 0 && ((current_time - last_zc_timestamp) > TIMEOUT_MOTOR_STALL_MS)) {
@@ -274,7 +309,7 @@ uint16_t period_to_pwm(uint16_t period)
 void pi_control()
 {
 
-  speed_measure = period_to_pwm(get_actual_speed());
+  speed_measure = period_to_pwm(measured_speed_period());
   if (app_state == CLOSEDLOOP) {
     uint16_t target_period = rpm_to_period(speed_setpoint_rpm);
     uint16_t target_pwm    = period_to_pwm(target_period);
@@ -310,6 +345,13 @@ void pi_control()
 void stop_motor(uint8_t mode)
 {
   //filtered_speed = 0;
+  if (hil_mode_active() || control_runtime_mode == CONTROL_RUNTIME_MONITOR_ONLY) {
+    PWM_STOP();
+    bldc_set_pwm(0);
+    app_state = IDLE;
+    return;
+  }
+
   switch (mode) {
   case 0:
     // gradual stop
@@ -332,6 +374,88 @@ void stop_motor(uint8_t mode)
     app_state = IDLE;
     break;
   }
+}
+
+uint8_t control_mode_set(uint8_t mode)
+{
+  if (mode > CONTROL_RUNTIME_HIL_SIM) {
+    return 0;
+  }
+
+  if (mode != CONTROL_RUNTIME_NORMAL) {
+    PWM_STOP();
+    bldc_set_pwm(0);
+    app_state = IDLE;
+  }
+
+  control_runtime_mode = (ControlRuntimeMode)mode;
+  consistent_zero_crossing = mode == CONTROL_RUNTIME_HIL_SIM ? 1U : 0U;
+  return 1;
+}
+
+uint8_t hil_start(void)
+{
+  if (!hil_mode_active()) {
+    return 0;
+  }
+
+  PWM_STOP();
+  bldc_set_pwm(0);
+  hil_last_input_tick = HAL_GetTick();
+  motor_stalled = false;
+  consistent_zero_crossing = 1;
+  TIM4->PSC = 2;
+  TIM4->ARR = 0xFFFF;
+  __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, 48000);
+  HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
+  app_state = CLOSEDLOOP;
+  return 1;
+}
+
+void hil_stop(void)
+{
+  PWM_STOP();
+  bldc_set_pwm(0);
+  HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
+  app_state = IDLE;
+}
+
+void hil_set_inputs(uint16_t speed_rpm, uint16_t zero_crossing_period, int16_t load_torque, uint8_t flags)
+{
+  hil_speed_rpm = speed_rpm;
+  hil_zero_crossing_period = zero_crossing_period;
+  hil_load_torque = load_torque;
+  hil_flags = flags;
+  hil_last_input_tick = HAL_GetTick();
+  consistent_zero_crossing = 1;
+}
+
+uint8_t hil_is_active(void)
+{
+  return hil_mode_active() ? 1U : 0U;
+}
+
+uint8_t hil_has_timeout(void)
+{
+  if (!hil_mode_active()) {
+    return 0U;
+  }
+  return (uint32_t)(HAL_GetTick() - hil_last_input_tick) > HIL_INPUT_TIMEOUT_MS ? 1U : 0U;
+}
+
+uint16_t hil_get_speed_rpm(void)
+{
+  return hil_speed_rpm;
+}
+
+uint16_t hil_get_pwm_command(void)
+{
+  return bldc_get_pwm();
+}
+
+uint8_t hil_get_flags(void)
+{
+  return hil_flags;
 }
 uint16_t convert_speed_ticks(uint16_t value, bool to_ticks)
 {

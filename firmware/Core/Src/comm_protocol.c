@@ -40,6 +40,14 @@ static void write_i16_le(uint8_t* data, int16_t value)
   write_u16_le(data, (uint16_t)value);
 }
 
+static void write_u32_le(uint8_t* data, uint32_t value)
+{
+  data[0] = (uint8_t)(value & 0xFFU);
+  data[1] = (uint8_t)(value >> 8);
+  data[2] = (uint8_t)(value >> 16);
+  data[3] = (uint8_t)(value >> 24);
+}
+
 static int16_t float_to_centi(float value)
 {
   return (int16_t)(value * 100.0f);
@@ -390,6 +398,10 @@ static uint8_t execute_request(const uint8_t request[COMM_FRAME_SIZE],
     return COMM_STATUS_OK;
   }
 
+  case COMM_OPCODE_SET_CONTROL_MODE:
+    if (payload_len != 1U) return COMM_STATUS_BAD_LENGTH;
+    return control_mode_set(payload[0]) ? COMM_STATUS_OK : COMM_STATUS_UNKNOWN_PARAM;
+
   case COMM_OPCODE_GET_CONFIG:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     return get_config(param, payload_out, payload_out_len);
@@ -436,6 +448,47 @@ static uint8_t execute_request(const uint8_t request[COMM_FRAME_SIZE],
   case COMM_OPCODE_LOG_RATE:
     if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
     return set_logging_rate_ms(read_u16_le(payload));
+
+  case COMM_OPCODE_HIL_START:
+    if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
+    (void)control_mode_set(CONTROL_RUNTIME_HIL_SIM);
+    return hil_start() ? COMM_STATUS_OK : COMM_STATUS_INVALID_STATE;
+
+  case COMM_OPCODE_HIL_STOP:
+    if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
+    hil_stop();
+    return COMM_STATUS_OK;
+
+  case COMM_OPCODE_HIL_SET_INPUTS:
+    if (payload_len != 8U) return COMM_STATUS_BAD_LENGTH;
+    if (!hil_is_active() && payload[7] != 0U) {
+      (void)control_mode_set(CONTROL_RUNTIME_HIL_SIM);
+      (void)hil_start();
+    }
+    if (!hil_is_active()) return COMM_STATUS_INVALID_STATE;
+    if (payload[7] == 0U) {
+      hil_stop();
+      return COMM_STATUS_OK;
+    }
+    hil_set_inputs(read_u16_le(payload),
+                   read_u16_le(&payload[2]),
+                   read_i16_le(&payload[4]),
+                   payload[6]);
+    return COMM_STATUS_OK;
+
+  case COMM_OPCODE_HIL_GET_OUTPUTS:
+    if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
+    write_u32_le(&payload_out[0], HAL_GetTick());
+    payload_out[4] = (uint8_t)app_state;
+    payload_out[5] = (uint8_t)control_runtime_mode;
+    write_u16_le(&payload_out[6], speed_setpoint_rpm);
+    write_u16_le(&payload_out[8], hil_is_active() ? hil_get_speed_rpm() : period_to_rpm(get_actual_speed()));
+    write_u16_le(&payload_out[10], hil_get_pwm_command());
+    payload_out[12] = (uint8_t)bldc_get_commutation_step();
+    payload_out[13] = hil_get_flags();
+    payload_out[14] = hil_has_timeout();
+    *payload_out_len = 15;
+    return COMM_STATUS_OK;
 
   default:
     return COMM_STATUS_UNKNOWN_OPCODE;

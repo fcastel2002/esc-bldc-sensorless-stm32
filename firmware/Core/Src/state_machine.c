@@ -83,11 +83,11 @@ App_States_t handleState(void)
   case CLOSEDLOOP:
     HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
     current_time = HAL_GetTick();
-    if (motor_stalled) {
+    if (!hil_is_active() && motor_stalled) {
       foc_startup();
       motor_stalled = false;
     }
-    if (0 == consistent_zero_crossing)
+    if (!hil_is_active() && 0 == consistent_zero_crossing)
       app_state = RUNNING;
     break;
   case READY:

@@ -37,6 +37,22 @@ public sealed class BridgeTests
     }
 
     [Fact]
+    public async Task SimulinkModeAllowsExternalSetpointWhileBlockingGuiSetpoint()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        await bridge.SetModeAsync(ControlMode.SimulinkControl);
+
+        CommandResult guiSetpoint = await bridge.SetSpeedRpmAsync(1400);
+        CommandResult simulinkSetpoint = await bridge.SetSpeedRpmFromSimulinkAsync(1600);
+
+        Assert.False(guiSetpoint.Success);
+        Assert.True(simulinkSetpoint.Success);
+        Assert.Single(transport.RequestedOpcodes, opcode => opcode == CommOpcode.SetSpeedRpm);
+    }
+
+    [Fact]
     public async Task TelemetryEventIsBufferedInBridge()
     {
         FakeEscTransport transport = new();
@@ -66,6 +82,24 @@ public sealed class BridgeTests
         Assert.Contains(CommOpcode.SetConfig, transport.RequestedOpcodes);
         Assert.Contains(CommOpcode.SaveConfig, transport.RequestedOpcodes);
         Assert.True(transport.RequestedOpcodes.IndexOf(CommOpcode.SetConfig) < transport.RequestedOpcodes.IndexOf(CommOpcode.SaveConfig));
+    }
+
+    [Fact]
+    public async Task HilInputsAndOutputsUseDedicatedOpcodes()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        await bridge.SetModeAsync(ControlMode.SimulinkControl);
+
+        CommandResult input = await bridge.HilSetInputsAsync(new HilInputs(1800, 0, 0, 2, true));
+        HilOutputs output = await bridge.HilGetOutputsAsync();
+
+        Assert.True(input.Success);
+        Assert.Equal(ControlRuntimeMode.HilSim, output.Mode);
+        Assert.Equal(1800, output.MeasuredRpm);
+        Assert.Contains(CommOpcode.HilSetInputs, transport.RequestedOpcodes);
+        Assert.Contains(CommOpcode.HilGetOutputs, transport.RequestedOpcodes);
     }
 
     private static EscBridgeService CreateBridge(FakeEscTransport? transport = null)
@@ -130,6 +164,7 @@ public sealed class BridgeTests
             {
                 CommOpcode.Ping => request.Payload,
                 CommOpcode.GetStatus => StatusPayload(),
+                CommOpcode.HilGetOutputs => HilOutputsPayload(),
                 _ => []
             };
 
@@ -173,6 +208,19 @@ public sealed class BridgeTests
             BitConverter.GetBytes((ushort)1000).CopyTo(payload, 4);
             BitConverter.GetBytes((ushort)980).CopyTo(payload, 6);
             BitConverter.GetBytes((ushort)999).CopyTo(payload, 8);
+            return payload;
+        }
+
+        private static byte[] HilOutputsPayload()
+        {
+            byte[] payload = new byte[15];
+            BitConverter.GetBytes(1000u).CopyTo(payload, 0);
+            payload[4] = 6;
+            payload[5] = (byte)ControlRuntimeMode.HilSim;
+            BitConverter.GetBytes((ushort)1000).CopyTo(payload, 6);
+            BitConverter.GetBytes((ushort)1800).CopyTo(payload, 8);
+            BitConverter.GetBytes((ushort)700).CopyTo(payload, 10);
+            payload[12] = 1;
             return payload;
         }
     }

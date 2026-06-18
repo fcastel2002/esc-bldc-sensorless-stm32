@@ -22,6 +22,7 @@ public sealed class EscBridgeService
     private bool _speedLoggingEnabled;
     private ushort _logRateMs = 500;
     private byte _sequence;
+    private HilBridgeStats _hilStats = new(false, 0, 0, 0, 0, 0, null);
 
     public EscBridgeService(
         IEscDeviceEnumerator deviceEnumerator,
@@ -177,14 +178,60 @@ public sealed class EscBridgeService
         return SendCommandAsync(CommOpcode.EmergencyStop, 0, Array.Empty<byte>(), cancellationToken);
     }
 
-    public Task<CommandResult> SetSpeedRpmAsync(int rpm, CancellationToken cancellationToken = default)
+    public async Task<CommandResult> SetSpeedRpmAsync(int rpm, CancellationToken cancellationToken = default)
     {
         if (!AllowsGuiControl())
         {
-            return Task.FromResult(CommandResult.Failed($"Control is locked by {_mode}."));
+            return CommandResult.Failed($"Control is locked by {_mode}.");
         }
 
-        return SendCommandAsync(CommOpcode.SetSpeedRpm, 0, EscProtocol.UInt16Payload(rpm), cancellationToken);
+        byte[] payload;
+        try
+        {
+            payload = EscProtocol.UInt16Payload(rpm);
+        }
+        catch (OverflowException)
+        {
+            return CommandResult.Failed($"Valor de velocidad fuera de rango: {rpm} rpm.");
+        }
+
+        return await SendCommandAsync(CommOpcode.SetSpeedRpm, 0, payload, cancellationToken);
+    }
+
+    public Task<CommandResult> RunFromSimulinkAsync(CancellationToken cancellationToken = default)
+    {
+        return SendSimulinkControlCommandAsync(CommOpcode.Run, cancellationToken);
+    }
+
+    public Task<CommandResult> StopFromSimulinkAsync(CancellationToken cancellationToken = default)
+    {
+        return SendSimulinkControlCommandAsync(CommOpcode.Stop, cancellationToken);
+    }
+
+    public async Task<CommandResult> SetSpeedRpmFromSimulinkAsync(int rpm, bool refreshStatus = true, CancellationToken cancellationToken = default)
+    {
+        if (!AllowsSimulinkControl())
+        {
+            return CommandResult.Failed("Set GUI mode to Simulink control before sending real motor commands.");
+        }
+
+        byte[] payload;
+        try
+        {
+            payload = EscProtocol.UInt16Payload(rpm);
+        }
+        catch (OverflowException)
+        {
+            return CommandResult.Failed($"Valor de velocidad fuera de rango: {rpm} rpm.");
+        }
+
+        CommandResult result = await SendCommandAsync(CommOpcode.SetSpeedRpm, 0, payload, cancellationToken, refreshStatus).ConfigureAwait(false);
+        if (result.Success && !refreshStatus)
+        {
+            UpdateCachedSpeedSetpoint((ushort)rpm);
+        }
+
+        return result;
     }
 
     public async Task<object?> GetConfigAsync(ConfigParam parameter, CancellationToken cancellationToken = default)
@@ -194,15 +241,24 @@ public sealed class EscBridgeService
         return EscProtocol.DecodeConfigValue(parameter, response.Payload);
     }
 
-    public Task<CommandResult> SetConfigAsync(ConfigParam parameter, double value, CancellationToken cancellationToken = default)
+    public async Task<CommandResult> SetConfigAsync(ConfigParam parameter, double value, CancellationToken cancellationToken = default)
     {
         if (!AllowsGuiControl())
         {
-            return Task.FromResult(CommandResult.Failed($"Control is locked by {_mode}."));
+            return CommandResult.Failed($"Control is locked by {_mode}.");
         }
 
-        byte[] payload = EscProtocol.ConfigPayload(parameter, value);
-        return SendCommandAsync(CommOpcode.SetConfig, (byte)parameter, payload, cancellationToken);
+        byte[] payload;
+        try
+        {
+            payload = EscProtocol.ConfigPayload(parameter, value);
+        }
+        catch (Exception ex) when (ex is OverflowException or ArgumentOutOfRangeException)
+        {
+            return CommandResult.Failed($"Valor fuera de rango para {parameter}: {value}.");
+        }
+
+        return await SendCommandAsync(CommOpcode.SetConfig, (byte)parameter, payload, cancellationToken);
     }
 
     public Task<CommandResult> ResetConfigAsync(ConfigParam parameter, CancellationToken cancellationToken = default)
@@ -223,6 +279,75 @@ public sealed class EscBridgeService
         }
 
         return SendCommandAsync(CommOpcode.SaveConfig, (byte)parameter, Array.Empty<byte>(), cancellationToken);
+    }
+
+    public async Task<CommandResult> SetControlRuntimeModeAsync(ControlRuntimeMode mode, CancellationToken cancellationToken = default)
+    {
+        if (!AllowsHilControl())
+        {
+            return CommandResult.Failed($"Control is locked by {_mode}.");
+        }
+
+        return await SendCommandAsync(CommOpcode.SetControlMode, 0, EscProtocol.ControlModePayload(mode), cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CommandResult> HilStartAsync(CancellationToken cancellationToken = default)
+    {
+        if (!AllowsHilControl())
+        {
+            return CommandResult.Failed($"Control is locked by {_mode}.");
+        }
+
+        CommandResult result = await SendCommandAsync(CommOpcode.HilStart, 0, Array.Empty<byte>(), cancellationToken, refreshStatus: false).ConfigureAwait(false);
+        if (result.Success)
+        {
+            SetHilEnabled(true);
+        }
+
+        return result;
+    }
+
+    public async Task<CommandResult> HilStopAsync(CancellationToken cancellationToken = default)
+    {
+        CommandResult result = await SendCommandAsync(CommOpcode.HilStop, 0, Array.Empty<byte>(), cancellationToken, refreshStatus: false).ConfigureAwait(false);
+        if (result.Success)
+        {
+            SetHilEnabled(false);
+        }
+
+        return result;
+    }
+
+    public async Task<CommandResult> HilSetInputsAsync(HilInputs inputs, CancellationToken cancellationToken = default)
+    {
+        if (!AllowsHilControl())
+        {
+            return CommandResult.Failed($"Control is locked by {_mode}.");
+        }
+
+        CommandResult result = await SendCommandAsync(CommOpcode.HilSetInputs, 0, EscProtocol.HilInputsPayload(inputs), cancellationToken, refreshStatus: false).ConfigureAwait(false);
+        if (result.Success)
+        {
+            SetHilEnabled(inputs.Enable);
+        }
+
+        return result;
+    }
+
+    public async Task<HilOutputs> HilGetOutputsAsync(CancellationToken cancellationToken = default)
+    {
+        EscFrame response = await SendRequestAsync(CommOpcode.HilGetOutputs, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+        return EscProtocol.DecodeHilOutputs(response);
+    }
+
+    public void UpdateHilStats(HilBridgeStats stats)
+    {
+        lock (_stateGate)
+        {
+            _hilStats = stats;
+        }
+
+        Notify();
     }
 
     public async Task<CommandResult> SetLogRateAsync(ushort rateMs, CancellationToken cancellationToken = default)
@@ -328,13 +453,26 @@ public sealed class EscBridgeService
         return await SendCommandAsync(opcode, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<CommandResult> SendCommandAsync(CommOpcode opcode, byte parameter, byte[] payload, CancellationToken cancellationToken)
+    private async Task<CommandResult> SendSimulinkControlCommandAsync(CommOpcode opcode, CancellationToken cancellationToken)
+    {
+        if (!AllowsSimulinkControl())
+        {
+            return CommandResult.Failed("Set GUI mode to Simulink control before sending real motor commands.");
+        }
+
+        return await SendCommandAsync(opcode, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<CommandResult> SendCommandAsync(CommOpcode opcode, byte parameter, byte[] payload, CancellationToken cancellationToken, bool refreshStatus = true)
     {
         try
         {
             EscFrame response = await SendRequestAsync(opcode, parameter, payload, cancellationToken).ConfigureAwait(false);
             CommandResult result = CommandResult.FromStatus(response.Status);
-            await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+            if (refreshStatus)
+            {
+                await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+            }
             return result;
         }
         catch (Exception ex)
@@ -432,6 +570,45 @@ public sealed class EscBridgeService
         }
     }
 
+    private bool AllowsHilControl()
+    {
+        lock (_stateGate)
+        {
+            return _mode != ControlMode.MonitorOnly;
+        }
+    }
+
+    private bool AllowsSimulinkControl()
+    {
+        lock (_stateGate)
+        {
+            return _mode == ControlMode.SimulinkControl;
+        }
+    }
+
+    private void SetHilEnabled(bool enabled)
+    {
+        lock (_stateGate)
+        {
+            _hilStats = _hilStats with { Enabled = enabled };
+        }
+
+        Notify();
+    }
+
+    private void UpdateCachedSpeedSetpoint(ushort rpm)
+    {
+        lock (_stateGate)
+        {
+            if (_status is not null)
+            {
+                _status = _status with { SpeedSetpointRpm = rpm };
+            }
+        }
+
+        Notify();
+    }
+
     private void SetState(DeviceConnectionState state, HidDeviceDescriptor? device, string? error)
     {
         lock (_stateGate)
@@ -467,7 +644,8 @@ public sealed class EscBridgeService
             DateTimeOffset.UtcNow,
             _speedLoggingEnabled,
             _logRateMs,
-            _telemetryStore.GetStats("speed", "rpm"));
+            _telemetryStore.GetStats("speed", "rpm"),
+            _hilStats);
     }
 
     private void Notify()

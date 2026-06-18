@@ -12,6 +12,7 @@ public static class EscBridgeServiceCollectionExtensions
         services.AddSingleton<TelemetryStore>();
         services.AddSingleton<EscBridgeService>();
         services.AddHostedService<EscBridgeWorker>();
+        services.AddHostedService<HilUdpBridgeService>();
         return services;
     }
 }

@@ -13,7 +13,8 @@ public sealed record BridgeSnapshot(
     DateTimeOffset LastUpdated,
     bool SpeedLoggingEnabled,
     ushort LogRateMs,
-    TelemetryStats SpeedTelemetry);
+    TelemetryStats SpeedTelemetry,
+    HilBridgeStats Hil);
 
 public sealed record TelemetryStats(
     int SampleCount,
@@ -23,3 +24,12 @@ public sealed record TelemetryStats(
     DateTimeOffset? LastHostTimestamp,
     double EffectiveRateHz,
     uint DroppedSamples);
+
+public sealed record HilBridgeStats(
+    bool Enabled,
+    uint RxFrames,
+    uint LostFrames,
+    double EffectiveRateHz,
+    double AverageRoundTripMs,
+    double JitterMs,
+    HilOutputs? LastOutputs);
