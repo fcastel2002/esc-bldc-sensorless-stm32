@@ -101,6 +101,8 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 
 For gains, value `135` means `1.35`. `SET_CONFIG` and `RESET_CONFIG` update the active RAM configuration and mark pending changes, but do not write flash. `SAVE_CONFIG` writes the current active configuration to flash. `RESET_CONFIG` supports each implemented config param and `0xFF` for all defaults.
 
+When `app_state == CLOSEDLOOP`, changes to `PWM_FREQ`, `KP`, `KI`, and `KD` are applied immediately without leaving closed loop. `KD` acts on the measured speed derivative, so setpoint changes do not create derivative kick. Other config parameters still follow the deferred `CONFIG` path.
+
 ## Logging and telemetry
 
 Log params:

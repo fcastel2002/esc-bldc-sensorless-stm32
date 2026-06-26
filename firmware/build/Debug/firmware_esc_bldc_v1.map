@@ -4972,8 +4972,6 @@ Discarded input sections
  .bss           0x00000000        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .bss.speed_setpoint
                 0x00000000        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .bss.diff_speed
-                0x00000000        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .text.convert_speed_ticks
                 0x00000000       0xdc CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .bss.speed_calc_counter.3
@@ -6365,7 +6363,7 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
                 0x08000000                g_pfnVectors
                 0x0800010c                        . = ALIGN (0x4)
 
-.text           0x0800010c     0xf8cc
+.text           0x0800010c     0xf854
                 0x0800010c                        . = ALIGN (0x4)
  *(.text)
  .text          0x0800010c      0x21c C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_addsubsf3.o)
@@ -7108,451 +7106,453 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
                 0x0800af8a       0x36 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
  .text.control_state_allows_command
                 0x0800afc0       0x3c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+ .text.apply_config_change
+                0x0800affc       0x78 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
  .text.get_config
-                0x0800affc      0x11c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+                0x0800b074      0x11c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
  .text.set_config
-                0x0800b118      0x188 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+                0x0800b190      0x170 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
  .text.save_config
-                0x0800b2a0       0x44 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+                0x0800b300       0x44 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
  .text.reset_config
-                0x0800b2e4       0xf8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+                0x0800b344       0xe4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
  .text.logging_variable_from_param
-                0x0800b3dc       0x4a CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
- *fill*         0x0800b426        0x2 
+                0x0800b428       0x4a CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+ *fill*         0x0800b472        0x2 
  .text.execute_request
-                0x0800b428      0x510 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+                0x0800b474      0x510 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
  .text.comm_protocol_handle_frame
-                0x0800b938      0x112 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
-                0x0800b938                comm_protocol_handle_frame
- *fill*         0x0800ba4a        0x2 
+                0x0800b984      0x112 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+                0x0800b984                comm_protocol_handle_frame
+ *fill*         0x0800ba96        0x2 
  .text.comm_protocol_build_event
-                0x0800ba4c       0x70 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
-                0x0800ba4c                comm_protocol_build_event
+                0x0800ba98       0x70 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+                0x0800ba98                comm_protocol_build_event
  .text.comm_transport_get_mode
-                0x0800babc       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
-                0x0800babc                comm_transport_get_mode
+                0x0800bb08       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x0800bb08                comm_transport_get_mode
  .text.comm_transport_is_usb_ready
-                0x0800bad0       0x34 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
-                0x0800bad0                comm_transport_is_usb_ready
+                0x0800bb1c       0x34 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x0800bb1c                comm_transport_is_usb_ready
  .text.comm_transport_init
-                0x0800bb04       0x60 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
-                0x0800bb04                comm_transport_init
+                0x0800bb50       0x60 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x0800bb50                comm_transport_init
  .text.handle_frame
-                0x0800bb64       0x2c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x0800bbb0       0x2c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
  .text.process_uart
-                0x0800bb90       0x80 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x0800bbdc       0x80 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
  .text.process_usb
-                0x0800bc10       0x6c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x0800bc5c       0x6c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
  .text.comm_transport_process
-                0x0800bc7c       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
-                0x0800bc7c                comm_transport_process
+                0x0800bcc8       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x0800bcc8                comm_transport_process
  .text.comm_transport_send_frame
-                0x0800bc9c       0x80 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
-                0x0800bc9c                comm_transport_send_frame
+                0x0800bce8       0x80 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x0800bce8                comm_transport_send_frame
  .text.comm_transport_receive_usb_report
-                0x0800bd1c       0x68 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
-                0x0800bd1c                comm_transport_receive_usb_report
+                0x0800bd68       0x68 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x0800bd68                comm_transport_receive_usb_report
  .text.HAL_UART_RxCpltCallback
-                0x0800bd84       0x88 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
-                0x0800bd84                HAL_UART_RxCpltCallback
+                0x0800bdd0       0x88 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x0800bdd0                HAL_UART_RxCpltCallback
  .text.set_default_esc_params
-                0x0800be0c       0x6c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800be0c                set_default_esc_params
+                0x0800be58       0x6c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800be58                set_default_esc_params
  .text.update_all_esc
-                0x0800be78       0x44 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800be78                update_all_esc
+                0x0800bec4       0x44 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800bec4                update_all_esc
  .text.compute_crc32
-                0x0800bebc       0xc8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800bebc                compute_crc32
+                0x0800bf08       0xc8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800bf08                compute_crc32
  .text.get_pwm_freq
-                0x0800bf84       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800bf84                get_pwm_freq
+                0x0800bfd0       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800bfd0                get_pwm_freq
  .text.set_pwm_freq
-                0x0800bf98       0x40 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800bf98                set_pwm_freq
+                0x0800bfe4       0x40 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800bfe4                set_pwm_freq
  .text.set_pole_pairs
-                0x0800bfd8       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800bfd8                set_pole_pairs
+                0x0800c024       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c024                set_pole_pairs
  .text.get_pole_pairs
-                0x0800c010       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800c010                get_pole_pairs
- .text.set_KP   0x0800c028       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800c028                set_KP
- .text.get_KP   0x0800c074       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800c074                get_KP
- .text.set_KI   0x0800c088       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800c088                set_KI
- .text.get_KI   0x0800c0d4       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800c0d4                get_KI
- .text.set_KD   0x0800c0e8       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800c0e8                set_KD
- .text.get_KD   0x0800c134       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800c134                get_KD
+                0x0800c05c       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c05c                get_pole_pairs
+ .text.set_KP   0x0800c074       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c074                set_KP
+ .text.get_KP   0x0800c0c0       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c0c0                get_KP
+ .text.set_KI   0x0800c0d4       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c0d4                set_KI
+ .text.get_KI   0x0800c120       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c120                get_KI
+ .text.set_KD   0x0800c134       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c134                set_KD
+ .text.get_KD   0x0800c180       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c180                get_KD
  .text.get_min_speed
-                0x0800c148       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800c148                get_min_speed
+                0x0800c194       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c194                get_min_speed
  .text.get_max_speed
-                0x0800c15c       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800c15c                get_max_speed
+                0x0800c1a8       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c1a8                get_max_speed
  .text.set_max_speed
-                0x0800c170       0x40 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800c170                set_max_speed
+                0x0800c1bc       0x40 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c1bc                set_max_speed
  .text.set_min_speed
-                0x0800c1b0       0x40 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
-                0x0800c1b0                set_min_speed
+                0x0800c1fc       0x40 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x0800c1fc                set_min_speed
  .text.calculate_block_crc
-                0x0800c1f0       0x94 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+                0x0800c23c       0x94 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
  .text.write_page
-                0x0800c284       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+                0x0800c2d0       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
  .text.find_active_page
-                0x0800c2d0       0xe4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+                0x0800c31c       0xe4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
  .text.erase_flash_page
-                0x0800c3b4       0x48 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+                0x0800c400       0x48 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
  .text.write_flash_block
-                0x0800c3fc       0x68 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+                0x0800c448       0x68 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
  .text.flash_config_init
-                0x0800c464       0x7c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
-                0x0800c464                flash_config_init
+                0x0800c4b0       0x7c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+                0x0800c4b0                flash_config_init
  .text.flash_config_save
-                0x0800c4e0      0x148 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
-                0x0800c4e0                flash_config_save
+                0x0800c52c      0x148 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+                0x0800c52c                flash_config_save
  .text.flash_config_parameter_changed
-                0x0800c628       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
-                0x0800c628                flash_config_parameter_changed
+                0x0800c674       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+                0x0800c674                flash_config_parameter_changed
  .text.hil_mode_active
-                0x0800c640       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800c68c       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .text.measured_speed_period
-                0x0800c660       0x2c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800c6ac       0x2c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .text.map_speed
-                0x0800c68c       0x88 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800c6d8       0x88 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .text.updateAllMotorControl
-                0x0800c714       0xd0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800c714                updateAllMotorControl
+                0x0800c760       0xb0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800c760                updateAllMotorControl
  .text.state_allows_commutation
-                0x0800c7e4       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800c810       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .text.state_allows_speed_measurement
-                0x0800c830       0x48 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800c85c       0x48 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .text.state_allows_speed_update
-                0x0800c878       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800c8a4       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .text.commutate
-                0x0800c898       0x3c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800c8c4       0x3c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .text.zero_crossing_handler
-                0x0800c8d4       0xb4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800c8d4                zero_crossing_handler
+                0x0800c900       0xb4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800c900                zero_crossing_handler
  .text.detect_motor
-                0x0800c988       0xfc CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800c988                detect_motor
+                0x0800c9b4       0xfc CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800c9b4                detect_motor
  .text.check_motor_status
-                0x0800ca84       0xf4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800ca84                check_motor_status
+                0x0800cab0       0xf4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800cab0                check_motor_status
  .text.period_to_pwm
-                0x0800cb78       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800cb78                period_to_pwm
+                0x0800cba4       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800cba4                period_to_pwm
  .text.pi_control
-                0x0800cb94      0x234 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800cb94                pi_control
+                0x0800cbc0      0x1e0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800cbc0                pi_control
  .text.stop_motor
-                0x0800cdc8      0x110 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800cdc8                stop_motor
+                0x0800cda0      0x110 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800cda0                stop_motor
  .text.control_mode_set
-                0x0800ced8       0x70 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800ced8                control_mode_set
+                0x0800ceb0       0x70 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800ceb0                control_mode_set
  .text.hil_start
-                0x0800cf48       0x94 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800cf48                hil_start
+                0x0800cf20       0x94 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800cf20                hil_start
  .text.hil_stop
-                0x0800cfdc       0x40 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800cfdc                hil_stop
+                0x0800cfb4       0x40 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800cfb4                hil_stop
  .text.hil_set_inputs
-                0x0800d01c       0x68 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800d01c                hil_set_inputs
+                0x0800cff4       0x68 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800cff4                hil_set_inputs
  .text.hil_is_active
-                0x0800d084       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800d084                hil_is_active
+                0x0800d05c       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800d05c                hil_is_active
  .text.hil_has_timeout
-                0x0800d09c       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800d09c                hil_has_timeout
+                0x0800d074       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800d074                hil_has_timeout
  .text.hil_get_speed_rpm
-                0x0800d0d4       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800d0d4                hil_get_speed_rpm
+                0x0800d0ac       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800d0ac                hil_get_speed_rpm
  .text.hil_get_pwm_command
-                0x0800d0ec        0xe CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800d0ec                hil_get_pwm_command
- *fill*         0x0800d0fa        0x2 
+                0x0800d0c4        0xe CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800d0c4                hil_get_pwm_command
+ *fill*         0x0800d0d2        0x2 
  .text.hil_get_flags
-                0x0800d0fc       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x0800d0fc                hil_get_flags
+                0x0800d0d4       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0800d0d4                hil_get_flags
  .text.generate_sine_tables
-                0x0800d114      0x164 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+                0x0800d0ec      0x164 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
  .text.foc_startup
-                0x0800d278       0xe4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
-                0x0800d278                foc_startup
+                0x0800d250       0xe8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+                0x0800d250                foc_startup
  .text.update_pwm_startup_foc
-                0x0800d35c      0x170 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
-                0x0800d35c                update_pwm_startup_foc
+                0x0800d338      0x170 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+                0x0800d338                update_pwm_startup_foc
  .text.executeTransition
-                0x0800d4cc       0xd4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+                0x0800d4a8       0xd4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
  .text.handleState
-                0x0800d5a0      0x294 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
-                0x0800d5a0                handleState
+                0x0800d57c      0x240 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+                0x0800d57c                handleState
  .text.speed_sensor_process_phase_measurement
-                0x0800d834      0x124 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
-                0x0800d834                speed_sensor_process_phase_measurement
+                0x0800d7bc      0x124 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x0800d7bc                speed_sensor_process_phase_measurement
  .text.calculate_consensus_speed
-                0x0800d958      0x164 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x0800d8e0      0x164 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
  .text.get_actual_speed
-                0x0800dabc       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
-                0x0800dabc                get_actual_speed
+                0x0800da44       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x0800da44                get_actual_speed
  .text.rpm_to_period
-                0x0800dad4       0x7e CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
-                0x0800dad4                rpm_to_period
+                0x0800da5c       0x7e CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x0800da5c                rpm_to_period
  .text.period_to_rpm
-                0x0800db52       0x96 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
-                0x0800db52                period_to_rpm
+                0x0800dada       0x96 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x0800dada                period_to_rpm
  .text.filtro_media_movil_zc
-                0x0800dbe8       0xe8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
-                0x0800dbe8                filtro_media_movil_zc
+                0x0800db70       0xe8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x0800db70                filtro_media_movil_zc
  .text.speed_sensor_handle_W_measurement
-                0x0800dcd0      0x148 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
-                0x0800dcd0                speed_sensor_handle_W_measurement
+                0x0800dc58      0x148 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x0800dc58                speed_sensor_handle_W_measurement
  .text.speed_sensor_handle_consensus
-                0x0800de18       0xdc CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
-                0x0800de18                speed_sensor_handle_consensus
+                0x0800dda0       0xdc CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x0800dda0                speed_sensor_handle_consensus
  .text.speed_sensor_get_speed_range
-                0x0800def4       0x10 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
-                0x0800def4                speed_sensor_get_speed_range
+                0x0800de7c       0x10 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x0800de7c                speed_sensor_get_speed_range
  .text.commutate
-                0x0800df04      0x444 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x0800de8c      0x444 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
  .text.bldc_commutate
-                0x0800e348       0x64 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
-                0x0800e348                bldc_commutate
+                0x0800e2d0       0x64 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x0800e2d0                bldc_commutate
  .text.bldc_set_pwm
-                0x0800e3ac       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
-                0x0800e3ac                bldc_set_pwm
+                0x0800e334       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x0800e334                bldc_set_pwm
  .text.bldc_get_pwm
-                0x0800e3cc       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
-                0x0800e3cc                bldc_get_pwm
+                0x0800e354       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x0800e354                bldc_get_pwm
  .text.bldc_get_commutation_step
-                0x0800e3e4       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
-                0x0800e3e4                bldc_get_commutation_step
+                0x0800e36c       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x0800e36c                bldc_get_commutation_step
  .text.safe_mod
-                0x0800e3fc       0x42 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
-                0x0800e3fc                safe_mod
- *fill*         0x0800e43e        0x2 
+                0x0800e384       0x42 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
+                0x0800e384                safe_mod
+ *fill*         0x0800e3c6        0x2 
  .text.MX_USB_DEVICE_Init
-                0x0800e440       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
-                0x0800e440                MX_USB_DEVICE_Init
+                0x0800e3c8       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
+                0x0800e3c8                MX_USB_DEVICE_Init
  .text.HAL_PCD_MspInit
-                0x0800e478       0x94 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e478                HAL_PCD_MspInit
+                0x0800e400       0x94 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e400                HAL_PCD_MspInit
  .text.HAL_PCD_SetupStageCallback
-                0x0800e50c       0x24 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e50c                HAL_PCD_SetupStageCallback
+                0x0800e494       0x24 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e494                HAL_PCD_SetupStageCallback
  .text.HAL_PCD_DataOutStageCallback
-                0x0800e530       0x36 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e530                HAL_PCD_DataOutStageCallback
+                0x0800e4b8       0x36 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e4b8                HAL_PCD_DataOutStageCallback
  .text.HAL_PCD_DataInStageCallback
-                0x0800e566       0x34 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e566                HAL_PCD_DataInStageCallback
+                0x0800e4ee       0x34 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e4ee                HAL_PCD_DataInStageCallback
  .text.HAL_PCD_SOFCallback
-                0x0800e59a       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e59a                HAL_PCD_SOFCallback
+                0x0800e522       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e522                HAL_PCD_SOFCallback
  .text.HAL_PCD_ResetCallback
-                0x0800e5b6       0x2a CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e5b6                HAL_PCD_ResetCallback
+                0x0800e53e       0x2a CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e53e                HAL_PCD_ResetCallback
  .text.HAL_PCD_SuspendCallback
-                0x0800e5e0       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e5e0                HAL_PCD_SuspendCallback
+                0x0800e568       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e568                HAL_PCD_SuspendCallback
  .text.HAL_PCD_ResumeCallback
-                0x0800e5fc       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e5fc                HAL_PCD_ResumeCallback
+                0x0800e584       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e584                HAL_PCD_ResumeCallback
  .text.USBD_LL_Init
-                0x0800e618       0x94 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e618                USBD_LL_Init
+                0x0800e5a0       0x94 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e5a0                USBD_LL_Init
  .text.USBD_LL_Start
-                0x0800e6ac       0x1e CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e6ac                USBD_LL_Start
+                0x0800e634       0x1e CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e634                USBD_LL_Start
  .text.USBD_LL_OpenEP
-                0x0800e6ca       0x34 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e6ca                USBD_LL_OpenEP
+                0x0800e652       0x34 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e652                USBD_LL_OpenEP
  .text.USBD_LL_CloseEP
-                0x0800e6fe       0x26 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e6fe                USBD_LL_CloseEP
+                0x0800e686       0x26 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e686                USBD_LL_CloseEP
  .text.USBD_LL_StallEP
-                0x0800e724       0x26 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e724                USBD_LL_StallEP
+                0x0800e6ac       0x26 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e6ac                USBD_LL_StallEP
  .text.USBD_LL_ClearStallEP
-                0x0800e74a       0x26 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e74a                USBD_LL_ClearStallEP
+                0x0800e6d2       0x26 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e6d2                USBD_LL_ClearStallEP
  .text.USBD_LL_IsStallEP
-                0x0800e770       0x56 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e770                USBD_LL_IsStallEP
+                0x0800e6f8       0x56 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e6f8                USBD_LL_IsStallEP
  .text.USBD_LL_SetUSBAddress
-                0x0800e7c6       0x26 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e7c6                USBD_LL_SetUSBAddress
+                0x0800e74e       0x26 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e74e                USBD_LL_SetUSBAddress
  .text.USBD_LL_Transmit
-                0x0800e7ec       0x2e CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e7ec                USBD_LL_Transmit
+                0x0800e774       0x2e CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e774                USBD_LL_Transmit
  .text.USBD_LL_PrepareReceive
-                0x0800e81a       0x2e CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e81a                USBD_LL_PrepareReceive
+                0x0800e7a2       0x2e CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e7a2                USBD_LL_PrepareReceive
  .text.USBD_LL_GetRxDataSize
-                0x0800e848       0x26 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e848                USBD_LL_GetRxDataSize
- *fill*         0x0800e86e        0x2 
+                0x0800e7d0       0x26 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e7d0                USBD_LL_GetRxDataSize
+ *fill*         0x0800e7f6        0x2 
  .text.USBD_static_malloc
-                0x0800e870       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e870                USBD_static_malloc
+                0x0800e7f8       0x18 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e7f8                USBD_static_malloc
  .text.USBD_static_free
-                0x0800e888       0x12 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e888                USBD_static_free
+                0x0800e810       0x12 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e810                USBD_static_free
  .text.HAL_PCDEx_SetConnectionState
-                0x0800e89a       0x16 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x0800e89a                HAL_PCDEx_SetConnectionState
+                0x0800e822       0x16 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x0800e822                HAL_PCDEx_SetConnectionState
  .text.CustomHID_Init
-                0x0800e8b0        0xe CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
+                0x0800e838        0xe CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
  .text.CustomHID_DeInit
-                0x0800e8be        0xe CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
+                0x0800e846        0xe CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
  .text.CustomHID_OutReport
-                0x0800e8cc       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
+                0x0800e854       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
  .text.USBD_HID_DeviceDescriptor
-                0x0800e8ec       0x24 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+                0x0800e874       0x24 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
  .text.USBD_HID_LangIDStrDescriptor
-                0x0800e910       0x24 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+                0x0800e898       0x24 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
  .text.USBD_HID_ProductStrDescriptor
-                0x0800e934       0x28 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+                0x0800e8bc       0x28 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
  .text.USBD_HID_ManufacturerStrDescriptor
-                0x0800e95c       0x28 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+                0x0800e8e4       0x28 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
  .text.USBD_HID_SerialStrDescriptor
-                0x0800e984       0x24 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+                0x0800e90c       0x24 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
  .text.USBD_HID_ConfigStrDescriptor
-                0x0800e9a8       0x28 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+                0x0800e930       0x28 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
  .text.USBD_HID_InterfaceStrDescriptor
-                0x0800e9d0       0x28 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+                0x0800e958       0x28 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
  .text.Get_SerialNum
-                0x0800e9f8       0x58 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+                0x0800e980       0x58 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
  .text.IntToUnicode
-                0x0800ea50       0x66 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
- .text.memcpy   0x0800eab6       0x1c C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libg_nano.a(libc_a-memcpy-stub.o)
-                0x0800eab6                memcpy
- *fill*         0x0800ead2        0x2 
- .text.sinf     0x0800ead4       0x68 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-sf_sin.o)
-                0x0800ead4                sinf
+                0x0800e9d8       0x66 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+ .text.memcpy   0x0800ea3e       0x1c C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libg_nano.a(libc_a-memcpy-stub.o)
+                0x0800ea3e                memcpy
+ *fill*         0x0800ea5a        0x2 
+ .text.sinf     0x0800ea5c       0x68 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-sf_sin.o)
+                0x0800ea5c                sinf
  .text.__kernel_cosf
-                0x0800eb3c      0x194 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-kf_cos.o)
-                0x0800eb3c                __kernel_cosf
+                0x0800eac4      0x194 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-kf_cos.o)
+                0x0800eac4                __kernel_cosf
  .text.__kernel_sinf
-                0x0800ecd0       0xf4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-kf_sin.o)
-                0x0800ecd0                __kernel_sinf
+                0x0800ec58       0xf4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-kf_sin.o)
+                0x0800ec58                __kernel_sinf
  .text.__ieee754_rem_pio2f
-                0x0800edc4      0x320 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-ef_rem_pio2.o)
-                0x0800edc4                __ieee754_rem_pio2f
- .text.fabsf    0x0800f0e4        0x8 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-sf_fabs.o)
-                0x0800f0e4                fabsf
+                0x0800ed4c      0x320 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-ef_rem_pio2.o)
+                0x0800ed4c                __ieee754_rem_pio2f
+ .text.fabsf    0x0800f06c        0x8 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-sf_fabs.o)
+                0x0800f06c                fabsf
  .text.__kernel_rem_pio2f
-                0x0800f0ec      0x77c C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-kf_rem_pio2.o)
-                0x0800f0ec                __kernel_rem_pio2f
- .text.scalbnf  0x0800f868       0xb4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-sf_scalbn.o)
-                0x0800f868                scalbnf
- .text.floorf   0x0800f91c       0xa4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-sf_floor.o)
-                0x0800f91c                floorf
+                0x0800f074      0x77c C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-kf_rem_pio2.o)
+                0x0800f074                __kernel_rem_pio2f
+ .text.scalbnf  0x0800f7f0       0xb4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-sf_scalbn.o)
+                0x0800f7f0                scalbnf
+ .text.floorf   0x0800f8a4       0xa4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-sf_floor.o)
+                0x0800f8a4                floorf
  *(.glue_7)
- .glue_7        0x0800f9c0        0x0 linker stubs
+ .glue_7        0x0800f948        0x0 linker stubs
  *(.glue_7t)
- .glue_7t       0x0800f9c0        0x0 linker stubs
+ .glue_7t       0x0800f948        0x0 linker stubs
  *(.eh_frame)
- .eh_frame      0x0800f9c0        0x0 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
+ .eh_frame      0x0800f948        0x0 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
  *(.init)
- .init          0x0800f9c0        0x4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crti.o
-                0x0800f9c0                _init
- .init          0x0800f9c4        0x8 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtn.o
+ .init          0x0800f948        0x4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crti.o
+                0x0800f948                _init
+ .init          0x0800f94c        0x8 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtn.o
  *(.fini)
- .fini          0x0800f9cc        0x4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crti.o
-                0x0800f9cc                _fini
- .fini          0x0800f9d0        0x8 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtn.o
-                0x0800f9d8                        . = ALIGN (0x4)
-                0x0800f9d8                        _etext = .
+ .fini          0x0800f954        0x4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crti.o
+                0x0800f954                _fini
+ .fini          0x0800f958        0x8 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtn.o
+                0x0800f960                        . = ALIGN (0x4)
+                0x0800f960                        _etext = .
 
-.vfp11_veneer   0x0800f9d8        0x0
- .vfp11_veneer  0x0800f9d8        0x0 linker stubs
+.vfp11_veneer   0x0800f960        0x0
+ .vfp11_veneer  0x0800f960        0x0 linker stubs
 
-.v4_bx          0x0800f9d8        0x0
- .v4_bx         0x0800f9d8        0x0 linker stubs
+.v4_bx          0x0800f960        0x0
+ .v4_bx         0x0800f960        0x0 linker stubs
 
-.iplt           0x0800f9d8        0x0
- .iplt          0x0800f9d8        0x0 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
+.iplt           0x0800f960        0x0
+ .iplt          0x0800f960        0x0 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
 
-.rodata         0x0800f9d8      0x460
-                0x0800f9d8                        . = ALIGN (0x4)
+.rodata         0x0800f960      0x460
+                0x0800f960                        . = ALIGN (0x4)
  *(.rodata)
- .rodata        0x0800f9d8       0x5f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+ .rodata        0x0800f960       0x5f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
  *(.rodata*)
- *fill*         0x0800fa37        0x1 
+ *fill*         0x0800f9bf        0x1 
  .rodata.AHBPrescTable
-                0x0800fa38       0x10 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
-                0x0800fa38                AHBPrescTable
+                0x0800f9c0       0x10 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
+                0x0800f9c0                AHBPrescTable
  .rodata.APBPrescTable
-                0x0800fa48        0x8 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
-                0x0800fa48                APBPrescTable
+                0x0800f9d0        0x8 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
+                0x0800f9d0                APBPrescTable
  .rodata.aPLLMULFactorTable.1
-                0x0800fa50       0x10 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rcc.c.obj
+                0x0800f9d8       0x10 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rcc.c.obj
  .rodata.aPredivFactorTable.0
-                0x0800fa60        0x2 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rcc.c.obj
- *fill*         0x0800fa62        0x2 
+                0x0800f9e8        0x2 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rcc.c.obj
+ *fill*         0x0800f9ea        0x2 
  .rodata.CPU_clock
-                0x0800fa64        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/main.c.obj
-                0x0800fa64                CPU_clock
+                0x0800f9ec        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/main.c.obj
+                0x0800f9ec                CPU_clock
  .rodata.npio2_hw
-                0x0800fa68       0x80 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-ef_rem_pio2.o)
+                0x0800f9f0       0x80 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-ef_rem_pio2.o)
  .rodata.two_over_pi
-                0x0800fae8      0x318 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-ef_rem_pio2.o)
- .rodata.PIo2   0x0800fe00       0x2c C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-kf_rem_pio2.o)
+                0x0800fa70      0x318 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-ef_rem_pio2.o)
+ .rodata.PIo2   0x0800fd88       0x2c C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-kf_rem_pio2.o)
  .rodata.init_jk
-                0x0800fe2c        0xc C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-kf_rem_pio2.o)
-                0x0800fe38                        . = ALIGN (0x4)
+                0x0800fdb4        0xc C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libm.a(libm_a-kf_rem_pio2.o)
+                0x0800fdc0                        . = ALIGN (0x4)
 
-.ARM.extab      0x0800fe38        0x0
-                0x0800fe38                        . = ALIGN (0x4)
+.ARM.extab      0x0800fdc0        0x0
+                0x0800fdc0                        . = ALIGN (0x4)
  *(.ARM.extab* .gnu.linkonce.armextab.*)
-                0x0800fe38                        . = ALIGN (0x4)
+                0x0800fdc0                        . = ALIGN (0x4)
 
-.ARM            0x0800fe38        0x0
-                0x0800fe38                        . = ALIGN (0x4)
-                0x0800fe38                        __exidx_start = .
+.ARM            0x0800fdc0        0x0
+                0x0800fdc0                        . = ALIGN (0x4)
+                0x0800fdc0                        __exidx_start = .
  *(.ARM.exidx*)
-                0x0800fe38                        __exidx_end = .
-                0x0800fe38                        . = ALIGN (0x4)
+                0x0800fdc0                        __exidx_end = .
+                0x0800fdc0                        . = ALIGN (0x4)
 
-.preinit_array  0x0800fe38        0x0
-                0x0800fe38                        . = ALIGN (0x4)
-                0x0800fe38                        PROVIDE (__preinit_array_start = .)
+.preinit_array  0x0800fdc0        0x0
+                0x0800fdc0                        . = ALIGN (0x4)
+                0x0800fdc0                        PROVIDE (__preinit_array_start = .)
  *(.preinit_array*)
-                0x0800fe38                        PROVIDE (__preinit_array_end = .)
-                0x0800fe38                        . = ALIGN (0x4)
+                0x0800fdc0                        PROVIDE (__preinit_array_end = .)
+                0x0800fdc0                        . = ALIGN (0x4)
 
-.init_array     0x0800fe38        0x4
-                0x0800fe38                        . = ALIGN (0x4)
-                0x0800fe38                        PROVIDE (__init_array_start = .)
+.init_array     0x0800fdc0        0x4
+                0x0800fdc0                        . = ALIGN (0x4)
+                0x0800fdc0                        PROVIDE (__init_array_start = .)
  *(SORT_BY_NAME(.init_array.*))
  *(.init_array*)
- .init_array    0x0800fe38        0x4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
-                0x0800fe3c                        PROVIDE (__init_array_end = .)
-                0x0800fe3c                        . = ALIGN (0x4)
+ .init_array    0x0800fdc0        0x4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
+                0x0800fdc4                        PROVIDE (__init_array_end = .)
+                0x0800fdc4                        . = ALIGN (0x4)
 
-.fini_array     0x0800fe3c        0x4
-                0x0800fe3c                        . = ALIGN (0x4)
+.fini_array     0x0800fdc4        0x4
+                0x0800fdc4                        . = ALIGN (0x4)
                 [!provide]                        PROVIDE (__fini_array_start = .)
  *(SORT_BY_NAME(.fini_array.*))
  *(.fini_array*)
- .fini_array    0x0800fe3c        0x4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
+ .fini_array    0x0800fdc4        0x4 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
                 [!provide]                        PROVIDE (__fini_array_end = .)
-                0x0800fe40                        . = ALIGN (0x4)
-                0x0800fe40                        _sidata = LOADADDR (.data)
+                0x0800fdc8                        . = ALIGN (0x4)
+                0x0800fdc8                        _sidata = LOADADDR (.data)
 
-.rel.dyn        0x0800fe40        0x0
- .rel.iplt      0x0800fe40        0x0 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
+.rel.dyn        0x0800fdc8        0x0
+ .rel.iplt      0x0800fdc8        0x0 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
 
-.data           0x20000000      0x180 load address 0x0800fe40
+.data           0x20000000      0x180 load address 0x0800fdc8
                 0x20000000                        . = ALIGN (0x4)
                 0x20000000                        _sdata = .
  *(.data)
@@ -7593,10 +7593,9 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
  .data.sine_ctrl
                 0x200000e4       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
                 0x200000e4                sine_ctrl
- .data.is_first_startup.1
-                0x20000100        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
  .data.speed_buffer_size
-                0x20000101        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x20000100        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ *fill*         0x20000101        0x1 
  .data.last_speed_capture
                 0x20000102        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
  .data.CustomHID_ReportDesc
@@ -7622,17 +7621,17 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
                 0x20000180                        _edata = .
 
 .tm_clone_table
-                0x20000180        0x0 load address 0x0800ffc0
+                0x20000180        0x0 load address 0x0800ff48
  .tm_clone_table
                 0x20000180        0x0 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
  .tm_clone_table
                 0x20000180        0x0 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtend.o
 
-.igot.plt       0x20000180        0x0 load address 0x0800ffc0
+.igot.plt       0x20000180        0x0 load address 0x0800ff48
  .igot.plt      0x20000180        0x0 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp/crtbegin.o
                 0x20000180                        . = ALIGN (0x4)
 
-.bss            0x20000180     0x1384 load address 0x0800ffc0
+.bss            0x20000180     0x1388 load address 0x0800ff48
                 0x20000180                        _sbss = .
                 0x20000180                        __bss_start__ = _sbss
  *(.bss)
@@ -7759,122 +7758,128 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
                 0x200004e8        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .bss.min_speed_integral
                 0x200004ec        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .bss.direction
-                0x200004f0        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x200004f0                direction
- .bss.consistent_zero_crossing
-                0x200004f1        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                0x200004f1                consistent_zero_crossing
- *fill*         0x200004f2        0x2 
- .bss.kp        0x200004f4        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .bss.ki        0x200004f8        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .bss.kd        0x200004fc        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .bss.hil_speed_rpm
-                0x20000500        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .bss.hil_zero_crossing_period
-                0x20000502        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .bss.hil_load_torque
-                0x20000504        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .bss.hil_flags
-                0x20000506        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- *fill*         0x20000507        0x1 
- .bss.hil_last_input_tick
-                0x20000508        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .bss.last_check_time.2
-                0x2000050c        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .bss.stall_counter.1
-                0x20000510        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .bss.running_counter.0
-                0x20000511        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- *fill*         0x20000512        0x2 
- .bss.sin_table_U
-                0x20000514      0x2ce CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
-                0x20000514                sin_table_U
- *fill*         0x200007e2        0x2 
- .bss.sin_table_V
-                0x200007e4      0x2ce CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
-                0x200007e4                sin_table_V
- *fill*         0x20000ab2        0x2 
- .bss.sin_table_W
-                0x20000ab4      0x2ce CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
-                0x20000ab4                sin_table_W
- .bss.ready_for_running
-                0x20000d82        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
-                0x20000d82                ready_for_running
- *fill*         0x20000d83        0x1 
- .bss.phase_counter.0
-                0x20000d84        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
- .bss.app_state
-                0x20000d86        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
-                0x20000d86                app_state
- .bss.comm_initialized.2
-                0x20000d87        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
- .bss.flash_initialized.1
-                0x20000d88        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
- *fill*         0x20000d89        0x3 
- .bss.last_comm_check.0
-                0x20000d8c        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
- .bss.phase_measurements
-                0x20000d90       0x30 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .bss.consensus_speed
-                0x20000dc0        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .bss.active_phases_count
-                0x20000dc2        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .bss.speed_measurement_ready
-                0x20000dc3        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .bss.last_W_timestamp
-                0x20000dc4        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- *fill*         0x20000dc6        0x2 
- .bss.W_periods
-                0x20000dc8        0x8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .bss.W_period_idx
-                0x20000dd0        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .bss.valid_W_zcp
-                0x20000dd1        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .bss.filtered_speed
-                0x20000dd2        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
  .bss.diff_speed
-                0x20000dd4        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .bss.speed_buffer
+                0x200004f0        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x200004f0                diff_speed
+ .bss.direction
+                0x200004f4        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x200004f4                direction
+ .bss.consistent_zero_crossing
+                0x200004f5        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x200004f5                consistent_zero_crossing
+ .bss.hil_speed_rpm
+                0x200004f6        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ .bss.hil_zero_crossing_period
+                0x200004f8        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ .bss.hil_load_torque
+                0x200004fa        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ .bss.hil_flags
+                0x200004fc        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ *fill*         0x200004fd        0x3 
+ .bss.hil_last_input_tick
+                0x20000500        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ .bss.last_check_time.2
+                0x20000504        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ .bss.stall_counter.1
+                0x20000508        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ .bss.running_counter.0
+                0x20000509        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ *fill*         0x2000050a        0x2 
+ .bss.sin_table_U
+                0x2000050c      0x2ce CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+                0x2000050c                sin_table_U
+ *fill*         0x200007da        0x2 
+ .bss.sin_table_V
+                0x200007dc      0x2ce CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+                0x200007dc                sin_table_V
+ *fill*         0x20000aaa        0x2 
+ .bss.sin_table_W
+                0x20000aac      0x2ce CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+                0x20000aac                sin_table_W
+ .bss.phase_counter
+                0x20000d7a        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+ .bss.ready_for_running
+                0x20000d7c        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+                0x20000d7c                ready_for_running
+ .bss.app_state
+                0x20000d7d        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+                0x20000d7d                app_state
+ .bss.comm_initialized.6
+                0x20000d7e        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ .bss.flash_initialized.5
+                0x20000d7f        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ .bss.last_comm_check.4
+                0x20000d80        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ .bss.last_state.3
+                0x20000d84        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ *fill*         0x20000d85        0x3 
+ .bss.running_enter_time.2
+                0x20000d88        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ .bss.restart_pending.1
+                0x20000d8c        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ *fill*         0x20000d8d        0x3 
+ .bss.restart_brake_start_time.0
+                0x20000d90        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ .bss.phase_measurements
+                0x20000d94       0x30 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .bss.consensus_speed
+                0x20000dc4        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .bss.active_phases_count
+                0x20000dc6        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .bss.speed_measurement_ready
+                0x20000dc7        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .bss.last_W_timestamp
+                0x20000dc8        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ *fill*         0x20000dca        0x2 
+ .bss.W_periods
+                0x20000dcc        0x8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .bss.W_period_idx
+                0x20000dd4        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .bss.valid_W_zcp
+                0x20000dd5        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .bss.filtered_speed
+                0x20000dd6        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .bss.diff_speed
                 0x20000dd8        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .bss.speed_buffer
+                0x20000ddc        0x4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
  .bss.prev_speed.2
-                0x20000ddc        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x20000de0        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
  .bss.speed_index.1
-                0x20000dde        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x20000de2        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
  .bss.speed_calc_counter.0
-                0x20000ddf        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x20000de3        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
  .bss.g_pwm_val
-                0x20000de0        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x20000de4        0x2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
  .bss.commutation_step
-                0x20000de2        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x20000de6        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
  .bss.floating_W
-                0x20000de3        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
-                0x20000de3                floating_W
+                0x20000de7        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x20000de7                floating_W
  .bss.floating_U
-                0x20000de4        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
-                0x20000de4                floating_U
+                0x20000de8        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x20000de8                floating_U
  .bss.floating_V
-                0x20000de5        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
-                0x20000de5                floating_V
- *fill*         0x20000de6        0x2 
+                0x20000de9        0x1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x20000de9                floating_V
+ *fill*         0x20000dea        0x2 
  .bss.USBD_Device
-                0x20000de8      0x2c4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
-                0x20000de8                USBD_Device
+                0x20000dec      0x2c4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
+                0x20000dec                USBD_Device
  .bss.hpcd_USB_FS
-                0x200010ac      0x2d8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
-                0x200010ac                hpcd_USB_FS
- .bss.mem.0     0x20001384       0x80 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x200010b0      0x2d8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x200010b0                hpcd_USB_FS
+ .bss.mem.0     0x20001388       0x80 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
  .bss.USBD_StrDesc
-                0x20001404      0x100 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+                0x20001408      0x100 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
  *(COMMON)
-                0x20001504                        . = ALIGN (0x4)
-                0x20001504                        _ebss = .
-                0x20001504                        __bss_end__ = _ebss
+                0x20001508                        . = ALIGN (0x4)
+                0x20001508                        _ebss = .
+                0x20001508                        __bss_end__ = _ebss
 
 ._user_heap_stack
-                0x20001504      0x604 load address 0x0800ffc0
+                0x20001508      0x600 load address 0x0800ff48
                 0x20001508                        . = ALIGN (0x8)
- *fill*         0x20001504        0x4 
                 [!provide]                        PROVIDE (end = .)
                 0x20001508                        PROVIDE (_end = .)
                 0x20001708                        . = (. + _Min_Heap_Size)
@@ -8096,7 +8101,7 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
  .comment       0x00000045        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
                                  0x46 (size before relaxing)
 
-.debug_frame    0x00000000     0x65b4
+.debug_frame    0x00000000     0x65d8
  .debug_frame   0x00000000       0x20 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libc_nano.a(libc_a-memset.o)
  .debug_frame   0x00000020       0x2c C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libc_nano.a(libc_a-init.o)
  .debug_frame   0x0000004c       0x58 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
@@ -8128,28 +8133,28 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
  .debug_frame   0x00004b7c       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/stm32f1xx_hal_msp.c.obj
  .debug_frame   0x00004bb4       0x7c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/isr_callbacks.c.obj
  .debug_frame   0x00004c30      0x200 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm.c.obj
- .debug_frame   0x00004e30      0x34c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
- .debug_frame   0x0000517c      0x170 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
- .debug_frame   0x000052ec      0x260 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
- .debug_frame   0x0000554c      0x1a8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
- .debug_frame   0x000056f4      0x324 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .debug_frame   0x00005a18       0x90 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
- .debug_frame   0x00005aa8       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
- .debug_frame   0x00005ae0      0x1a8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .debug_frame   0x00005c88       0xbc CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
- .debug_frame   0x00005d44       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
- .debug_frame   0x00005d7c       0x2c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
- .debug_frame   0x00005da8      0x47c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
- .debug_frame   0x00006224       0x74 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
- .debug_frame   0x00006298      0x160 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
- .debug_frame   0x000063f8       0x4c C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_addsubsf3.o)
- .debug_frame   0x00006444       0x38 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_muldivsf3.o)
- .debug_frame   0x0000647c       0xc8 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_cmpsf2.o)
- .debug_frame   0x00006544       0x24 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_fixsfsi.o)
- .debug_frame   0x00006568       0x24 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_fixunssfsi.o)
- .debug_frame   0x0000658c       0x28 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libg_nano.a(libc_a-memcpy-stub.o)
+ .debug_frame   0x00004e30      0x368 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+ .debug_frame   0x00005198      0x170 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+ .debug_frame   0x00005308      0x260 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+ .debug_frame   0x00005568      0x1a8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+ .debug_frame   0x00005710      0x334 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ .debug_frame   0x00005a44       0x90 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+ .debug_frame   0x00005ad4       0x30 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ .debug_frame   0x00005b04      0x1a8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .debug_frame   0x00005cac       0xbc CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+ .debug_frame   0x00005d68       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
+ .debug_frame   0x00005da0       0x2c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
+ .debug_frame   0x00005dcc      0x47c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+ .debug_frame   0x00006248       0x74 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
+ .debug_frame   0x000062bc      0x160 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+ .debug_frame   0x0000641c       0x4c C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_addsubsf3.o)
+ .debug_frame   0x00006468       0x38 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_muldivsf3.o)
+ .debug_frame   0x000064a0       0xc8 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_cmpsf2.o)
+ .debug_frame   0x00006568       0x24 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_fixsfsi.o)
+ .debug_frame   0x0000658c       0x24 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_fixunssfsi.o)
+ .debug_frame   0x000065b0       0x28 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp\libg_nano.a(libc_a-memcpy-stub.o)
 
-.debug_info     0x00000000    0x1d14a
+.debug_info     0x00000000    0x1da74
  .debug_info    0x00000000      0x21f cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
  .debug_info    0x0000021f      0x37f cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_crc.c.obj
  .debug_info    0x0000059e      0x704 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal.c.obj
@@ -8180,22 +8185,22 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
  .debug_info    0x00013c72       0x30 CMakeFiles/firmware_esc_bldc_v1.dir/startup_stm32f103xb.s.obj
  .debug_info    0x00013ca2      0x76b CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/isr_callbacks.c.obj
  .debug_info    0x0001440d      0x6ab CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm.c.obj
- .debug_info    0x00014ab8      0xcd4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
- .debug_info    0x0001578c      0xd71 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
- .debug_info    0x000164fd      0x7be CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
- .debug_info    0x00016cbb      0x7aa CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
- .debug_info    0x00017465      0xf51 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .debug_info    0x000183b6      0xb5f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
- .debug_info    0x00018f15      0xadc CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
- .debug_info    0x000199f1      0xcaf CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .debug_info    0x0001a6a0      0x7df CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
- .debug_info    0x0001ae7f       0xda CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
- .debug_info    0x0001af59      0x613 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
- .debug_info    0x0001b56c     0x159d CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
- .debug_info    0x0001cb09      0x1f1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
- .debug_info    0x0001ccfa      0x450 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+ .debug_info    0x00014ab8     0x132b CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+ .debug_info    0x00015de3      0xd71 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+ .debug_info    0x00016b54      0x7be CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+ .debug_info    0x00017312      0x7aa CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+ .debug_info    0x00017abc     0x10eb CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ .debug_info    0x00018ba7      0xb4d CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+ .debug_info    0x000196f4      0xc27 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ .debug_info    0x0001a31b      0xcaf CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .debug_info    0x0001afca      0x7df CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+ .debug_info    0x0001b7a9       0xda CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
+ .debug_info    0x0001b883      0x613 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
+ .debug_info    0x0001be96     0x159d CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+ .debug_info    0x0001d433      0x1f1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
+ .debug_info    0x0001d624      0x450 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
 
-.debug_abbrev   0x00000000     0x5b02
+.debug_abbrev   0x00000000     0x5c73
  .debug_abbrev  0x00000000      0x140 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
  .debug_abbrev  0x00000140      0x1b1 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_crc.c.obj
  .debug_abbrev  0x000002f1      0x201 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal.c.obj
@@ -8226,22 +8231,22 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
  .debug_abbrev  0x000037d0       0x24 CMakeFiles/firmware_esc_bldc_v1.dir/startup_stm32f103xb.s.obj
  .debug_abbrev  0x000037f4      0x1e2 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/isr_callbacks.c.obj
  .debug_abbrev  0x000039d6      0x269 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm.c.obj
- .debug_abbrev  0x00003c3f      0x323 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
- .debug_abbrev  0x00003f62      0x2dd CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
- .debug_abbrev  0x0000423f      0x204 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
- .debug_abbrev  0x00004443      0x253 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
- .debug_abbrev  0x00004696      0x3dd CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .debug_abbrev  0x00004a73      0x21d CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
- .debug_abbrev  0x00004c90      0x1ed CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
- .debug_abbrev  0x00004e7d      0x2de CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .debug_abbrev  0x0000515b      0x1e5 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
- .debug_abbrev  0x00005340       0x78 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
- .debug_abbrev  0x000053b8      0x176 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
- .debug_abbrev  0x0000552e      0x2ce CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
- .debug_abbrev  0x000057fc      0x13f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
- .debug_abbrev  0x0000593b      0x1c7 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+ .debug_abbrev  0x00003c3f      0x3f7 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+ .debug_abbrev  0x00004036      0x2dd CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+ .debug_abbrev  0x00004313      0x204 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+ .debug_abbrev  0x00004517      0x253 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+ .debug_abbrev  0x0000476a      0x41f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ .debug_abbrev  0x00004b89      0x234 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+ .debug_abbrev  0x00004dbd      0x231 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ .debug_abbrev  0x00004fee      0x2de CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .debug_abbrev  0x000052cc      0x1e5 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+ .debug_abbrev  0x000054b1       0x78 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
+ .debug_abbrev  0x00005529      0x176 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
+ .debug_abbrev  0x0000569f      0x2ce CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+ .debug_abbrev  0x0000596d      0x13f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
+ .debug_abbrev  0x00005aac      0x1c7 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
 
-.debug_aranges  0x00000000     0x1950
+.debug_aranges  0x00000000     0x1958
  .debug_aranges
                 0x00000000       0x28 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
  .debug_aranges
@@ -8303,36 +8308,36 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
  .debug_aranges
                 0x000012c8       0x88 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm.c.obj
  .debug_aranges
-                0x00001350       0xc8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+                0x00001350       0xd0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
  .debug_aranges
-                0x00001418       0x68 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x00001420       0x68 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
  .debug_aranges
-                0x00001480       0xa0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x00001488       0xa0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
  .debug_aranges
-                0x00001520       0x70 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+                0x00001528       0x70 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
  .debug_aranges
-                0x00001590       0xd8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x00001598       0xd8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .debug_aranges
-                0x00001668       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+                0x00001670       0x38 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
  .debug_aranges
-                0x000016a0       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+                0x000016a8       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
  .debug_aranges
-                0x000016c0       0x70 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x000016c8       0x70 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
  .debug_aranges
-                0x00001730       0x40 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x00001738       0x40 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
  .debug_aranges
-                0x00001770       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
+                0x00001778       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
  .debug_aranges
-                0x00001790       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
+                0x00001798       0x20 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
  .debug_aranges
-                0x000017b0      0x110 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x000017b8      0x110 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
  .debug_aranges
-                0x000018c0       0x30 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
+                0x000018c8       0x30 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
  .debug_aranges
-                0x000018f0       0x60 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+                0x000018f8       0x60 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
 
 .debug_rnglists
-                0x00000000     0x1341
+                0x00000000     0x136f
  .debug_rnglists
                 0x00000000       0x1a cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
  .debug_rnglists
@@ -8394,35 +8399,35 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
  .debug_rnglists
                 0x00000e66       0x6e CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm.c.obj
  .debug_rnglists
-                0x00000ed4       0x96 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+                0x00000ed4       0xa8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
  .debug_rnglists
-                0x00000f6a       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+                0x00000f7c       0x4c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
  .debug_rnglists
-                0x00000fb6       0x74 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+                0x00000fc8       0x74 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
  .debug_rnglists
-                0x0000102a       0x52 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+                0x0000103c       0x52 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
  .debug_rnglists
-                0x0000107c       0xa6 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                0x0000108e       0xb5 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .debug_rnglists
-                0x00001122       0x29 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+                0x00001143       0x29 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
  .debug_rnglists
-                0x0000114b       0x14 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+                0x0000116c       0x21 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
  .debug_rnglists
-                0x0000115f       0x65 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+                0x0000118d       0x65 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
  .debug_rnglists
-                0x000011c4       0x2c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+                0x000011f2       0x2c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
  .debug_rnglists
-                0x000011f0       0x13 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
+                0x0000121e       0x13 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
  .debug_rnglists
-                0x00001203       0x13 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
+                0x00001231       0x13 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
  .debug_rnglists
-                0x00001216       0xc9 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+                0x00001244       0xc9 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
  .debug_rnglists
-                0x000012df       0x1f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
+                0x0000130d       0x1f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
  .debug_rnglists
-                0x000012fe       0x43 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+                0x0000132c       0x43 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
 
-.debug_macro    0x00000000    0x1e629
+.debug_macro    0x00000000    0x1e635
  .debug_macro   0x00000000      0x1cc cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
  .debug_macro   0x000001cc      0xade cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
  .debug_macro   0x00000caa       0x2e cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
@@ -8536,20 +8541,20 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
  .debug_macro   0x0001c5b5      0x3df CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
  .debug_macro   0x0001c994      0x3b1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
  .debug_macro   0x0001cd45       0x16 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
- .debug_macro   0x0001cd5b      0x3a1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
- .debug_macro   0x0001d0fc      0x39d CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .debug_macro   0x0001d499       0x56 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .debug_macro   0x0001d4ef       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .debug_macro   0x0001d50b      0x39b CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
- .debug_macro   0x0001d8a6      0x27b CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
- .debug_macro   0x0001db21      0x246 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
- .debug_macro   0x0001dd67       0x22 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
- .debug_macro   0x0001dd89      0x3e4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
- .debug_macro   0x0001e16d      0x24d CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
- .debug_macro   0x0001e3ba      0x253 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
- .debug_macro   0x0001e60d       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+ .debug_macro   0x0001cd5b      0x3ad CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ .debug_macro   0x0001d108      0x39d CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .debug_macro   0x0001d4a5       0x56 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .debug_macro   0x0001d4fb       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .debug_macro   0x0001d517      0x39b CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+ .debug_macro   0x0001d8b2      0x27b CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
+ .debug_macro   0x0001db2d      0x246 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
+ .debug_macro   0x0001dd73       0x22 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
+ .debug_macro   0x0001dd95      0x3e4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+ .debug_macro   0x0001e179      0x24d CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
+ .debug_macro   0x0001e3c6      0x253 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+ .debug_macro   0x0001e619       0x1c CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
 
-.debug_line     0x00000000    0x20f8e
+.debug_line     0x00000000    0x21265
  .debug_line    0x00000000      0x6c0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
  .debug_line    0x000006c0      0x768 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_crc.c.obj
  .debug_line    0x00000e28      0x8f4 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal.c.obj
@@ -8580,109 +8585,109 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
  .debug_line    0x0001655e       0x78 CMakeFiles/firmware_esc_bldc_v1.dir/startup_stm32f103xb.s.obj
  .debug_line    0x000165d6      0x8c4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/isr_callbacks.c.obj
  .debug_line    0x00016e9a      0xaca CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm.c.obj
- .debug_line    0x00017964     0x10dc CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
- .debug_line    0x00018a40      0xb8f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
- .debug_line    0x000195cf      0xa7f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
- .debug_line    0x0001a04e      0xaaa CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
- .debug_line    0x0001aaf8      0xeb8 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
- .debug_line    0x0001b9b0      0xa19 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
- .debug_line    0x0001c3c9      0x987 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
- .debug_line    0x0001cd50      0xced CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
- .debug_line    0x0001da3d      0x980 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
- .debug_line    0x0001e3bd      0x6f1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
- .debug_line    0x0001eaae      0x7ba CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
- .debug_line    0x0001f268      0xcd0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
- .debug_line    0x0001ff38      0x804 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
- .debug_line    0x0002073c      0x852 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+ .debug_line    0x00017964     0x118a CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+ .debug_line    0x00018aee      0xb8f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+ .debug_line    0x0001967d      0xa7f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+ .debug_line    0x0001a0fc      0xaaa CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+ .debug_line    0x0001aba6      0xf8b CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ .debug_line    0x0001bb31      0xa12 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+ .debug_line    0x0001c543      0xae4 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+ .debug_line    0x0001d027      0xced CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .debug_line    0x0001dd14      0x980 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+ .debug_line    0x0001e694      0x6f1 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
+ .debug_line    0x0001ed85      0x7ba CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
+ .debug_line    0x0001f53f      0xcd0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+ .debug_line    0x0002020f      0x804 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
+ .debug_line    0x00020a13      0x852 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
 
-.debug_str      0x00000000    0x929a0
- .debug_str     0x00000000    0x929a0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
+.debug_str      0x00000000    0x92a94
+ .debug_str     0x00000000    0x92a94 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Core/Src/system_stm32f1xx.c.obj
                               0x86345 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_crc.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_crc.c.obj
                               0x86487 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal.c.obj
                               0x86a78 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rcc.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rcc.c.obj
                               0x86774 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rcc_ex.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_rcc_ex.c.obj
                               0x864c4 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_gpio.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_gpio.c.obj
                               0x866cb (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_dma.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_dma.c.obj
                               0x866ee (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_cortex.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_cortex.c.obj
                               0x869c4 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_flash.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_flash.c.obj
                               0x86620 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_flash_ex.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_flash_ex.c.obj
                               0x867ce (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_tim.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_tim.c.obj
                               0x87776 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_tim_ex.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_tim_ex.c.obj
                               0x86f82 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_uart.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_uart.c.obj
                               0x86de5 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_pcd.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_pcd.c.obj
                               0x86c62 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_pcd_ex.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_pcd_ex.c.obj
                               0x867c4 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_ll_usb.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_ll_usb.c.obj
                               0x86816 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_core.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_core.c.obj
                               0x872fb (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_ctlreq.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_ctlreq.c.obj
                               0x87215 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_ioreq.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Middlewares/ST/STM32_USB_Device_Library/Core/Src/usbd_ioreq.c.obj
                               0x87142 (size before relaxing)
- .debug_str     0x000929a0        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Middlewares/ST/STM32_USB_Device_Library/Class/CustomHID/Src/usbd_customhid.c.obj
+ .debug_str     0x00092a94        0x0 cmake/stm32cubemx/CMakeFiles/STM32_Drivers.dir/__/__/Middlewares/ST/STM32_USB_Device_Library/Class/CustomHID/Src/usbd_customhid.c.obj
                               0x87665 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/main.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/main.c.obj
                               0x8aeb8 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/gpio.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/gpio.c.obj
                               0x8a720 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/crc.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/crc.c.obj
                               0x8a809 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/tim.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/tim.c.obj
                               0x8b29e (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usart.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usart.c.obj
                               0x8aeb1 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/stm32f1xx_it.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/stm32f1xx_it.c.obj
                               0x8b178 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/stm32f1xx_hal_msp.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/stm32f1xx_hal_msp.c.obj
                               0x8a67a (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/startup_stm32f103xb.s.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/startup_stm32f103xb.s.obj
                                  0x90 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/isr_callbacks.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/isr_callbacks.c.obj
                               0x8ac2e (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm.c.obj
                               0x8af38 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
-                              0x8b425 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+                              0x8b952 (size before relaxing)
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_transport.c.obj
                               0x8c18c (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/hard_config.c.obj
                               0x8aaab (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/flash_config.c.obj
                               0x8ab7f (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
-                              0x8b2af (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
-                              0x8ae7d (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
-                              0x8afff (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+                              0x8b3a4 (size before relaxing)
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/startup.c.obj
+                              0x8ae6c (size before relaxing)
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj
+                              0x8b098 (size before relaxing)
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/speed_sensor.c.obj
                               0x8aec1 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/bldc_driver.c.obj
                               0x8abd8 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/utilities.c.obj
                               0x89606 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usb_device.c.obj
                               0x873e3 (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_conf.c.obj
                               0x8c1eb (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_customhid_if.c.obj
                               0x8744e (size before relaxing)
- .debug_str     0x000929a0        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
+ .debug_str     0x00092a94        0x0 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/usbd_desc.c.obj
                               0x87097 (size before relaxing)
 
 .debug_line_str
@@ -8705,3 +8710,12 @@ LOAD C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/.
  .debug_line_str
                 0x0000013e        0x0 C:/Program Files (x86)/Arm/GNU Toolchain mingw-w64-i686-arm-none-eabi/bin/../lib/gcc/arm-none-eabi/15.2.1/thumb/v7-m/nofp\libgcc.a(_arm_fixunssfsi.o)
                                  0xca (size before relaxing)
+
+.debug_loclists
+                0x00000000       0xc4
+ .debug_loclists
+                0x00000000       0x4f CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/comm_protocol.c.obj
+ .debug_loclists
+                0x0000004f       0x1e CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/motor_control.c.obj
+ .debug_loclists
+                0x0000006d       0x57 CMakeFiles/firmware_esc_bldc_v1.dir/Core/Src/state_machine.c.obj

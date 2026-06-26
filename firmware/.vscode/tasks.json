@@ -77,6 +77,21 @@
             "detail": "CMake template clean rebuild task"
         },
         {
+            "type": "shell",
+            "label": "CMake: build Release",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "--preset",
+                "Release"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "problemMatcher": []
+        },
+        {
             "type": "cppbuild",
             "label": "C/C++: arm-none-eabi-gcc build active file",
             "command": "/opt/st/stm32cubeclt_1.18.0/GNU-tools-for-STM32/bin/arm-none-eabi-gcc",

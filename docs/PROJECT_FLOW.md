@@ -19,8 +19,8 @@ La secuencia actual es:
    - [`MX_TIM3_Init()`](../firmware/Core/Src/tim.c#L172)
 4. Se ajustan prescalers de timers, se habilitan capturas por interrupcion en TIM2 y se llama a [`detect_motor()`](../firmware/Core/Src/motor_control.c#L172).
 5. El `while (1)` ejecuta continuamente:
-   - [`handleState()`](../firmware/Core/Src/state_machine.c#L12)
-   - [`check_motor_status()`](../firmware/Core/Src/motor_control.c#L196)
+   - [`handleState()`](../firmware/Core/Src/state_machine.c#L16)
+   - [`check_motor_status()`](../firmware/Core/Src/motor_control.c#L217)
    - parpadeo del LED de estado cada 200 ms usando `led_tick`.
 
 En esta version, `main()` no inicializa UART ni USB directamente. Eso queda delegado a la capa de comunicacion cuando la maquina de estados llama a `commInit()`.
@@ -36,7 +36,7 @@ La variable global [`app_state`](../firmware/Core/Src/state_machine.c#L10) repre
 | `RUNNING` | Conmutacion six-step sensorless, esperando cruces por cero consistentes. |
 | `READY` | Estado puente: configura TIM4 para ejecutar control PI. |
 | `CLOSEDLOOP` | Control de velocidad en lazo cerrado. |
-| `CONFIG` | Aplica parametros nuevos y actualiza dependencias. |
+| `CONFIG` | Aplica parametros nuevos y actualiza dependencias cuando el cambio no se puede hacer en caliente. |
 | `STOPPED` | Detiene interrupciones de control. |
 | `HARD_ERROR` | Entra a `Error_Handler()`. |
 
@@ -45,7 +45,7 @@ La variable global [`app_state`](../firmware/Core/Src/state_machine.c#L10) repre
 Cuando la configuracion esta lista, se aplican dos capas:
 
 - [`update_all_esc()`](../firmware/Core/Src/hard_config.c#L43): actualiza parametros base del ESC, sobre todo `TIM1->ARR` segun frecuencia PWM.
-- [`updateAllMotorControl()`](../firmware/Core/Src/motor_control.c#L105): recalcula limites PWM, setpoint inicial y ganancias PI.
+- [`updateAllMotorControl()`](../firmware/Core/Src/motor_control.c#L105): recalcula limites PWM, setpoint inicial y ganancias del control de velocidad.
 
 ## 3. Comunicacion con el host
 
@@ -71,6 +71,7 @@ Comandos principales implementados en [`execute_request()`](../firmware/Core/Src
 - `STOP` / `ESTOP`: llaman a [`stop_motor()`](../firmware/Core/Src/motor_control.c#L310).
 - `SET_SPEED_RPM`: cambia `speed_setpoint_rpm`.
 - `GET_CONFIG`, `SET_CONFIG`, `RESET_CONFIG`: leen, modifican o restauran parametros.
+  En `CLOSEDLOOP`, `PWM_FREQ`, `KP`, `KI` y `KD` se aplican en caliente sin salir del lazo cerrado; el resto sigue pasando por `CONFIG`.
 - `LOG_START`, `LOG_STOP`, `LOG_RATE`: controlan telemetria periodica.
 
 Los scripts de prueba del host estan en [`gui/`](../gui):
@@ -93,7 +94,7 @@ Defaults principales en [`set_default_esc_params()`](../firmware/Core/Src/hard_c
 
 La persistencia esta en [`flash_config.c`](../firmware/Core/Src/flash_config.c). Usa dos paginas rotativas al final de Flash, definidas por [`FLASH_CONFIG_START`](../firmware/Core/Inc/flash_config.h#L13). [`flash_config_init()`](../firmware/Core/Src/flash_config.c#L157) busca una pagina valida por firma y CRC; [`flash_config_save()`](../firmware/Core/Src/flash_config.c#L180) escribe en la otra pagina para repartir desgaste.
 
-Cuando un comando modifica parametros, las funciones `set_*` de [`hard_config.c`](../firmware/Core/Src/hard_config.c) llaman a [`flash_config_parameter_changed()`](../firmware/Core/Src/flash_config.c#L257). Despues `CONFIG` fuerza recalculo de timers/control y, si hay cambios pendientes, [`update_all_esc()`](../firmware/Core/Src/hard_config.c#L43) dispara el guardado.
+Cuando un comando modifica parametros, las funciones `set_*` de [`hard_config.c`](../firmware/Core/Src/hard_config.c) llaman a [`flash_config_parameter_changed()`](../firmware/Core/Src/flash_config.c#L257). Si el cambio llega durante `CLOSEDLOOP` y solo afecta `PWM_FREQ`, `KP`, `KI` o `KD`, el firmware recalcula runtime al instante y mantiene el motor girando. El resto de parametros sigue entrando por `CONFIG`, que fuerza recalculo de timers/control y deja el guardado pendiente hasta `SAVE_CONFIG`.
 
 ## 5. Arranque del motor
 
@@ -102,13 +103,16 @@ El arranque activo esta en [`startup.c`](../firmware/Core/Src/startup.c).
 [`foc_startup()`](../firmware/Core/Src/startup.c#L94) no hace FOC completo con realimentacion de corriente; usa una rampa sinusoidal open-loop:
 
 1. Genera tablas senoidales U/V/W con [`generate_sine_tables()`](../firmware/Core/Src/startup.c#L26).
-2. Configura TIM4 como base temporal de actualizacion.
-3. Habilita PWM en TIM1 y los enable de las fases.
-4. Pone `app_state = FOC_STARTUP`.
+2. Reinicia fase y amplitud inicial para que cada intento de arranque empiece igual, incluso despues de un stall o cambio de sentido.
+3. Configura TIM4 como base temporal de actualizacion.
+4. Habilita PWM en TIM1 y los enable de las fases.
+5. Pone `app_state = FOC_STARTUP`.
 
 Cada update de TIM4 llama a [`HAL_TIM_PeriodElapsedCallback()`](../firmware/Core/Src/isr_callbacks.c#L45), que a su vez llama a [`update_pwm_startup_foc()`](../firmware/Core/Src/startup.c#L171). Esa funcion avanza la fase de las tablas, aumenta amplitud y frecuencia, y tras `STARTUP_ITERATIONS` ejecuta [`executeTransition()`](../firmware/Core/Src/startup.c#L217).
 
 [`executeTransition()`](../firmware/Core/Src/startup.c#L217) detiene la senoidal, deja un duty inicial, habilita six-step y pasa a `RUNNING`.
+
+Si se detecta `motor_stalled`, o si `RUNNING` dura mas de 1.5 s sin pasar a `READY`, [`handleState()`](../firmware/Core/Src/state_machine.c#L16) corta el PWM durante 0.5 s y relanza [`foc_startup()`](../firmware/Core/Src/startup.c#L94). Este timeout no depende del detector de stall; funciona como watchdog directo del enganche sensorless.
 
 ## 6. Conmutacion sensorless
 
@@ -121,9 +125,9 @@ La conmutacion fisica esta en [`bldc_driver.c`](../firmware/Core/Src/bldc_driver
 - configura la polaridad de captura en TIM2 para detectar el proximo cruce por cero;
 - actualiza flags `floating_U`, `floating_V`, `floating_W`.
 
-La ISR entra por [`TIM2_IRQHandler()`](../firmware/Core/Src/stm32f1xx_it.c#L207), HAL llama a [`HAL_TIM_IC_CaptureCallback()`](../firmware/Core/Src/isr_callbacks.c#L12), y esta funcion solo acepta el canal cuya fase esta flotante. Si corresponde, llama a [`zero_crossing_handler()`](../firmware/Core/Src/motor_control.c#L134).
+La ISR entra por [`TIM2_IRQHandler()`](../firmware/Core/Src/stm32f1xx_it.c#L207), HAL llama a [`HAL_TIM_IC_CaptureCallback()`](../firmware/Core/Src/isr_callbacks.c#L12), y esta funcion solo acepta el canal cuya fase esta flotante. Si corresponde, llama a [`zero_crossing_handler()`](../firmware/Core/Src/motor_control.c#L152).
 
-[`zero_crossing_handler()`](../firmware/Core/Src/motor_control.c#L134) tiene dos tareas:
+[`zero_crossing_handler()`](../firmware/Core/Src/motor_control.c#L152) tiene dos tareas:
 
 - conmutar al siguiente paso mediante la capa BLDC;
 - alimentar el sensado de velocidad en [`speed_sensor.c`](../firmware/Core/Src/speed_sensor.c).
@@ -159,9 +163,10 @@ En `CLOSEDLOOP`, TIM4 CH1 dispara [`HAL_TIM_OC_DelayElapsedCallback()`](../firmw
 2. convierte `speed_setpoint_rpm` a periodo y luego a PWM objetivo;
 3. calcula error, termino proporcional e integral;
 4. aplica anti-windup con saturacion entre `min_limit_pwm` y `max_limit_pwm`;
-5. escribe el duty final con [`bldc_set_pwm()`](../firmware/Core/Src/bldc_driver.c#L157).
+5. aplica `KD` sobre la velocidad medida, no sobre el error, para amortiguar perturbaciones sin reaccionar a cambios de referencia;
+6. escribe el duty final con [`bldc_set_pwm()`](../firmware/Core/Src/bldc_driver.c#L157).
 
-El motor se monitorea con [`check_motor_status()`](../firmware/Core/Src/motor_control.c#L196). Si en `RUNNING` o `CLOSEDLOOP` no llegan cruces por cero por mas de `TIMEOUT_MOTOR_STALL_MS`, se marca `motor_stalled`; la maquina de estados responde reintentando [`foc_startup()`](../firmware/Core/Src/startup.c#L94).
+El motor se monitorea con [`check_motor_status()`](../firmware/Core/Src/motor_control.c#L217). Si en `RUNNING` o `CLOSEDLOOP` no llegan cruces por cero por mas de `TIMEOUT_MOTOR_STALL_MS`, se marca `motor_stalled`; la maquina de estados responde reintentando [`foc_startup()`](../firmware/Core/Src/startup.c#L94).
 
 ## 9. Mapa rapido de archivos
 

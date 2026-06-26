@@ -163,6 +163,41 @@ static bool control_state_allows_command(void)
   return app_state == IDLE || app_state == RUNNING || app_state == CLOSEDLOOP;
 }
 
+__attribute__((optimize("Os"))) static void apply_config_change(uint8_t param)
+{
+  if (app_state == CLOSEDLOOP) {
+    if (param == COMM_PARAM_KP || param == COMM_PARAM_KI || param == COMM_PARAM_KD) {
+      return;
+    }
+
+    if (param == COMM_PARAM_PWM_FREQ) {
+      uint16_t pwm = bldc_get_pwm();
+      int8_t step = bldc_get_commutation_step();
+
+      __disable_irq();
+      update_all_esc();
+      if (pwm > TIM1->ARR) {
+        pwm = TIM1->ARR;
+        bldc_set_pwm(pwm);
+      }
+      if (step <= POS_UW) {
+        __HAL_TIM_SET_COMPARE(&htim1, IN_U, pwm);
+      } else if (step <= POS_VU) {
+        __HAL_TIM_SET_COMPARE(&htim1, IN_V, pwm);
+      } else {
+        __HAL_TIM_SET_COMPARE(&htim1, IN_W, pwm);
+      }
+      updateAllMotorControl();
+      __enable_irq();
+      return;
+    }
+  }
+
+  esc_config_done = 0;
+  motor_control_config_done = 0;
+  app_state = CONFIG;
+}
+
 static uint8_t get_config(uint8_t param, uint8_t* payload, uint16_t* payload_len)
 {
   *payload_len = 0;
@@ -247,9 +282,7 @@ static uint8_t set_config(uint8_t param, const uint8_t* payload, uint16_t payloa
   uint8_t status = status_from_config(result);
   if (status == COMM_STATUS_OK) {
     flash_config_parameter_changed();
-    esc_config_done = 0;
-    motor_control_config_done = 0;
-    app_state = CONFIG;
+    apply_config_change(param);
   }
   return status;
 }
@@ -316,9 +349,7 @@ static uint8_t reset_config(uint8_t param)
     return COMM_STATUS_UNKNOWN_PARAM;
   }
 
-  esc_config_done = 0;
-  motor_control_config_done = 0;
-  app_state = CONFIG;
+  apply_config_change(param);
   return COMM_STATUS_OK;
 }
 
