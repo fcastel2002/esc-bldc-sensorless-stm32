@@ -14,6 +14,23 @@ URL local:
 http://localhost:5187
 ```
 
+## Generar ejecutable
+
+Para publicar un `.exe` de Windows que levante el servidor:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\gui\EscGui\publish-gui-win-x64.ps1
+```
+
+El ejecutable queda en:
+
+```text
+gui\EscGui\publish\win-x64\Esc.Web.exe
+```
+
+Al abrir `Esc.Web.exe` se levanta el servidor local y se intenta abrir el navegador en `http://localhost:5187`.
+Manten la carpeta `gui\EscGui\publish\win-x64` completa junto al ejecutable porque ahi quedan tambien los recursos web publicados.
+
 ## Estructura
 
 - `src/Esc.Protocol`: frames de 64 bytes, CRC16, opcodes, payloads y modelos de dominio.
@@ -21,6 +38,12 @@ http://localhost:5187
 - `src/Esc.Bridge`: servicio local, estado de conexion, modos de control, adquisicion y endpoints.
 - `src/Esc.Web`: dashboard Blazor y controles modulares.
 - `tests/Esc.Tests`: pruebas de protocolo y bridge con transporte falso.
+
+## Guias de lectura
+
+- `GUI_AGENT_CONTEXT.md`: mapa compacto orientado a agentes para ubicar rapido arquitectura, ownership, invariantes y archivos a tocar.
+- `GUI_BLAZOR_WALKTHROUGH.md`: recorrido completo de la GUI, Blazor, C#, servicios, controles modulares, grafico y tecnologias usadas.
+- `BRIDGE_WALKTHROUGH.md`: recorrido detallado del Bridge, protocolo HID, UDP para Simulink y flujo hacia el MCU.
 
 ## Endpoints locales
 

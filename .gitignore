@@ -21,6 +21,7 @@ docs/api/
 # .NET build outputs
 bin/
 obj/
+publish/
 
 # LaTeX generated files
 *.aux
