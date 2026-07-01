@@ -84,7 +84,6 @@ volatile uint8_t consistent_zero_crossing = 0; // flag
 //====================================================
 
 static volatile uint16_t hil_speed_rpm = 0;
-static volatile uint16_t hil_zero_crossing_period = 0;
 static volatile int16_t  hil_load_torque = 0;
 static volatile uint8_t  hil_flags = 0;
 static volatile uint32_t hil_last_input_tick = 0;
@@ -421,10 +420,9 @@ void hil_stop(void)
   app_state = IDLE;
 }
 
-void hil_set_inputs(uint16_t speed_rpm, uint16_t zero_crossing_period, int16_t load_torque, uint8_t flags)
+void hil_set_inputs(uint16_t speed_rpm, int16_t load_torque, uint8_t flags)
 {
   hil_speed_rpm = speed_rpm;
-  hil_zero_crossing_period = zero_crossing_period;
   hil_load_torque = load_torque;
   hil_flags = flags;
   hil_last_input_tick = HAL_GetTick();
@@ -458,6 +456,7 @@ uint8_t hil_get_flags(void)
 {
   return hil_flags;
 }
+
 uint16_t convert_speed_ticks(uint16_t value, bool to_ticks)
 {
   if (to_ticks) {

@@ -92,7 +92,7 @@ public sealed class BridgeTests
         await bridge.ConnectAsync();
         await bridge.SetModeAsync(ControlMode.SimulinkControl);
 
-        CommandResult input = await bridge.HilSetInputsAsync(new HilInputs(1800, 0, 0, 2, true));
+        CommandResult input = await bridge.HilSetInputsAsync(new HilInputs(1800, 0, 2, true));
         HilOutputs output = await bridge.HilGetOutputsAsync();
 
         Assert.True(input.Success);
@@ -100,6 +100,43 @@ public sealed class BridgeTests
         Assert.Equal(1800, output.MeasuredRpm);
         Assert.Contains(CommOpcode.HilSetInputs, transport.RequestedOpcodes);
         Assert.Contains(CommOpcode.HilGetOutputs, transport.RequestedOpcodes);
+    }
+
+    [Fact]
+    public void ConsecutiveIdenticalHilFramesAreCollapsedWithRepeatCount()
+    {
+        var bridge = CreateBridge();
+
+        bridge.RecordHilFrame("Simulink -> Bridge", "UDP", 7, "HilInputs", "7,137,1");
+        bridge.RecordHilFrame("Simulink -> Bridge", "UDP", 7, "HilInputs", "7,137,1");
+        bridge.RecordHilFrame("Simulink -> Bridge", "UDP", 7, "HilInputs", "7,138,1");
+
+        IReadOnlyList<HilFrameTraceEntry> frames = bridge.Snapshot.Hil.RecentFrames;
+
+        Assert.Equal(2, frames.Count);
+        Assert.Equal((uint)1, frames[0].RepeatCount);
+        Assert.Equal("7,138,1", frames[0].Payload);
+        Assert.Equal((uint)2, frames[1].RepeatCount);
+        Assert.Equal("7,137,1", frames[1].Payload);
+    }
+
+    [Fact]
+    public void HilSnapshotCanExposeLastAcceptedUdpInputs()
+    {
+        var bridge = CreateBridge();
+
+        bridge.UpdateHilStats(new HilBridgeStats(
+            true,
+            12,
+            0,
+            10,
+            3,
+            0.5,
+            null,
+            new HilInputs(245, 0, 0, true)));
+
+        Assert.Equal((ushort)245, bridge.Snapshot.Hil.LastInputs?.SpeedRpm);
+        Assert.True(bridge.Snapshot.Hil.LastInputs?.Enable);
     }
 
     private static EscBridgeService CreateBridge(FakeEscTransport? transport = null)

@@ -71,7 +71,6 @@ public static class BridgeEndpointMapper
         group.MapPost("/hil/inputs", async (HilInputRequest request, EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.HilSetInputsAsync(new HilInputs(
                 request.SpeedRpm,
-                request.ZeroCrossingPeriod,
                 request.LoadTorque,
                 request.Flags,
                 request.Enable),
@@ -127,5 +126,10 @@ public static class BridgeEndpointMapper
     public sealed record SetSpeedRequest(int Rpm);
     public sealed record SetConfigRequest(double Value);
     public sealed record LogRateRequest(ushort RateMs);
-    public sealed record HilInputRequest(ushort SpeedRpm, ushort ZeroCrossingPeriod, short LoadTorque, byte Flags, bool Enable);
+    public sealed record HilInputRequest(
+        ushort SpeedRpm,
+        ushort ZeroCrossingPeriod,
+        short LoadTorque,
+        byte Flags,
+        bool Enable);
 }

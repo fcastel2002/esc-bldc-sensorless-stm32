@@ -69,9 +69,9 @@ public sealed class ProtocolTests
     [Fact]
     public void HilInputsPayloadUsesExpectedWireShape()
     {
-        byte[] payload = EscProtocol.HilInputsPayload(new HilInputs(1500, 123, -4, 0xA5, true));
+        byte[] payload = EscProtocol.HilInputsPayload(new HilInputs(1500, -4, 0xA5, true));
 
-        Assert.Equal([0xDC, 0x05, 0x7B, 0x00, 0xFC, 0xFF, 0xA5, 0x01], payload);
+        Assert.Equal([0xDC, 0x05, 0x00, 0x00, 0xFC, 0xFF, 0xA5, 0x01], payload);
     }
 
     [Fact]

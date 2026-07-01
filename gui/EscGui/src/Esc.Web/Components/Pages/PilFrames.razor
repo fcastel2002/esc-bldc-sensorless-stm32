@@ -1,0 +1,168 @@
+@page "/pil"
+@using Microsoft.AspNetCore.Components.Rendering
+@implements IDisposable
+@inject EscBridgeService Bridge
+
+<PageTitle>Tramas PIL</PageTitle>
+
+<main class="dashboard pil-page">
+    <section class="topbar">
+        <div>
+            <p class="eyebrow">Processor in the loop</p>
+            <h1>Tramas PIL</h1>
+        </div>
+
+        <div class="topbar-actions">
+            <a class="nav-link" href="/">Dashboard</a>
+            <div class="connection-state @StateClass">
+                <span>@Snapshot.State</span>
+                <strong>@ConnectionLabel</strong>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-title">
+            <h2>Estado PIL</h2>
+            <span>UDP 127.0.0.1:5055</span>
+        </div>
+        <div class="hil-grid">
+            <span>Modo</span><strong>@(Snapshot.Hil.Enabled ? "HIL_SIM" : "-")</strong>
+            <span>Frames RX</span><strong>@Snapshot.Hil.RxFrames</strong>
+            <span>Perdidos</span><strong>@Snapshot.Hil.LostFrames</strong>
+            <span>Rate</span><strong>@Snapshot.Hil.EffectiveRateHz.ToString("0.0") Hz</strong>
+            <span>RTT medio</span><strong>@Snapshot.Hil.AverageRoundTripMs.ToString("0.00") ms</strong>
+            <span>App state</span><strong>@(Snapshot.Hil.LastOutputs?.AppState.ToString() ?? "-")</strong>
+            <span>Setpoint</span><strong>@(Snapshot.Hil.LastOutputs?.SetpointRpm.ToString() ?? "-") rpm</strong>
+            <span>Velocidad UDP</span><strong>@(Snapshot.Hil.LastInputs?.SpeedRpm.ToString() ?? "-") rpm</strong>
+            <span>Enable UDP</span><strong>@BoolText(Snapshot.Hil.LastInputs?.Enable)</strong>
+            <span>Velocidad MCU</span><strong>@(Snapshot.Hil.LastOutputs?.MeasuredRpm.ToString() ?? "-") rpm</strong>
+            <span>PWM logico</span><strong>@(Snapshot.Hil.LastOutputs?.PwmCommand.ToString() ?? "-")</strong>
+            <span>Timeout</span><strong>@BoolText(Snapshot.Hil.LastOutputs?.TimedOut)</strong>
+        </div>
+    </section>
+
+    <section class="trace-grid">
+        <article class="panel trace-panel">
+            <div class="panel-title">
+                <h2>Simulink</h2>
+                <span>@SimulinkFrames.Count() tramas</span>
+            </div>
+            @TraceTable(SimulinkFrames)
+        </article>
+
+        <article class="panel trace-panel">
+            <div class="panel-title">
+                <h2>MCU PIL</h2>
+                <span>@McuFrames.Count() tramas</span>
+            </div>
+            @TraceTable(McuFrames)
+        </article>
+    </section>
+</main>
+
+@code {
+    private BridgeSnapshot Snapshot { get; set; } = default!;
+
+    private IEnumerable<HilFrameTraceEntry> SimulinkFrames =>
+        Snapshot.Hil.RecentFrames.Where(frame => frame.Direction.Contains("Simulink", StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<HilFrameTraceEntry> McuFrames =>
+        Snapshot.Hil.RecentFrames.Where(frame => frame.Direction.Contains("MCU", StringComparison.OrdinalIgnoreCase));
+
+    private string StateClass => Snapshot.State.ToString().ToLowerInvariant();
+    private string ConnectionLabel => Snapshot.CurrentDevice?.DisplayName ?? "VID 0x3232 / PID 0xEC32";
+
+    protected override void OnInitialized()
+    {
+        Snapshot = Bridge.Snapshot;
+        Bridge.SnapshotChanged += HandleSnapshotChanged;
+    }
+
+    private void HandleSnapshotChanged(object? sender, EventArgs args)
+    {
+        Snapshot = Bridge.Snapshot;
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private RenderFragment TraceTable(IEnumerable<HilFrameTraceEntry> frames) => builder =>
+    {
+        var rows = frames.ToArray();
+        if (rows.Length == 0)
+        {
+            builder.OpenElement(0, "p");
+            builder.AddAttribute(1, "class", "empty-trace");
+            builder.AddContent(2, "Sin tramas.");
+            builder.CloseElement();
+            return;
+        }
+
+        builder.OpenElement(3, "div");
+        builder.AddAttribute(4, "class", "trace-table-shell");
+        builder.OpenElement(5, "table");
+        builder.AddAttribute(6, "class", "trace-table");
+        builder.OpenElement(7, "thead");
+        builder.OpenElement(8, "tr");
+        AddHeader(builder, 9, "Hora");
+        AddHeader(builder, 12, "Dir");
+        AddHeader(builder, 15, "Seq");
+        AddHeader(builder, 18, "Veces");
+        AddHeader(builder, 21, "Resumen");
+        AddHeader(builder, 24, "Payload");
+        builder.CloseElement();
+        builder.CloseElement();
+        builder.OpenElement(27, "tbody");
+
+        var sequence = 28;
+        foreach (HilFrameTraceEntry frame in rows)
+        {
+            builder.OpenElement(sequence++, "tr");
+            AddCell(builder, sequence++, TimeText(frame.Timestamp), "time-cell");
+            AddCell(builder, sequence++, frame.Direction, "direction-cell");
+            AddCell(builder, sequence++, frame.Sequence?.ToString() ?? "-", "seq-cell");
+            AddCell(builder, sequence++, frame.RepeatCount > 1 ? $"x{frame.RepeatCount}" : "-", "repeat-cell");
+            AddCell(builder, sequence++, frame.Summary, "summary-cell");
+            AddCell(builder, sequence++, frame.Payload, "payload-cell");
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private static void AddHeader(RenderTreeBuilder builder, int sequence, string text)
+    {
+        builder.OpenElement(sequence, "th");
+        builder.AddContent(sequence + 1, text);
+        builder.CloseElement();
+    }
+
+    private static void AddCell(RenderTreeBuilder builder, int sequence, string text, string cssClass)
+    {
+        builder.OpenElement(sequence, "td");
+        builder.AddAttribute(sequence + 1, "class", cssClass);
+        builder.AddContent(sequence + 2, text);
+        builder.CloseElement();
+    }
+
+    private static string TimeText(DateTimeOffset timestamp)
+    {
+        return timestamp.ToString("HH:mm:ss.fff");
+    }
+
+    private static string BoolText(bool? value)
+    {
+        return value switch
+        {
+            true => "Si",
+            false => "No",
+            null => "-"
+        };
+    }
+
+    public void Dispose()
+    {
+        Bridge.SnapshotChanged -= HandleSnapshotChanged;
+    }
+}

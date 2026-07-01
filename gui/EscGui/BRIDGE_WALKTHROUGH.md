@@ -1396,17 +1396,32 @@ Ese comando no usa `AllowsSimulinkControl`. La idea es que `ESTOP` esté siempre
 
 ## 25. HIL por UDP
 
-El paquete HIL actual es:
+El paquete PIL recomendado es:
 
 ```text
-seq,speed_rpm,zero_crossing_period,load_torque,flags,enable
+seq,speed_rpm,enable
+```
+
+Tambien se aceptan paquetes prefijados:
+
+```text
+PIL,speed_rpm,enable
+PIL,seq,speed_rpm,enable
 ```
 
 Ejemplo:
 
 ```text
-1,1000,0,0,0,1
+1,1000,1
 ```
+
+El formato HIL viejo sigue aceptado por compatibilidad:
+
+```text
+seq,speed_rpm,reserved,load_torque,flags,enable
+```
+
+El campo `reserved` se ignora; ya no se mandan cruces por cero desde Simulink. Simulink simula planta, ESC y conmutacion; el MCU solo recibe velocidad simulada.
 
 Se parsea con:
 
@@ -1895,7 +1910,7 @@ Para HIL:
 
 ```text
 Simulink UDP Send:
-    seq,speed_rpm,zero_crossing_period,load_torque,flags,enable
+    seq,speed_rpm,enable
 
 Bridge:
     descarta entradas HIL viejas acumuladas
@@ -1904,6 +1919,7 @@ Bridge:
 
 MCU:
     usa la velocidad simulada como feedback
+    devuelve PWM logico para que Simulink simule ESC/planta
 ```
 
 ## 39. Por qué el diseño sirve para el futuro
@@ -1920,4 +1936,3 @@ Este diseño deja preparadas varias extensiones:
 - Usar la misma GUI para otra aplicación del driver.
 
 Lo importante es que el firmware y el HID siguen teniendo un único dueño lógico: el Bridge.
-

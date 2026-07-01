@@ -96,6 +96,30 @@ input[type="range"] {
     padding: 20px 22px;
 }
 
+.topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.nav-link {
+    min-height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #b8c2cc;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #1f4f76;
+    padding: 0 14px;
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.nav-link:hover {
+    border-color: #5f7f99;
+}
+
 .eyebrow {
     margin: 0 0 4px;
     color: #586878;
@@ -367,6 +391,77 @@ h2 {
     color: #586878;
 }
 
+.trace-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.trace-panel {
+    min-width: 0;
+}
+
+.trace-table-shell {
+    max-height: 560px;
+    overflow: auto;
+    border: 1px solid #d8dee5;
+    border-radius: 8px;
+}
+
+.trace-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 0.84rem;
+}
+
+.trace-table th,
+.trace-table td {
+    border-bottom: 1px solid #e7ebef;
+    padding: 8px 10px;
+    text-align: left;
+    vertical-align: top;
+}
+
+.trace-table th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f7f9fb;
+    color: #435160;
+    font-weight: 700;
+}
+
+.time-cell {
+    width: 92px;
+    color: #586878;
+    white-space: nowrap;
+}
+
+.direction-cell {
+    width: 128px;
+}
+
+.seq-cell {
+    width: 54px;
+    color: #586878;
+}
+
+.summary-cell {
+    width: 180px;
+}
+
+.payload-cell {
+    font-family: Consolas, "Courier New", monospace;
+    overflow-wrap: anywhere;
+    color: #26313d;
+}
+
+.empty-trace {
+    margin: 0;
+    color: #586878;
+}
+
 .valid.modified:not([type=checkbox]) {
     outline: 1px solid #26b050;
 }
@@ -394,7 +489,8 @@ h2 {
     .topbar,
     .device-band,
     .mode-band,
-    .grid {
+    .grid,
+    .trace-grid {
         grid-template-columns: 1fr;
         flex-direction: column;
         align-items: stretch;
@@ -413,5 +509,10 @@ h2 {
 
     .inline-input {
         grid-template-columns: 1fr;
+    }
+
+    .topbar-actions {
+        align-items: stretch;
+        flex-direction: column;
     }
 }

@@ -50,7 +50,7 @@ extern uint16_t period_to_pwm(uint16_t period);
 extern uint8_t  control_mode_set(uint8_t mode);
 extern uint8_t  hil_start(void);
 extern void     hil_stop(void);
-extern void     hil_set_inputs(uint16_t speed_rpm, uint16_t zero_crossing_period, int16_t load_torque, uint8_t flags);
+extern void     hil_set_inputs(uint16_t speed_rpm, int16_t load_torque, uint8_t flags);
 extern uint8_t  hil_is_active(void);
 extern uint8_t  hil_has_timeout(void);
 extern uint16_t hil_get_speed_rpm(void);

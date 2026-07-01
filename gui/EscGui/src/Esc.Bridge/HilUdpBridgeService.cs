@@ -44,7 +44,22 @@ public sealed class HilUdpBridgeService : BackgroundService
             {
                 UdpReceiveResult received = await udp.ReceiveAsync(stoppingToken).ConfigureAwait(false);
                 received = await ReceiveLatestPendingPacketAsync(udp, received, stoppingToken).ConfigureAwait(false);
+                string requestText = DecodePacket(received.Buffer);
+                _bridge.RecordHilFrame(
+                    "Simulink -> Bridge",
+                    "UDP",
+                    TryReadSequence(requestText),
+                    ClassifyPacket(received.Buffer).ToString(),
+                    requestText);
+
                 string response = await HandlePacketAsync(received.Buffer, stoppingToken).ConfigureAwait(false);
+                _bridge.RecordHilFrame(
+                    "Bridge -> Simulink",
+                    "UDP",
+                    TryReadSequence(response),
+                    response.StartsWith("ok,", StringComparison.OrdinalIgnoreCase) ? "ok" : "err",
+                    response);
+
                 byte[] bytes = Encoding.ASCII.GetBytes(response);
                 await udp.SendAsync(bytes, received.RemoteEndPoint, stoppingToken).ConfigureAwait(false);
             }
@@ -191,7 +206,7 @@ public sealed class HilUdpBridgeService : BackgroundService
         }
 
         roundTrip.Stop();
-        TrackRoundTrip(roundTrip.Elapsed.TotalMilliseconds, outputs, inputs.Enable);
+        TrackRoundTrip(roundTrip.Elapsed.TotalMilliseconds, outputs, inputs, inputs.Enable);
 
         HilBridgeStats stats = _bridge.Snapshot.Hil;
         outputs ??= stats.LastOutputs;
@@ -258,35 +273,88 @@ public sealed class HilUdpBridgeService : BackgroundService
     private static bool TryParseInputs(string text, out uint sequence, out HilInputs inputs, out string? error)
     {
         sequence = 0;
-        inputs = new HilInputs(0, 0, 0, 0, false);
+        inputs = new HilInputs(0, 0, 0, false);
         error = null;
 
         string[] parts = text.Split(',', StringSplitOptions.TrimEntries);
-        if (parts.Length is not (5 or 6))
+        if (parts.Length == 0)
         {
-            error = "expected CSV: seq,speed_rpm,zero_crossing_period,load_torque,flags,enable";
+            error = "empty packet";
             return false;
         }
 
-        int offset = parts.Length == 6 ? 1 : 0;
-        if (parts.Length == 6 && !uint.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence))
+        string command = parts[0].ToUpperInvariant();
+        int offset = command is "PIL" or "HIL" ? 1 : 0;
+        int fieldCount = parts.Length - offset;
+
+        if (fieldCount is 2 or 3)
+        {
+            bool hasSequence = fieldCount == 3;
+            if (hasSequence && !uint.TryParse(parts[offset], NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence))
+            {
+                error = "invalid sequence";
+                return false;
+            }
+
+            int firstValue = offset + (hasSequence ? 1 : 0);
+            if (!ushort.TryParse(parts[firstValue], NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort speedRpm) ||
+                !byte.TryParse(parts[firstValue + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte enable))
+            {
+                error = "invalid numeric value";
+                return false;
+            }
+
+            inputs = new HilInputs(speedRpm, 0, 0, enable != 0);
+            return true;
+        }
+
+        if (fieldCount is not (5 or 6))
+        {
+            error = "expected CSV: seq,speed_rpm,enable or seq,speed_rpm,reserved,load_torque,flags,enable";
+            return false;
+        }
+
+        bool legacyHasSequence = fieldCount == 6;
+        if (legacyHasSequence && !uint.TryParse(parts[offset], NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence))
         {
             error = "invalid sequence";
             return false;
         }
 
-        if (!ushort.TryParse(parts[offset], NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort speedRpm) ||
-            !ushort.TryParse(parts[offset + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort zeroPeriod) ||
-            !short.TryParse(parts[offset + 2], NumberStyles.Integer, CultureInfo.InvariantCulture, out short loadTorque) ||
-            !byte.TryParse(parts[offset + 3], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte flags) ||
-            !byte.TryParse(parts[offset + 4], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte enable))
+        int legacyFirstValue = offset + (legacyHasSequence ? 1 : 0);
+        if (!ushort.TryParse(parts[legacyFirstValue], NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort legacySpeedRpm) ||
+            !ushort.TryParse(parts[legacyFirstValue + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out _) ||
+            !short.TryParse(parts[legacyFirstValue + 2], NumberStyles.Integer, CultureInfo.InvariantCulture, out short loadTorque) ||
+            !byte.TryParse(parts[legacyFirstValue + 3], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte flags) ||
+            !byte.TryParse(parts[legacyFirstValue + 4], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte legacyEnable))
         {
             error = "invalid numeric value";
             return false;
         }
 
-        inputs = new HilInputs(speedRpm, zeroPeriod, loadTorque, flags, enable != 0);
+        inputs = new HilInputs(legacySpeedRpm, loadTorque, flags, legacyEnable != 0);
         return true;
+    }
+
+    private static uint? TryReadSequence(string text)
+    {
+        if (TryParseInputs(text, out uint sequence, out _, out _))
+        {
+            return sequence;
+        }
+
+        string[] parts = text.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length >= 2 && uint.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence))
+        {
+            return sequence;
+        }
+
+        if (parts.Length >= 3 && uint.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence))
+        {
+            return sequence;
+        }
+
+        return null;
     }
 
     private void TrackReceive(uint sequence)
@@ -311,11 +379,12 @@ public sealed class HilUdpBridgeService : BackgroundService
         _lastArrivalMs = nowMs;
     }
 
-    private void TrackRoundTrip(double roundTripMs, HilOutputs? outputs, bool hilEnabled)
+    private void TrackRoundTrip(double roundTripMs, HilOutputs? outputs, HilInputs inputs, bool hilEnabled)
     {
         _averageRoundTripMs = _averageRoundTripMs == 0 ? roundTripMs : (_averageRoundTripMs * 0.9) + (roundTripMs * 0.1);
         double effectiveRate = _uptime.Elapsed.TotalSeconds <= 0 ? 0 : _rxFrames / _uptime.Elapsed.TotalSeconds;
         HilOutputs? lastOutputs = outputs ?? _bridge.Snapshot.Hil.LastOutputs;
+        HilInputs lastInputs = inputs;
         _bridge.UpdateHilStats(new HilBridgeStats(
             outputs?.Mode == ControlRuntimeMode.HilSim || (outputs is null && hilEnabled),
             _rxFrames,
@@ -323,7 +392,8 @@ public sealed class HilUdpBridgeService : BackgroundService
             effectiveRate,
             _averageRoundTripMs,
             _jitterMs,
-            lastOutputs));
+            lastOutputs,
+            lastInputs));
     }
 
     private enum PacketKind

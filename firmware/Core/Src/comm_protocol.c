@@ -502,7 +502,6 @@ static uint8_t execute_request(const uint8_t request[COMM_FRAME_SIZE],
       return COMM_STATUS_OK;
     }
     hil_set_inputs(read_u16_le(payload),
-                   read_u16_le(&payload[2]),
                    read_i16_le(&payload[4]),
                    payload[6]);
     return COMM_STATUS_OK;

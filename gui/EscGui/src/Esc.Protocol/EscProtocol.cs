@@ -138,7 +138,7 @@ public static class EscProtocol
     {
         var payload = new byte[8];
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(0, 2), inputs.SpeedRpm);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(2, 2), inputs.ZeroCrossingPeriod);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(2, 2), 0);
         BinaryPrimitives.WriteInt16LittleEndian(payload.AsSpan(4, 2), inputs.LoadTorque);
         payload[6] = inputs.Flags;
         payload[7] = inputs.Enable ? (byte)1 : (byte)0;
