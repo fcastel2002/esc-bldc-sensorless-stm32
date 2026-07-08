@@ -6,7 +6,7 @@
 
 - This is a mixed STM32 firmware + local Blazor GUI ESC project. Firmware and GUI share a 64-byte binary protocol; protocol changes usually require coordinated edits in both trees.
 - Firmware lives in `firmware/` and targets STM32F103C8T6 with CMake/Ninja and `arm-none-eabi-gcc`.
-- GUI lives in `gui/EscGui/`; there is no solution file, so use the individual `.csproj` paths. Projects target `net10.0`.
+- GUI lives in `gui/EscGui/`; `gui/EscGui/EscGui.slnx` exists as an auxiliary solution file, but official commands use individual `.csproj` paths. Projects target `net10.0`.
 - High-value docs before deep changes: `firmware/COMM_PROTOCOL.md` for frames/opcodes, `docs/PROJECT_FLOW.md` for firmware flow, `gui/EscGui/GUI_AGENT_CONTEXT.md` for GUI ownership, `gui/EscGui/BRIDGE_WALKTHROUGH.md` for bridge/HID/UDP details.
 
 ## Commands

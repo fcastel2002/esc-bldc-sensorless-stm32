@@ -12,9 +12,7 @@ This repository is a mixed embedded firmware and local GUI project. Firmware and
 |-- docs/                  Project documentation
 |-- specs/                 SSD feature specs and templates
 |-- simulacion_agitador/   Simulink/PIL/HIL helper scripts and models
-|-- slprj/                 Simulink generated support artifacts
 |-- INFORME/               Paper/report and hardware documentation
-|-- out/                   Generated diagrams and auxiliary outputs
 ```
 
 ## Firmware Ownership
@@ -50,6 +48,8 @@ The protocol is shared across firmware and GUI. Changes to opcodes, frame payloa
 
 PIL/HIL and Simulink integration are shared integration support, not a third primary application root.
 
-## Generated And Historical Artifacts
+## Generated Artifacts
 
-The repository currently contains tracked build, IDE, publish, and Simulink generated artifacts. Do not clean them in unrelated feature work. A cleanup should be handled as a separate, explicit PR.
+Build outputs, IDE metadata, publish folders, Python caches, `slprj/`, and `out/` are generated or local-only artifacts and should remain ignored. `slprj/` is produced by Simulink, while `out/` holds auxiliary generated outputs such as diagrams.
+
+If a future generated artifact needs to become source, document the ownership change before adding an exception to `.gitignore`.

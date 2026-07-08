@@ -4,7 +4,7 @@
 
 - This directory is the canonical local Blazor GUI and bridge project.
 - Projects target `net10.0`.
-- Use individual `.csproj` paths for commands. Do not assume a Visual Studio `.sln` workflow is required.
+- Use individual `.csproj` paths for official commands. `EscGui.slnx` exists as an auxiliary Visual Studio solution file, but do not assume a solution workflow is required.
 - The GUI shares the 64-byte ESC binary protocol with `firmware/`.
 
 ## Commands

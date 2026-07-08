@@ -41,6 +41,12 @@ jobs:
             exit 1
           }
 
+          $trackedIgnoredFiles = @(git ls-files -ci --exclude-standard)
+          if ($trackedIgnoredFiles.Count -gt 0) {
+            $trackedIgnoredFiles | ForEach-Object { Write-Error "Tracked file matches .gitignore and should be untracked: $_" }
+            exit 1
+          }
+
           if (-not (Test-Path AGENTS.md)) {
             Write-Error "AGENTS.md must exist."
             exit 1

@@ -55,11 +55,11 @@ El firmware STM32 se encuentra en [firmware/](firmware/). Esta carpeta contiene 
 |-- docs/                  Documentacion del proyecto, build/test y CI/CD
 |-- specs/                 Specs SSD versionadas por feature
 |-- simulacion_agitador/   Soporte PIL/HIL/Simulink
-|-- slprj/                 Artefactos generados de Simulink
 |-- INFORME/               Paper, proyecto Overleaf, esquematicos e imagenes
-|-- out/                   Diagramas y salidas auxiliares del proyecto
 |-- README.md              Resumen visual y tecnico del repositorio
 ```
+
+`slprj/` y `out/` son salidas generadas localmente por Simulink, diagramas o herramientas auxiliares. No son raices fuente versionadas y estan ignoradas por Git.
 
 ## Resultados reportados
 
