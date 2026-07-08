@@ -1,0 +1,19 @@
+# 000 Repo SSD Setup Tasks
+
+## Tasks
+
+- [x] T001 Create `CLAUDE.md` synchronized with root `AGENTS.md`.
+- [x] T002 Add firmware-specific `firmware/AGENTS.md`.
+- [x] T003 Add GUI-specific `gui/EscGui/AGENTS.md`.
+- [x] T004 Add documentation indexes and architecture docs.
+- [x] T005 Add SSD workflow docs and templates.
+- [x] T006 Add initial `000-repo-ssd-setup` spec package.
+- [ ] T007 Add GitHub Actions CI, release, docs workflows, and Dependabot.
+- [ ] T008 Update root README with SSD and CI/CD links.
+- [ ] T009 Run local firmware Debug configure/build.
+- [ ] T010 Run local GUI build and tests.
+- [ ] T011 Record verification results.
+
+## Notes
+
+Do not clean tracked generated artifacts as part of this feature.
