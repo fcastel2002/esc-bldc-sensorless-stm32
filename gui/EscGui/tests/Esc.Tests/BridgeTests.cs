@@ -2,6 +2,7 @@ using Esc.Bridge;
 using Esc.Protocol;
 using Esc.Transport;
 using Microsoft.Extensions.Logging;
+using System.Net;
 
 namespace Esc.Tests;
 
@@ -137,6 +138,48 @@ public sealed class BridgeTests
 
         Assert.Equal((ushort)245, bridge.Snapshot.Hil.LastInputs?.SpeedRpm);
         Assert.True(bridge.Snapshot.Hil.LastInputs?.Enable);
+    }
+
+    [Fact]
+    public void LowerSequenceCanTakeOwnershipFromAnotherUdpSender()
+    {
+        HilUdpSenderSession session = new(250);
+        IPEndPoint senderA = new(IPAddress.Loopback, 1);
+        IPEndPoint senderB = new(IPAddress.Loopback, 50571);
+
+        session.Accept(senderA, 101, 0);
+
+        Assert.True(session.CanAccept(senderB, 2, false, false, 50));
+
+        session.Accept(senderB, 2, 50);
+
+        Assert.False(session.CanAccept(senderA, 101, false, false, 60));
+    }
+
+    [Fact]
+    public void StartCommandCanForceTakeoverFromAnotherUdpSender()
+    {
+        HilUdpSenderSession session = new(250);
+        IPEndPoint senderA = new(IPAddress.Loopback, 1);
+        IPEndPoint senderB = new(IPAddress.Loopback, 50571);
+
+        session.Accept(senderA, 101, 0);
+
+        Assert.True(session.WouldTakeOver(senderB, null, true, 50));
+        Assert.False(session.WouldTakeOver(senderA, 102, false, 50));
+    }
+
+    [Fact]
+    public void SenderLeaseExpiresAfterIdleGap()
+    {
+        HilUdpSenderSession session = new(250);
+        IPEndPoint senderA = new(IPAddress.Loopback, 1);
+        IPEndPoint senderB = new(IPAddress.Loopback, 50571);
+
+        session.Accept(senderA, 40, 0);
+
+        Assert.False(session.CanAccept(senderB, 41, false, false, 100));
+        Assert.True(session.CanAccept(senderB, 41, false, false, 400));
     }
 
     private static EscBridgeService CreateBridge(FakeEscTransport? transport = null)

@@ -75,7 +75,7 @@ python .\simulacion_agitador\udp_hil_logger.py proxy --listen-port 5057 --target
 
 Luego el bloque `UDP Send` de Simulink debe enviar a `127.0.0.1:5057`.
 
-En este repo, `simulacion_agitador/sim_motor.mdl` ya quedo configurado asi por defecto. Tambien usa `LocalAddress = 0.0.0.0` y `LocalPort = -1` para evitar choques de bind con un puerto local fijo.
+En este repo, `simulacion_agitador/sim_motor.mdl` ya quedo configurado asi por defecto. Usa `LocalAddress = 0.0.0.0` y `LocalPort = 5058` para que el `UDP Receive` pueda leer la respuesta que vuelve al mismo puerto local.
 
 El script:
 
@@ -89,3 +89,48 @@ Para escuchar sin reenviar, por ejemplo con la GUI cerrada:
 ```powershell
 python .\simulacion_agitador\udp_hil_logger.py listen --listen-port 5055
 ```
+
+## Recepcion UDP en Simulink
+
+`simulacion_agitador/sim_motor.mdl` incluye un bloque `UDP Receive MCU` para leer la respuesta completa del bridge. El modelo se puede regenerar con:
+
+```matlab
+run("simulacion_agitador/configure_hil_udp_receive.m")
+```
+
+Configuracion actual:
+
+| Bloque | Parametro | Valor |
+| --- | --- | --- |
+| `UDP Send` | `Port` | `5057` |
+| `UDP Send` | `LocalPort` | `5058` |
+| `UDP Receive MCU` | `Port` | `5057` |
+| `UDP Receive MCU` | `LocalPort` | `5058` |
+| `UDP Receive MCU` | `DataSize` | `[1, 256]` |
+| `HIL PWM Full Scale` | `Value` | `2000` |
+| `HIL Fallback Duty` | `Value` | `0.3` |
+
+Esto asume el proxy/logger en `5057`. Para enviar directo a la GUI, cambiar el puerto destino de `5057` a `5055` en el script o en ambos bloques. `HIL PWM Full Scale` debe coincidir con `TIM1->ARR`; con la configuracion por defecto del firmware, `72 MHz / (2 * 18 kHz) = 2000`.
+
+El parser `Parse MCU UDP PI` decodifica la respuesta:
+
+```text
+ok,seq,tick_ms,app_state,mode,setpoint_rpm,measured_rpm,pwm_command,commutation_step,flags,timeout,rx_frames,lost_frames,effective_hz,avg_rtt_ms,jitter_ms
+```
+
+y guarda en workspace:
+
+| Variable | Contenido |
+| --- | --- |
+| `hil_mcu_packet` | Vector `[valid, seq, tick_ms, app_state, mode, setpoint_rpm, measured_rpm, pwm_command, commutation_step, flags, timeout, rx_frames, lost_frames, effective_hz, avg_rtt_ms, jitter_ms]`. |
+| `hil_mcu_duty` | `pwm_command / HIL PWM Full Scale`, saturado entre `0` y `1`. |
+| `hil_sim_pi_duty` | Duty calculado por un PI local simple, solo como referencia de comparacion. |
+| `hil_mcu_packet_valid` | `1` cuando se recibio un paquete `ok,...` completo. |
+| `six_step_dsw` | Vector de seis comandos que entra al inversor promedio. |
+| `six_step_rpm_ref` | Rampa open-loop que usa el generador de sectores del modelo. |
+| `six_step_fe_hz` | Frecuencia electrica de esa rampa. |
+| `six_step_sector` | Sector six-step activo. Si queda clavado, las tensiones tambien quedan clavadas. |
+
+El duty que entra al bloque de conmutacion six-step viene del PWM del MCU cuando el paquete es valido. Si no hay respuesta UDP valida, el modelo usa `HIL Fallback Duty` para no ocultar el problema con un PI local saturado. La senal pasa por `HIL Duty Delay` con `Ts = 20 ms`, que evita lazos algebraicos y representa el retardo discreto del ciclo Simulink-bridge-MCU.
+
+Importante: en esta arquitectura HIL el MCU solo devuelve el PWM logico del PI. La conmutacion/sector sigue quedando del lado de Simulink. Por eso, si la velocidad aparece sinusoidal u oscilante, revisar primero `six_step_sector`, `six_step_dsw` y la alineacion entre el sector aplicado y el angulo del rotor.

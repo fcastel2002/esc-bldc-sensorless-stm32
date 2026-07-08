@@ -16,6 +16,7 @@ import argparse
 import json
 import socket
 import sys
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -23,6 +24,19 @@ from typing import Any
 
 
 DEFAULT_BUFFER_SIZE = 4096
+ACTIVE_SENDER_LEASE_MS = 250
+
+
+def disable_udp_connreset(sock: socket.socket) -> None:
+    """Evita que Windows cierre sockets UDP ante ICMP port unreachable."""
+    sio_udp_connreset = getattr(socket, "SIO_UDP_CONNRESET", None)
+    if sio_udp_connreset is None:
+        return
+
+    try:
+        sock.ioctl(sio_udp_connreset, False)
+    except OSError:
+        pass
 
 
 @dataclass(frozen=True)
@@ -39,6 +53,62 @@ class PacketSummary:
     fields: list[str]
 
 
+@dataclass
+class SenderSession:
+    lease_ms: int
+    active_sender: tuple[str, int] | None = None
+    active_sequence: int | None = None
+    last_accepted_at_ms: float = float("-inf")
+
+    def can_accept(self, sender: tuple[str, int], summary: PacketSummary, now_ms: float) -> bool:
+        if is_estop(summary):
+            return True
+
+        self._expire_if_idle(now_ms)
+        if self.active_sender is None or sender == self.active_sender:
+            return True
+
+        return self.would_take_over(sender, summary, now_ms)
+
+    def would_take_over(self, sender: tuple[str, int], summary: PacketSummary, now_ms: float) -> bool:
+        self._expire_if_idle(now_ms)
+        if self.active_sender is None or sender == self.active_sender:
+            return False
+
+        if is_start_command(summary):
+            return True
+
+        return (
+            summary.sequence is not None
+            and self.active_sequence is not None
+            and summary.sequence < self.active_sequence
+        )
+
+    def accept(self, sender: tuple[str, int], summary: PacketSummary, now_ms: float) -> None:
+        self.active_sender = sender
+        self.active_sequence = summary.sequence
+        self.last_accepted_at_ms = now_ms
+
+    def release(self, sender: tuple[str, int] | None = None) -> None:
+        if sender is not None and sender != self.active_sender:
+            return
+
+        self.active_sender = None
+        self.active_sequence = None
+        self.last_accepted_at_ms = float("-inf")
+
+    def describe_active(self, now_ms: float) -> str:
+        self._expire_if_idle(now_ms)
+        if self.active_sender is None:
+            return "none"
+
+        return f"{self.active_sender[0]}:{self.active_sender[1]}"
+
+    def _expire_if_idle(self, now_ms: float) -> None:
+        if self.active_sender is not None and now_ms - self.last_accepted_at_ms > self.lease_ms:
+            self.release()
+
+
 def decode_packet(data: bytes) -> str:
     return data.decode("ascii", errors="replace").strip("\0\r\n ")
 
@@ -52,6 +122,26 @@ def try_int(value: str) -> int | None:
         return int(value, 10)
     except ValueError:
         return None
+
+
+def is_start_command(summary: PacketSummary) -> bool:
+    return summary.kind == "command" and summary.fields and summary.fields[0].upper() in {"HIL_START", "START"}
+
+
+def is_stop_command(summary: PacketSummary) -> bool:
+    return summary.kind == "command" and summary.fields and summary.fields[0].upper() in {"MOTOR_STOP", "REAL_STOP", "HIL_STOP", "STOP"}
+
+
+def is_run_command(summary: PacketSummary) -> bool:
+    return summary.kind == "command" and summary.fields and summary.fields[0].upper() in {"RUN", "MOTOR_RUN"}
+
+
+def is_estop(summary: PacketSummary) -> bool:
+    return summary.kind == "command" and summary.fields and summary.fields[0].upper() == "ESTOP"
+
+
+def is_forwardable_input(summary: PacketSummary) -> bool:
+    return summary.kind in {"command", "setpoint", "hil_inputs", "hil_inputs_legacy"}
 
 
 def summarize_packet(text: str) -> PacketSummary:
@@ -176,8 +266,35 @@ def write_log(entry: dict[str, Any], log_path: Path | None, quiet: bool) -> None
             handle.write(json.dumps(entry, ensure_ascii=True) + "\n")
 
 
+def make_proxy_drop_entry(endpoint: str, data: bytes, note: str) -> dict[str, Any]:
+    entry = make_log_entry("DROP_SIMULINK", endpoint, data)
+    entry["summary"]["note"] = note
+    return entry
+
+
+def apply_sender_session(session: SenderSession, remote: tuple[str, int], summary: PacketSummary, now_ms: float) -> None:
+    if is_estop(summary):
+        session.release()
+        return
+
+    if is_stop_command(summary):
+        session.release(remote)
+        return
+
+    if summary.kind == "hil_inputs" or summary.kind == "hil_inputs_legacy":
+        if summary.enable:
+            session.accept(remote, summary, now_ms)
+        else:
+            session.release(remote)
+        return
+
+    if is_start_command(summary) or is_run_command(summary) or summary.kind == "setpoint":
+        session.accept(remote, summary, now_ms)
+
+
 def run_listener(args: argparse.Namespace) -> int:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    disable_udp_connreset(sock)
     sock.bind((args.listen_host, args.listen_port))
     sock.settimeout(args.timeout_ms / 1000.0)
 
@@ -189,6 +306,8 @@ def run_listener(args: argparse.Namespace) -> int:
             try:
                 data, remote = sock.recvfrom(DEFAULT_BUFFER_SIZE)
             except socket.timeout:
+                continue
+            except ConnectionResetError:
                 continue
 
             received += 1
@@ -205,6 +324,9 @@ def run_listener(args: argparse.Namespace) -> int:
 def run_proxy(args: argparse.Namespace) -> int:
     server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     upstream = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sender_session = SenderSession(ACTIVE_SENDER_LEASE_MS)
+    disable_udp_connreset(server)
+    disable_udp_connreset(upstream)
     server.bind((args.listen_host, args.listen_port))
     upstream.settimeout(args.timeout_ms / 1000.0)
 
@@ -216,9 +338,38 @@ def run_proxy(args: argparse.Namespace) -> int:
     forwarded = 0
     try:
         while args.limit <= 0 or forwarded < args.limit:
-            data, remote = server.recvfrom(DEFAULT_BUFFER_SIZE)
+            try:
+                data, remote = server.recvfrom(DEFAULT_BUFFER_SIZE)
+            except ConnectionResetError:
+                continue
             forwarded += 1
-            write_log(make_log_entry("RX_SIMULINK", f"{remote[0]}:{remote[1]}", data), args.log_file, args.quiet)
+            endpoint = f"{remote[0]}:{remote[1]}"
+            entry = make_log_entry("RX_SIMULINK", endpoint, data)
+            write_log(entry, args.log_file, args.quiet)
+
+            summary_dict = entry["summary"]
+            summary = PacketSummary(
+                raw_text=summary_dict["raw_text"],
+                kind=summary_dict["kind"],
+                sequence=summary_dict["sequence"],
+                speed_rpm=summary_dict["speed_rpm"],
+                enable=summary_dict["enable"],
+                load_torque=summary_dict["load_torque"],
+                flags=summary_dict["flags"],
+                bridge_accepts=summary_dict["bridge_accepts"],
+                note=summary_dict["note"],
+                fields=summary_dict["fields"],
+            )
+
+            now_ms = time.monotonic() * 1000.0
+            if is_forwardable_input(summary) and not sender_session.can_accept(remote, summary, now_ms):
+                active_sender = sender_session.describe_active(now_ms)
+                note = f"proxy descarta este sender; activo={active_sender}"
+                write_log(make_proxy_drop_entry(endpoint, data, note), args.log_file, args.quiet)
+                response = f"err,proxy active sender {active_sender}".encode("ascii", errors="replace")
+                server.sendto(response, remote)
+                write_log(make_log_entry("TX_SIMULINK", endpoint, response), args.log_file, args.quiet)
+                continue
 
             upstream.sendto(data, (args.target_host, args.target_port))
             try:
@@ -243,14 +394,37 @@ def run_proxy(args: argparse.Namespace) -> int:
                 }
                 write_log(timeout_entry, args.log_file, args.quiet)
                 continue
+            except ConnectionResetError:
+                timeout_entry = {
+                    "timestamp": datetime.now().isoformat(timespec="milliseconds"),
+                    "direction": "RESET",
+                    "endpoint": f"{args.target_host}:{args.target_port}",
+                    "summary": {
+                        "raw_text": "",
+                        "kind": "reset",
+                        "sequence": None,
+                        "speed_rpm": None,
+                        "enable": None,
+                        "load_torque": None,
+                        "flags": None,
+                        "bridge_accepts": False,
+                        "note": "ICMP port unreachable o reset UDP del host remoto",
+                        "fields": [],
+                    },
+                }
+                write_log(timeout_entry, args.log_file, args.quiet)
+                continue
 
             write_log(
                 make_log_entry("RX_BRIDGE", f"{bridge_remote[0]}:{bridge_remote[1]}", response),
                 args.log_file,
                 args.quiet,
             )
+            response_text = decode_packet(response)
+            if is_forwardable_input(summary) and response_text.upper().startswith("OK"):
+                apply_sender_session(sender_session, remote, summary, now_ms)
             server.sendto(response, remote)
-            write_log(make_log_entry("TX_SIMULINK", f"{remote[0]}:{remote[1]}", response), args.log_file, args.quiet)
+            write_log(make_log_entry("TX_SIMULINK", endpoint, response), args.log_file, args.quiet)
     except KeyboardInterrupt:
         pass
     finally:

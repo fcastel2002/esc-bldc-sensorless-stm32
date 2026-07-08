@@ -14,9 +14,11 @@ public sealed class HilUdpBridgeService : BackgroundService
     public const int DefaultPort = 5055;
     private const int MaxDrainPackets = 256;
     private const double HilOutputPollPeriodMs = 100;
+    private const double ActiveSenderLeaseMs = 250;
 
     private readonly EscBridgeService _bridge;
     private readonly ILogger<HilUdpBridgeService> _logger;
+    private readonly HilUdpSenderSession _senderSession = new(ActiveSenderLeaseMs);
     private readonly Stopwatch _uptime = Stopwatch.StartNew();
     private uint _rxFrames;
     private uint _lostFrames;
@@ -52,7 +54,7 @@ public sealed class HilUdpBridgeService : BackgroundService
                     ClassifyPacket(received.Buffer).ToString(),
                     requestText);
 
-                string response = await HandlePacketAsync(received.Buffer, stoppingToken).ConfigureAwait(false);
+                string response = await HandlePacketAsync(received.Buffer, received.RemoteEndPoint, stoppingToken).ConfigureAwait(false);
                 _bridge.RecordHilFrame(
                     "Bridge -> Simulink",
                     "UDP",
@@ -74,16 +76,28 @@ public sealed class HilUdpBridgeService : BackgroundService
         }
     }
 
-    private static async Task<UdpReceiveResult> ReceiveLatestPendingPacketAsync(
+    private async Task<UdpReceiveResult> ReceiveLatestPendingPacketAsync(
         UdpClient udp,
         UdpReceiveResult selected,
         CancellationToken cancellationToken)
     {
+        string selectedText = DecodePacket(selected.Buffer);
         PacketKind selectedKind = ClassifyPacket(selected.Buffer);
+        if (selectedKind == PacketKind.EmergencyStop)
+        {
+            return selected;
+        }
+
+        bool selectedAllowed = CanAcceptSender(selected.RemoteEndPoint, selectedKind, selectedText);
+        IPEndPoint? preferredSender = WouldSenderTakeOver(selected.RemoteEndPoint, selectedKind, selectedText)
+            ? CloneEndPoint(selected.RemoteEndPoint)
+            : null;
+        uint? selectedSequence = TryReadSequence(selectedText);
 
         for (int drained = 0; udp.Available > 0 && drained < MaxDrainPackets; drained++)
         {
             UdpReceiveResult next = await udp.ReceiveAsync(cancellationToken).ConfigureAwait(false);
+            string nextText = DecodePacket(next.Buffer);
             PacketKind nextKind = ClassifyPacket(next.Buffer);
 
             if (nextKind == PacketKind.EmergencyStop)
@@ -91,22 +105,66 @@ public sealed class HilUdpBridgeService : BackgroundService
                 return next;
             }
 
-            if (selectedKind == PacketKind.EmergencyStop)
-            {
-                continue;
-            }
-
             if (nextKind == PacketKind.Invalid)
             {
                 continue;
             }
 
-            if (selectedKind == PacketKind.Invalid ||
+            if (preferredSender is not null && !EndpointsEqual(next.RemoteEndPoint, preferredSender))
+            {
+                continue;
+            }
+
+            bool nextAllowed = CanAcceptSender(next.RemoteEndPoint, nextKind, nextText);
+            if (!nextAllowed)
+            {
+                continue;
+            }
+
+            uint? nextSequence = TryReadSequence(nextText);
+            if (selectedAllowed &&
+                IsCoalescible(selectedKind) &&
+                IsCoalescible(nextKind) &&
+                !EndpointsEqual(selected.RemoteEndPoint, next.RemoteEndPoint) &&
+                selectedSequence.HasValue &&
+                nextSequence.HasValue)
+            {
+                if (nextSequence.Value < selectedSequence.Value)
+                {
+                    selected = next;
+                    selectedText = nextText;
+                    selectedKind = nextKind;
+                    selectedAllowed = true;
+                    selectedSequence = nextSequence;
+                    preferredSender = CloneEndPoint(next.RemoteEndPoint);
+                    continue;
+                }
+
+                preferredSender ??= CloneEndPoint(selected.RemoteEndPoint);
+                continue;
+            }
+
+            if (WouldSenderTakeOver(next.RemoteEndPoint, nextKind, nextText))
+            {
+                selected = next;
+                selectedText = nextText;
+                selectedKind = nextKind;
+                selectedAllowed = true;
+                selectedSequence = nextSequence;
+                preferredSender = CloneEndPoint(next.RemoteEndPoint);
+                continue;
+            }
+
+            if (!selectedAllowed ||
+                selectedKind == PacketKind.Invalid ||
                 nextKind == PacketKind.Discrete ||
                 IsCoalescible(nextKind) && IsCoalescible(selectedKind))
             {
                 selected = next;
+                selectedText = nextText;
                 selectedKind = nextKind;
+                selectedAllowed = true;
+                selectedSequence = nextSequence;
             }
         }
 
@@ -136,7 +194,10 @@ public sealed class HilUdpBridgeService : BackgroundService
         };
     }
 
-    private async Task<string> HandlePacketAsync(byte[] buffer, CancellationToken cancellationToken)
+    private async Task<string> HandlePacketAsync(
+        byte[] buffer,
+        IPEndPoint remoteEndPoint,
+        CancellationToken cancellationToken)
     {
         string text = DecodePacket(buffer);
         if (string.IsNullOrWhiteSpace(text))
@@ -146,39 +207,77 @@ public sealed class HilUdpBridgeService : BackgroundService
 
         string[] commandParts = text.Split(',', StringSplitOptions.TrimEntries);
         string command = commandParts[0].ToUpperInvariant();
+        uint? requestSequence = TryReadSequence(text);
+        double requestNowMs = _uptime.Elapsed.TotalMilliseconds;
+
+        if (!CanAcceptSender(remoteEndPoint, ClassifyPacket(buffer), text))
+        {
+            return $"err,active PIL sender {_senderSession.DescribeActiveSender(requestNowMs)}";
+        }
 
         if (command is "SETPOINT" or "SP" or "SPEED")
         {
-            return await HandleSetpointCommandAsync(commandParts, cancellationToken).ConfigureAwait(false);
+            string response = await HandleSetpointCommandAsync(commandParts, cancellationToken).ConfigureAwait(false);
+            if (response.StartsWith("ok,", StringComparison.OrdinalIgnoreCase))
+            {
+                _senderSession.Accept(remoteEndPoint, requestSequence, requestNowMs);
+            }
+
+            return response;
         }
 
         if (command is "RUN" or "MOTOR_RUN")
         {
             CommandResult run = await _bridge.RunFromSimulinkAsync(cancellationToken).ConfigureAwait(false);
+            if (run.Success)
+            {
+                _senderSession.Accept(remoteEndPoint, requestSequence, requestNowMs);
+            }
+
             return BuildCommandResponse("run", 0, run);
         }
 
         if (command is "MOTOR_STOP" or "REAL_STOP")
         {
             CommandResult stopped = await _bridge.StopFromSimulinkAsync(cancellationToken).ConfigureAwait(false);
+            if (stopped.Success)
+            {
+                _senderSession.Release(remoteEndPoint);
+            }
+
             return BuildCommandResponse("stop", 0, stopped);
         }
 
         if (command == "ESTOP")
         {
             CommandResult stopped = await _bridge.EmergencyStopAsync(cancellationToken).ConfigureAwait(false);
+            if (stopped.Success)
+            {
+                _senderSession.Release();
+            }
+
             return BuildCommandResponse("estop", 0, stopped);
         }
 
         if (command is "HIL_START" or "START")
         {
             CommandResult started = await _bridge.HilStartAsync(cancellationToken).ConfigureAwait(false);
+            if (started.Success)
+            {
+                _senderSession.Accept(remoteEndPoint, requestSequence, requestNowMs);
+            }
+
             return started.Success ? "ok,start" : $"err,{started.Message}";
         }
 
         if (command is "HIL_STOP" or "STOP")
         {
             CommandResult stopped = await _bridge.HilStopAsync(cancellationToken).ConfigureAwait(false);
+            if (stopped.Success)
+            {
+                _senderSession.Release(remoteEndPoint);
+            }
+
             return stopped.Success ? "ok,stop" : $"err,{stopped.Message}";
         }
 
@@ -194,6 +293,15 @@ public sealed class HilUdpBridgeService : BackgroundService
         if (!result.Success)
         {
             return $"err,{result.Message}";
+        }
+
+        if (inputs.Enable)
+        {
+            _senderSession.Accept(remoteEndPoint, sequence, requestNowMs);
+        }
+        else
+        {
+            _senderSession.Release(remoteEndPoint);
         }
 
         HilOutputs? outputs = null;
@@ -355,6 +463,46 @@ public sealed class HilUdpBridgeService : BackgroundService
         }
 
         return null;
+    }
+
+    private bool CanAcceptSender(IPEndPoint sender, PacketKind kind, string text)
+    {
+        string command = ReadCommand(text);
+        bool isStartCommand = command is "HIL_START" or "START";
+        bool isEmergencyStop = kind == PacketKind.EmergencyStop;
+        return _senderSession.CanAccept(
+            sender,
+            TryReadSequence(text),
+            isStartCommand,
+            isEmergencyStop,
+            _uptime.Elapsed.TotalMilliseconds);
+    }
+
+    private bool WouldSenderTakeOver(IPEndPoint sender, PacketKind kind, string text)
+    {
+        string command = ReadCommand(text);
+        bool isStartCommand = command is "HIL_START" or "START";
+        return _senderSession.WouldTakeOver(
+            sender,
+            TryReadSequence(text),
+            isStartCommand,
+            _uptime.Elapsed.TotalMilliseconds);
+    }
+
+    private static string ReadCommand(string text)
+    {
+        string[] parts = text.Split(',', StringSplitOptions.TrimEntries);
+        return parts.Length == 0 ? string.Empty : parts[0].ToUpperInvariant();
+    }
+
+    private static IPEndPoint CloneEndPoint(IPEndPoint endPoint)
+    {
+        return new IPEndPoint(endPoint.Address, endPoint.Port);
+    }
+
+    private static bool EndpointsEqual(IPEndPoint left, IPEndPoint right)
+    {
+        return left.Address.Equals(right.Address) && left.Port == right.Port;
     }
 
     private void TrackReceive(uint sequence)

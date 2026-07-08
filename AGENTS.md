@@ -1,6 +1,6 @@
 # Agent Instructions
 
-Keep `AGENTS.md` and `CLAUDE.md` in the repository root synchronized when changing either one.
+
 
 ## Repo Shape
 
