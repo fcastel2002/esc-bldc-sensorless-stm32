@@ -10,7 +10,7 @@ Runs on pushes to `main` and `pil_simul`, and on pull requests targeting those b
 
 Jobs:
 
-- `repo-hygiene`: validates spec folder naming, blocks known large transient logs, and checks that `AGENTS.md` and `CLAUDE.md` stay synchronized.
+- `repo-hygiene`: validates spec folder naming, blocks known large transient logs, checks that root `AGENTS.md` and `.agents/README.md` exist, and blocks committed `.codex/` or root `CLAUDE.md` files.
 - `firmware-debug`: installs CMake, Ninja, and the Arm GNU toolchain, then runs `cmake --preset Debug -DESC_BUILD_CODE_DOCS=OFF` and `cmake --build --preset Debug`.
 - `gui-build-test`: installs .NET `10.0.x`, restores the Blazor GUI project, builds it, and runs xUnit tests.
 - `protocol-guard`: when protocol-sensitive files change, requires protocol tests and protocol documentation changes in the same pull request.

@@ -41,15 +41,19 @@ jobs:
             exit 1
           }
 
-          if (-not (Test-Path AGENTS.md) -or -not (Test-Path CLAUDE.md)) {
-            Write-Error "AGENTS.md and CLAUDE.md must both exist."
+          if (-not (Test-Path AGENTS.md)) {
+            Write-Error "AGENTS.md must exist."
             exit 1
           }
 
-          $agentsHash = (Get-FileHash AGENTS.md -Algorithm SHA256).Hash
-          $claudeHash = (Get-FileHash CLAUDE.md -Algorithm SHA256).Hash
-          if ($agentsHash -ne $claudeHash) {
-            Write-Error "AGENTS.md and CLAUDE.md are not synchronized."
+          if (-not (Test-Path .agents/README.md)) {
+            Write-Error ".agents/README.md must exist to document agent workspace conventions."
+            exit 1
+          }
+
+          $blockedAgentFiles = @(git ls-files -- "CLAUDE.md" ".codex/*")
+          if ($blockedAgentFiles.Count -gt 0) {
+            $blockedAgentFiles | ForEach-Object { Write-Error "Do not commit model-specific or local Codex agent files: $_" }
             exit 1
           }
 

@@ -51,6 +51,7 @@ El firmware STM32 se encuentra en [firmware/](firmware/). Esta carpeta contiene 
 .
 |-- firmware/              Proyecto embebido STM32F103C8T6
 |-- gui/EscGui/            GUI local Blazor, bridge, protocolo y tests
+|-- .agents/               Convenciones neutrales para agentes
 |-- docs/                  Documentacion del proyecto, build/test y CI/CD
 |-- specs/                 Specs SSD versionadas por feature
 |-- simulacion_agitador/   Soporte PIL/HIL/Simulink

@@ -8,6 +8,7 @@ This repository is a mixed embedded firmware and local GUI project. Firmware and
 .
 |-- firmware/              STM32F103C8T6 firmware
 |-- gui/EscGui/            Local Blazor GUI, bridge, protocol, tests
+|-- .agents/               Tool-neutral agent support conventions
 |-- docs/                  Project documentation
 |-- specs/                 SSD feature specs and templates
 |-- simulacion_agitador/   Simulink/PIL/HIL helper scripts and models

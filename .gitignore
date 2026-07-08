@@ -2,6 +2,7 @@
 .metadata/
 .idea/
 .vscode/
+.codex/
 *.log
 
 # CMake and embedded build outputs

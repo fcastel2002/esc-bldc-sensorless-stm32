@@ -3,7 +3,9 @@
 ## Local Checks
 
 - [x] `git status --short --branch`
-- [x] `if ((Get-FileHash AGENTS.md -Algorithm SHA256).Hash -eq (Get-FileHash CLAUDE.md -Algorithm SHA256).Hash) { "ok" } else { exit 1 }`
+- [x] `Test-Path AGENTS.md`
+- [x] `Test-Path .agents/README.md`
+- [x] `git ls-files -- "CLAUDE.md" ".codex/*"` returns no files.
 - [x] From `firmware/`: `cmake --preset Debug -DESC_BUILD_CODE_DOCS=OFF`
 - [x] From `firmware/`: `cmake --build --preset Debug`
 - [x] From repo root: `dotnet build gui\EscGui\src\Esc.Web\Esc.Web.csproj`
@@ -34,6 +36,7 @@ Local execution on 2026-07-08 used a detached temporary worktree at `C:\Users\Fr
 
 - PASS: `repo-hygiene` PowerShell validation.
 - PASS: `ssd-docs` PowerShell validation.
+- PASS: agent guidance decision recorded in `specs/000-repo-ssd-setup/decisions/001-agent-guidance-location.md`.
 - PASS: firmware `cmake --preset Debug -DESC_BUILD_CODE_DOCS=OFF`.
 - PASS: firmware `cmake --build --preset Debug`.
 - PASS: `dotnet build gui\EscGui\src\Esc.Web\Esc.Web.csproj`.
@@ -44,3 +47,4 @@ Notes:
 - Firmware build emitted existing unused-parameter warnings in generated HAL/USB sources.
 - GUI commands emitted `NETSDK1057` because the installed local .NET 10 SDK is a preview build.
 - GitHub Actions jobs are not executed locally; they remain pending until the branch is pushed and a PR or matching branch workflow runs.
+- `CLAUDE.md` was removed from the setup after review; `AGENTS.md` is the canonical guidance file.

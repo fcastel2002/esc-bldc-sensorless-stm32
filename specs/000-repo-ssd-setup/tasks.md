@@ -2,7 +2,7 @@
 
 ## Tasks
 
-- [x] T001 Create `CLAUDE.md` synchronized with root `AGENTS.md`.
+- [x] T001 Keep root `AGENTS.md` as canonical guidance without a `CLAUDE.md` mirror.
 - [x] T002 Add firmware-specific `firmware/AGENTS.md`.
 - [x] T003 Add GUI-specific `gui/EscGui/AGENTS.md`.
 - [x] T004 Add documentation indexes and architecture docs.
@@ -13,6 +13,7 @@
 - [x] T009 Run local firmware Debug configure/build.
 - [x] T010 Run local GUI build and tests.
 - [x] T011 Record verification results.
+- [x] T012 Record agent guidance location decision and retire tracked `.codex/` files.
 
 ## Notes
 

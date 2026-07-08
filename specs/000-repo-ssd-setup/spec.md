@@ -17,7 +17,8 @@ In scope:
 - Add SSD feature folder conventions and templates.
 - Add initial `000-repo-ssd-setup` spec package.
 - Add documentation for repo map, build/test commands, CI/CD, and protocol ownership.
-- Add `CLAUDE.md` synchronized with root `AGENTS.md`.
+- Keep `AGENTS.md` files as canonical active agent guidance.
+- Add `.agents/` as the neutral location for optional agent support material.
 - Add firmware and GUI local `AGENTS.md` files.
 - Add GitHub Actions CI, release, docs workflows, and Dependabot configuration.
 - Update root README links.
@@ -44,8 +45,10 @@ No protocol behavior changes. This feature only documents protocol ownership and
 
 ## Acceptance Criteria
 
-- `CLAUDE.md` matches `AGENTS.md`.
+- Root `AGENTS.md` remains the canonical agent guidance file.
 - `firmware/AGENTS.md` and `gui/EscGui/AGENTS.md` exist with subproject-specific rules.
+- `.agents/README.md` documents agent workspace conventions.
+- `.codex/` and root `CLAUDE.md` are not versioned.
 - `docs/` includes build/test, CI/CD, repo map, and protocol ownership docs.
 - `specs/` includes templates and this initial setup spec.
 - GitHub Actions workflows exist for CI, release packaging, and docs artifact generation.

@@ -9,7 +9,8 @@ Keep the existing firmware and GUI roots unchanged, add SSD as a documentation a
 ```text
 .
 |-- AGENTS.md
-|-- CLAUDE.md
+|-- .agents/
+|   |-- README.md
 |-- .github/
 |   |-- workflows/
 |   |   |-- ci.yml
@@ -38,6 +39,9 @@ Keep the existing firmware and GUI roots unchanged, add SSD as a documentation a
 
 - `firmware/` remains the canonical embedded firmware root.
 - `gui/EscGui/` remains the canonical GUI and bridge root.
+- `AGENTS.md` files are the canonical active agent instructions.
+- `.agents/` is reserved for optional, tool-neutral agent support material.
+- `.codex/` and root `CLAUDE.md` are intentionally not versioned.
 - `firmware/COMM_PROTOCOL.md` and `gui/EscGui/src/Esc.Protocol/` define the shared protocol contract.
 - `simulacion_agitador/` and `slprj/` remain PIL/HIL/Simulink support assets.
 
