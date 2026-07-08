@@ -12,9 +12,12 @@
             <h1>ESC Bridge</h1>
         </div>
 
-        <div class="connection-state @StateClass">
-            <span>@Snapshot.State</span>
-            <strong>@ConnectionLabel</strong>
+        <div class="topbar-actions">
+            <a class="nav-link" href="/pil">Tramas PIL</a>
+            <div class="connection-state @StateClass">
+                <span>@Snapshot.State</span>
+                <strong>@ConnectionLabel</strong>
+            </div>
         </div>
     </section>
 
@@ -177,7 +180,9 @@
             <span>Rate</span><strong>@Snapshot.Hil.EffectiveRateHz.ToString("0.0") Hz</strong>
             <span>Jitter</span><strong>@Snapshot.Hil.JitterMs.ToString("0.00") ms</strong>
             <span>RTT medio</span><strong>@Snapshot.Hil.AverageRoundTripMs.ToString("0.00") ms</strong>
-            <span>PWM lógico</span><strong>@(Snapshot.Hil.LastOutputs?.PwmCommand.ToString() ?? "-")</strong>
+            <span>Velocidad UDP</span><strong>@(Snapshot.Hil.LastInputs?.SpeedRpm.ToString() ?? "-") rpm</strong>
+            <span>Velocidad MCU</span><strong>@(Snapshot.Hil.LastOutputs?.MeasuredRpm.ToString() ?? "-") rpm</strong>
+            <span>PWM logico</span><strong>@(Snapshot.Hil.LastOutputs?.PwmCommand.ToString() ?? "-")</strong>
             <span>Timeout</span><strong>@BoolText(Snapshot.Hil.LastOutputs?.TimedOut)</strong>
         </div>
     </section>

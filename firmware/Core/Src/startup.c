@@ -22,6 +22,7 @@ static uint16_t   zero_sine_value             = 0;
 volatile uint16_t mod_q15                     = 6553; // 0.2 in Q15
 static void       generate_sine_tables(uint16_t pwm_arr, uint8_t direction);
 static void       executeTransition(void);
+static uint16_t   phase_counter               = 0;
 
 static void generate_sine_tables(uint16_t pwm_arr, uint8_t direction)
 {
@@ -93,12 +94,11 @@ SineDriveController   sine_ctrl   = {
  */
 void foc_startup(void)
 {
-  static uint8_t is_first_startup = 1;
-  sine_ctrl.timer_arr             = initial_arr;
-  if (is_first_startup) {
-    generate_sine_tables(TIM1->ARR, direction);
-    is_first_startup = 0;
-  }
+  sine_ctrl.timer_arr = initial_arr;
+  mod_q15             = 6553; // 0.2 in Q15
+  phase_counter       = 0;
+  generate_sine_tables(TIM1->ARR, direction);
+
   TIM4->PSC = 35;
   TIM4->ARR = sine_ctrl.timer_arr;
 
@@ -172,8 +172,6 @@ void update_pwm_startup_foc(void)
 {
   if (app_state != FOC_STARTUP)
     return;
-
-  static uint16_t phase_counter = 0;
 
   /* ---------- Generación senoidal open-loop ---------- */
   phase_counter += sine_ctrl.phase_step;

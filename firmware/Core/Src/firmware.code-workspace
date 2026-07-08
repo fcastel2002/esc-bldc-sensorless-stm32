@@ -1,0 +1,34 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		},
+		{
+			"path": "../../.."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"state_machine.h": "c",
+			"motor_control.h": "c",
+			"main.h": "c",
+			"usart.h": "c",
+			"stm32f1xx_hal_def.h": "c",
+			"stm32_hal_legacy.h": "c",
+			"flash_config.h": "c",
+			"stm32f1xx_hal.h": "c",
+			"stm32f1xx_hal_conf.h": "c",
+			"stm32f1xx_hal_flash.h": "c",
+			"hard_config.h": "c",
+			"cstdint": "c",
+			"string.h": "c",
+			"stdlib.h": "c",
+			"bldc_driver.h": "c",
+			"compare": "c",
+			"speed_sensor.h": "c",
+			"basic_config.h": "c",
+			"tim.h": "c",
+			"utilities.h": "c"
+		}
+	}
+}

@@ -14,9 +14,11 @@ public sealed class HilUdpBridgeService : BackgroundService
     public const int DefaultPort = 5055;
     private const int MaxDrainPackets = 256;
     private const double HilOutputPollPeriodMs = 100;
+    private const double ActiveSenderLeaseMs = 250;
 
     private readonly EscBridgeService _bridge;
     private readonly ILogger<HilUdpBridgeService> _logger;
+    private readonly HilUdpSenderSession _senderSession = new(ActiveSenderLeaseMs);
     private readonly Stopwatch _uptime = Stopwatch.StartNew();
     private uint _rxFrames;
     private uint _lostFrames;
@@ -44,7 +46,22 @@ public sealed class HilUdpBridgeService : BackgroundService
             {
                 UdpReceiveResult received = await udp.ReceiveAsync(stoppingToken).ConfigureAwait(false);
                 received = await ReceiveLatestPendingPacketAsync(udp, received, stoppingToken).ConfigureAwait(false);
-                string response = await HandlePacketAsync(received.Buffer, stoppingToken).ConfigureAwait(false);
+                string requestText = DecodePacket(received.Buffer);
+                _bridge.RecordHilFrame(
+                    "Simulink -> Bridge",
+                    "UDP",
+                    TryReadSequence(requestText),
+                    ClassifyPacket(received.Buffer).ToString(),
+                    requestText);
+
+                string response = await HandlePacketAsync(received.Buffer, received.RemoteEndPoint, stoppingToken).ConfigureAwait(false);
+                _bridge.RecordHilFrame(
+                    "Bridge -> Simulink",
+                    "UDP",
+                    TryReadSequence(response),
+                    response.StartsWith("ok,", StringComparison.OrdinalIgnoreCase) ? "ok" : "err",
+                    response);
+
                 byte[] bytes = Encoding.ASCII.GetBytes(response);
                 await udp.SendAsync(bytes, received.RemoteEndPoint, stoppingToken).ConfigureAwait(false);
             }
@@ -59,16 +76,28 @@ public sealed class HilUdpBridgeService : BackgroundService
         }
     }
 
-    private static async Task<UdpReceiveResult> ReceiveLatestPendingPacketAsync(
+    private async Task<UdpReceiveResult> ReceiveLatestPendingPacketAsync(
         UdpClient udp,
         UdpReceiveResult selected,
         CancellationToken cancellationToken)
     {
+        string selectedText = DecodePacket(selected.Buffer);
         PacketKind selectedKind = ClassifyPacket(selected.Buffer);
+        if (selectedKind == PacketKind.EmergencyStop)
+        {
+            return selected;
+        }
+
+        bool selectedAllowed = CanAcceptSender(selected.RemoteEndPoint, selectedKind, selectedText);
+        IPEndPoint? preferredSender = WouldSenderTakeOver(selected.RemoteEndPoint, selectedKind, selectedText)
+            ? CloneEndPoint(selected.RemoteEndPoint)
+            : null;
+        uint? selectedSequence = TryReadSequence(selectedText);
 
         for (int drained = 0; udp.Available > 0 && drained < MaxDrainPackets; drained++)
         {
             UdpReceiveResult next = await udp.ReceiveAsync(cancellationToken).ConfigureAwait(false);
+            string nextText = DecodePacket(next.Buffer);
             PacketKind nextKind = ClassifyPacket(next.Buffer);
 
             if (nextKind == PacketKind.EmergencyStop)
@@ -76,22 +105,66 @@ public sealed class HilUdpBridgeService : BackgroundService
                 return next;
             }
 
-            if (selectedKind == PacketKind.EmergencyStop)
-            {
-                continue;
-            }
-
             if (nextKind == PacketKind.Invalid)
             {
                 continue;
             }
 
-            if (selectedKind == PacketKind.Invalid ||
+            if (preferredSender is not null && !EndpointsEqual(next.RemoteEndPoint, preferredSender))
+            {
+                continue;
+            }
+
+            bool nextAllowed = CanAcceptSender(next.RemoteEndPoint, nextKind, nextText);
+            if (!nextAllowed)
+            {
+                continue;
+            }
+
+            uint? nextSequence = TryReadSequence(nextText);
+            if (selectedAllowed &&
+                IsCoalescible(selectedKind) &&
+                IsCoalescible(nextKind) &&
+                !EndpointsEqual(selected.RemoteEndPoint, next.RemoteEndPoint) &&
+                selectedSequence.HasValue &&
+                nextSequence.HasValue)
+            {
+                if (nextSequence.Value < selectedSequence.Value)
+                {
+                    selected = next;
+                    selectedText = nextText;
+                    selectedKind = nextKind;
+                    selectedAllowed = true;
+                    selectedSequence = nextSequence;
+                    preferredSender = CloneEndPoint(next.RemoteEndPoint);
+                    continue;
+                }
+
+                preferredSender ??= CloneEndPoint(selected.RemoteEndPoint);
+                continue;
+            }
+
+            if (WouldSenderTakeOver(next.RemoteEndPoint, nextKind, nextText))
+            {
+                selected = next;
+                selectedText = nextText;
+                selectedKind = nextKind;
+                selectedAllowed = true;
+                selectedSequence = nextSequence;
+                preferredSender = CloneEndPoint(next.RemoteEndPoint);
+                continue;
+            }
+
+            if (!selectedAllowed ||
+                selectedKind == PacketKind.Invalid ||
                 nextKind == PacketKind.Discrete ||
                 IsCoalescible(nextKind) && IsCoalescible(selectedKind))
             {
                 selected = next;
+                selectedText = nextText;
                 selectedKind = nextKind;
+                selectedAllowed = true;
+                selectedSequence = nextSequence;
             }
         }
 
@@ -121,7 +194,10 @@ public sealed class HilUdpBridgeService : BackgroundService
         };
     }
 
-    private async Task<string> HandlePacketAsync(byte[] buffer, CancellationToken cancellationToken)
+    private async Task<string> HandlePacketAsync(
+        byte[] buffer,
+        IPEndPoint remoteEndPoint,
+        CancellationToken cancellationToken)
     {
         string text = DecodePacket(buffer);
         if (string.IsNullOrWhiteSpace(text))
@@ -131,39 +207,77 @@ public sealed class HilUdpBridgeService : BackgroundService
 
         string[] commandParts = text.Split(',', StringSplitOptions.TrimEntries);
         string command = commandParts[0].ToUpperInvariant();
+        uint? requestSequence = TryReadSequence(text);
+        double requestNowMs = _uptime.Elapsed.TotalMilliseconds;
+
+        if (!CanAcceptSender(remoteEndPoint, ClassifyPacket(buffer), text))
+        {
+            return $"err,active PIL sender {_senderSession.DescribeActiveSender(requestNowMs)}";
+        }
 
         if (command is "SETPOINT" or "SP" or "SPEED")
         {
-            return await HandleSetpointCommandAsync(commandParts, cancellationToken).ConfigureAwait(false);
+            string response = await HandleSetpointCommandAsync(commandParts, cancellationToken).ConfigureAwait(false);
+            if (response.StartsWith("ok,", StringComparison.OrdinalIgnoreCase))
+            {
+                _senderSession.Accept(remoteEndPoint, requestSequence, requestNowMs);
+            }
+
+            return response;
         }
 
         if (command is "RUN" or "MOTOR_RUN")
         {
             CommandResult run = await _bridge.RunFromSimulinkAsync(cancellationToken).ConfigureAwait(false);
+            if (run.Success)
+            {
+                _senderSession.Accept(remoteEndPoint, requestSequence, requestNowMs);
+            }
+
             return BuildCommandResponse("run", 0, run);
         }
 
         if (command is "MOTOR_STOP" or "REAL_STOP")
         {
             CommandResult stopped = await _bridge.StopFromSimulinkAsync(cancellationToken).ConfigureAwait(false);
+            if (stopped.Success)
+            {
+                _senderSession.Release(remoteEndPoint);
+            }
+
             return BuildCommandResponse("stop", 0, stopped);
         }
 
         if (command == "ESTOP")
         {
             CommandResult stopped = await _bridge.EmergencyStopAsync(cancellationToken).ConfigureAwait(false);
+            if (stopped.Success)
+            {
+                _senderSession.Release();
+            }
+
             return BuildCommandResponse("estop", 0, stopped);
         }
 
         if (command is "HIL_START" or "START")
         {
             CommandResult started = await _bridge.HilStartAsync(cancellationToken).ConfigureAwait(false);
+            if (started.Success)
+            {
+                _senderSession.Accept(remoteEndPoint, requestSequence, requestNowMs);
+            }
+
             return started.Success ? "ok,start" : $"err,{started.Message}";
         }
 
         if (command is "HIL_STOP" or "STOP")
         {
             CommandResult stopped = await _bridge.HilStopAsync(cancellationToken).ConfigureAwait(false);
+            if (stopped.Success)
+            {
+                _senderSession.Release(remoteEndPoint);
+            }
+
             return stopped.Success ? "ok,stop" : $"err,{stopped.Message}";
         }
 
@@ -181,6 +295,15 @@ public sealed class HilUdpBridgeService : BackgroundService
             return $"err,{result.Message}";
         }
 
+        if (inputs.Enable)
+        {
+            _senderSession.Accept(remoteEndPoint, sequence, requestNowMs);
+        }
+        else
+        {
+            _senderSession.Release(remoteEndPoint);
+        }
+
         HilOutputs? outputs = null;
         HilBridgeStats currentStats = _bridge.Snapshot.Hil;
         double nowMs = _uptime.Elapsed.TotalMilliseconds;
@@ -191,7 +314,7 @@ public sealed class HilUdpBridgeService : BackgroundService
         }
 
         roundTrip.Stop();
-        TrackRoundTrip(roundTrip.Elapsed.TotalMilliseconds, outputs, inputs.Enable);
+        TrackRoundTrip(roundTrip.Elapsed.TotalMilliseconds, outputs, inputs, inputs.Enable);
 
         HilBridgeStats stats = _bridge.Snapshot.Hil;
         outputs ??= stats.LastOutputs;
@@ -258,35 +381,128 @@ public sealed class HilUdpBridgeService : BackgroundService
     private static bool TryParseInputs(string text, out uint sequence, out HilInputs inputs, out string? error)
     {
         sequence = 0;
-        inputs = new HilInputs(0, 0, 0, 0, false);
+        inputs = new HilInputs(0, 0, 0, false);
         error = null;
 
         string[] parts = text.Split(',', StringSplitOptions.TrimEntries);
-        if (parts.Length is not (5 or 6))
+        if (parts.Length == 0)
         {
-            error = "expected CSV: seq,speed_rpm,zero_crossing_period,load_torque,flags,enable";
+            error = "empty packet";
             return false;
         }
 
-        int offset = parts.Length == 6 ? 1 : 0;
-        if (parts.Length == 6 && !uint.TryParse(parts[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence))
+        string command = parts[0].ToUpperInvariant();
+        int offset = command is "PIL" or "HIL" ? 1 : 0;
+        int fieldCount = parts.Length - offset;
+
+        if (fieldCount is 2 or 3)
+        {
+            bool hasSequence = fieldCount == 3;
+            if (hasSequence && !uint.TryParse(parts[offset], NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence))
+            {
+                error = "invalid sequence";
+                return false;
+            }
+
+            int firstValue = offset + (hasSequence ? 1 : 0);
+            if (!ushort.TryParse(parts[firstValue], NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort speedRpm) ||
+                !byte.TryParse(parts[firstValue + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte enable))
+            {
+                error = "invalid numeric value";
+                return false;
+            }
+
+            inputs = new HilInputs(speedRpm, 0, 0, enable != 0);
+            return true;
+        }
+
+        if (fieldCount is not (5 or 6))
+        {
+            error = "expected CSV: seq,speed_rpm,enable or seq,speed_rpm,reserved,load_torque,flags,enable";
+            return false;
+        }
+
+        bool legacyHasSequence = fieldCount == 6;
+        if (legacyHasSequence && !uint.TryParse(parts[offset], NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence))
         {
             error = "invalid sequence";
             return false;
         }
 
-        if (!ushort.TryParse(parts[offset], NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort speedRpm) ||
-            !ushort.TryParse(parts[offset + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort zeroPeriod) ||
-            !short.TryParse(parts[offset + 2], NumberStyles.Integer, CultureInfo.InvariantCulture, out short loadTorque) ||
-            !byte.TryParse(parts[offset + 3], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte flags) ||
-            !byte.TryParse(parts[offset + 4], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte enable))
+        int legacyFirstValue = offset + (legacyHasSequence ? 1 : 0);
+        if (!ushort.TryParse(parts[legacyFirstValue], NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort legacySpeedRpm) ||
+            !ushort.TryParse(parts[legacyFirstValue + 1], NumberStyles.Integer, CultureInfo.InvariantCulture, out _) ||
+            !short.TryParse(parts[legacyFirstValue + 2], NumberStyles.Integer, CultureInfo.InvariantCulture, out short loadTorque) ||
+            !byte.TryParse(parts[legacyFirstValue + 3], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte flags) ||
+            !byte.TryParse(parts[legacyFirstValue + 4], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte legacyEnable))
         {
             error = "invalid numeric value";
             return false;
         }
 
-        inputs = new HilInputs(speedRpm, zeroPeriod, loadTorque, flags, enable != 0);
+        inputs = new HilInputs(legacySpeedRpm, loadTorque, flags, legacyEnable != 0);
         return true;
+    }
+
+    private static uint? TryReadSequence(string text)
+    {
+        if (TryParseInputs(text, out uint sequence, out _, out _))
+        {
+            return sequence;
+        }
+
+        string[] parts = text.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length >= 2 && uint.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence))
+        {
+            return sequence;
+        }
+
+        if (parts.Length >= 3 && uint.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence))
+        {
+            return sequence;
+        }
+
+        return null;
+    }
+
+    private bool CanAcceptSender(IPEndPoint sender, PacketKind kind, string text)
+    {
+        string command = ReadCommand(text);
+        bool isStartCommand = command is "HIL_START" or "START";
+        bool isEmergencyStop = kind == PacketKind.EmergencyStop;
+        return _senderSession.CanAccept(
+            sender,
+            TryReadSequence(text),
+            isStartCommand,
+            isEmergencyStop,
+            _uptime.Elapsed.TotalMilliseconds);
+    }
+
+    private bool WouldSenderTakeOver(IPEndPoint sender, PacketKind kind, string text)
+    {
+        string command = ReadCommand(text);
+        bool isStartCommand = command is "HIL_START" or "START";
+        return _senderSession.WouldTakeOver(
+            sender,
+            TryReadSequence(text),
+            isStartCommand,
+            _uptime.Elapsed.TotalMilliseconds);
+    }
+
+    private static string ReadCommand(string text)
+    {
+        string[] parts = text.Split(',', StringSplitOptions.TrimEntries);
+        return parts.Length == 0 ? string.Empty : parts[0].ToUpperInvariant();
+    }
+
+    private static IPEndPoint CloneEndPoint(IPEndPoint endPoint)
+    {
+        return new IPEndPoint(endPoint.Address, endPoint.Port);
+    }
+
+    private static bool EndpointsEqual(IPEndPoint left, IPEndPoint right)
+    {
+        return left.Address.Equals(right.Address) && left.Port == right.Port;
     }
 
     private void TrackReceive(uint sequence)
@@ -311,11 +527,12 @@ public sealed class HilUdpBridgeService : BackgroundService
         _lastArrivalMs = nowMs;
     }
 
-    private void TrackRoundTrip(double roundTripMs, HilOutputs? outputs, bool hilEnabled)
+    private void TrackRoundTrip(double roundTripMs, HilOutputs? outputs, HilInputs inputs, bool hilEnabled)
     {
         _averageRoundTripMs = _averageRoundTripMs == 0 ? roundTripMs : (_averageRoundTripMs * 0.9) + (roundTripMs * 0.1);
         double effectiveRate = _uptime.Elapsed.TotalSeconds <= 0 ? 0 : _rxFrames / _uptime.Elapsed.TotalSeconds;
         HilOutputs? lastOutputs = outputs ?? _bridge.Snapshot.Hil.LastOutputs;
+        HilInputs lastInputs = inputs;
         _bridge.UpdateHilStats(new HilBridgeStats(
             outputs?.Mode == ControlRuntimeMode.HilSim || (outputs is null && hilEnabled),
             _rxFrames,
@@ -323,7 +540,8 @@ public sealed class HilUdpBridgeService : BackgroundService
             effectiveRate,
             _averageRoundTripMs,
             _jitterMs,
-            lastOutputs));
+            lastOutputs,
+            lastInputs));
     }
 
     private enum PacketKind

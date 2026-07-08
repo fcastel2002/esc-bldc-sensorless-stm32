@@ -6,12 +6,15 @@ namespace Esc.Bridge;
 
 public sealed class EscBridgeService
 {
+    private const int MaxHilTraceEntries = 80;
+
     private readonly IEscDeviceEnumerator _deviceEnumerator;
     private readonly IEscTransport _transport;
     private readonly TelemetryStore _telemetryStore;
     private readonly ILogger<EscBridgeService> _logger;
     private readonly SemaphoreSlim _ioLock = new(1, 1);
     private readonly object _stateGate = new();
+    private readonly List<HilFrameTraceEntry> _hilFrameTrace = new();
 
     private IReadOnlyList<HidDeviceDescriptor> _devices = Array.Empty<HidDeviceDescriptor>();
     private HidDeviceDescriptor? _currentDevice;
@@ -22,7 +25,7 @@ public sealed class EscBridgeService
     private bool _speedLoggingEnabled;
     private ushort _logRateMs = 500;
     private byte _sequence;
-    private HilBridgeStats _hilStats = new(false, 0, 0, 0, 0, 0, null);
+    private HilBridgeStats _hilStats = new(false, 0, 0, 0, 0, 0, null, null);
 
     public EscBridgeService(
         IEscDeviceEnumerator deviceEnumerator,
@@ -350,6 +353,55 @@ public sealed class EscBridgeService
         Notify();
     }
 
+    public void RecordHilFrame(
+        string direction,
+        string transport,
+        uint? sequence,
+        string summary,
+        string payload)
+    {
+        bool collapsed = false;
+        lock (_stateGate)
+        {
+            DateTimeOffset timestamp = DateTimeOffset.Now;
+            if (_hilFrameTrace.Count > 0)
+            {
+                HilFrameTraceEntry last = _hilFrameTrace[^1];
+                if (last.Direction == direction &&
+                    last.Transport == transport &&
+                    last.Sequence == sequence &&
+                    last.Summary == summary &&
+                    last.Payload == payload)
+                {
+                    _hilFrameTrace[^1] = last with
+                    {
+                        Timestamp = timestamp,
+                        RepeatCount = last.RepeatCount + 1
+                    };
+                    collapsed = true;
+                }
+            }
+
+            if (!collapsed)
+            {
+                _hilFrameTrace.Add(new HilFrameTraceEntry(
+                    timestamp,
+                    direction,
+                    transport,
+                    sequence,
+                    summary,
+                    payload));
+
+                while (_hilFrameTrace.Count > MaxHilTraceEntries)
+                {
+                    _hilFrameTrace.RemoveAt(0);
+                }
+            }
+        }
+
+        Notify();
+    }
+
     public async Task<CommandResult> SetLogRateAsync(ushort rateMs, CancellationToken cancellationToken = default)
     {
         CommandResult result = await SendCommandAsync(CommOpcode.LogRate, 0, EscProtocol.UInt16Payload(rateMs), cancellationToken).ConfigureAwait(false);
@@ -523,6 +575,11 @@ public sealed class EscBridgeService
     {
         byte sequence = unchecked(++_sequence);
         byte[] request = EscProtocol.BuildRequest(sequence, opcode, parameter, payload);
+        if (IsPilOpcode(opcode))
+        {
+            RecordHilBinaryFrame("Bridge -> MCU", request);
+        }
+
         await _transport.WriteFrameAsync(request, cancellationToken).ConfigureAwait(false);
 
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMilliseconds(1_000);
@@ -542,6 +599,11 @@ public sealed class EscBridgeService
 
             if (frame.Type == CommFrameType.Response && frame.Sequence == sequence && frame.Opcode == opcode)
             {
+                if (IsPilOpcode(opcode))
+                {
+                    RecordHilBinaryFrame("MCU -> Bridge", frame);
+                }
+
                 return frame;
             }
         }
@@ -634,6 +696,7 @@ public sealed class EscBridgeService
 
     private BridgeSnapshot BuildSnapshot()
     {
+        HilBridgeStats hilStats = _hilStats with { RecentFrames = _hilFrameTrace.AsEnumerable().Reverse().ToArray() };
         return new BridgeSnapshot(
             _state,
             _mode,
@@ -645,11 +708,37 @@ public sealed class EscBridgeService
             _speedLoggingEnabled,
             _logRateMs,
             _telemetryStore.GetStats("speed", "rpm"),
-            _hilStats);
+            hilStats);
     }
 
     private void Notify()
     {
         SnapshotChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static bool IsPilOpcode(CommOpcode opcode)
+    {
+        return opcode is CommOpcode.HilStart or CommOpcode.HilStop or CommOpcode.HilSetInputs or CommOpcode.HilGetOutputs;
+    }
+
+    private void RecordHilBinaryFrame(string direction, byte[] rawFrame)
+    {
+        try
+        {
+            RecordHilBinaryFrame(direction, EscProtocol.Parse(rawFrame));
+        }
+        catch (Exception ex)
+        {
+            RecordHilFrame(direction, "HID", null, "binary frame parse error", ex.Message);
+        }
+    }
+
+    private void RecordHilBinaryFrame(string direction, EscFrame frame)
+    {
+        string summary = $"{frame.Type} {frame.Opcode} seq={frame.Sequence} len={frame.Payload.Length} status={frame.Status}";
+        string payload = frame.Payload.Length == 0
+            ? $"payload=- raw={Convert.ToHexString(frame.Raw)}"
+            : $"payload={Convert.ToHexString(frame.Payload)} raw={Convert.ToHexString(frame.Raw)}";
+        RecordHilFrame(direction, "HID", frame.Sequence, summary, payload);
     }
 }

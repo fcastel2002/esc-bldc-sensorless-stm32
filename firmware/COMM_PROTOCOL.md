@@ -101,6 +101,8 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 
 For gains, value `135` means `1.35`. `SET_CONFIG` and `RESET_CONFIG` update the active RAM configuration and mark pending changes, but do not write flash. `SAVE_CONFIG` writes the current active configuration to flash. `RESET_CONFIG` supports each implemented config param and `0xFF` for all defaults.
 
+When `app_state == CLOSEDLOOP`, changes to `PWM_FREQ`, `KP`, `KI`, and `KD` are applied immediately without leaving closed loop. `KD` acts on the measured speed derivative, so setpoint changes do not create derivative kick. Other config parameters still follow the deferred `CONFIG` path.
+
 ## Logging and telemetry
 
 Log params:
@@ -134,14 +136,14 @@ Control modes:
 | `1` | `MONITOR_ONLY` |
 | `2` | `HIL_SIM` |
 
-In `HIL_SIM`, real TIM2 input-capture speed measurements and real commutation are ignored. The MCU keeps the PI control tick and uses the latest simulated speed received by `HIL_SET_INPUTS`. If no HIL input arrives for 50 ms, the firmware stops the logical HIL run and returns to `IDLE`.
+In `HIL_SIM`, the MCU is blind to ESC commutation and real TIM2 input-capture events are ignored. Simulink owns the simulated plant and ESC/conmutation. The MCU keeps the PI control tick, uses the latest simulated speed received by `HIL_SET_INPUTS` as feedback, and exposes the logical PWM command with `HIL_GET_OUTPUTS`. If no HIL input arrives for 50 ms, the firmware stops the logical HIL run and returns to `IDLE`.
 
 `HIL_SET_INPUTS` payload:
 
 | Offset | Type | Meaning |
 | --- | --- | --- |
 | 0..1 | `uint16` | simulated speed RPM |
-| 2..3 | `uint16` | simulated zero-crossing period, reserved for future use |
+| 2..3 | `uint16` | reserved, ignored |
 | 4..5 | `int16` | load torque, reserved for future use |
 | 6 | `uint8` | input flags |
 | 7 | `uint8` | enable: `0=stop`, nonzero=start/update |
@@ -162,7 +164,19 @@ In `HIL_SIM`, real TIM2 input-capture speed measurements and real commutation ar
 
 The ESC Bridge exposes a UDP loopback bridge for Simulink on `127.0.0.1:5055`. Send ASCII CSV:
 
-`seq,speed_rpm,zero_crossing_period,load_torque,flags,enable`
+`seq,speed_rpm,enable`
+
+The bridge also accepts command-prefixed packets:
+
+`PIL,speed_rpm,enable`
+
+`PIL,seq,speed_rpm,enable`
+
+For compatibility with older HIL blocks, the bridge still accepts:
+
+`seq,speed_rpm,reserved,load_torque,flags,enable`
+
+The `reserved` field is ignored and no zero-crossing or commutation event is generated. The GUI exposes a `/pil` page that shows recent UDP frames from Simulink and recent binary HID frames exchanged with the MCU for PIL/HIL commands.
 
 The response is ASCII CSV:
 

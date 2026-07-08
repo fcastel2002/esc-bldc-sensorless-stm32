@@ -83,11 +83,7 @@ volatile uint8_t direction  = 0;
 volatile uint8_t consistent_zero_crossing = 0; // flag
 //====================================================
 
-static float kp = 0;
-static float ki = 0;
-static float kd = 0;
 static volatile uint16_t hil_speed_rpm = 0;
-static volatile uint16_t hil_zero_crossing_period = 0;
 static volatile int16_t  hil_load_torque = 0;
 static volatile uint8_t  hil_flags = 0;
 static volatile uint32_t hil_last_input_tick = 0;
@@ -124,14 +120,13 @@ static inline uint16_t map_speed(uint16_t raw_speed)
 
 void updateAllMotorControl()
 {
-  max_limit_pwm             = TIM1->ARR;
-  max_pwm                   = max_limit_pwm;
-  min_limit_pwm             = max_limit_pwm * 0.05f;
-  pwm_speed_range_relation  = (float)(max_limit_pwm - min_limit_pwm) / (float)speed_sensor_get_speed_range();
-  speed_setpoint_rpm        = 1000;
-  kp                        = get_KP();
-  ki                        = get_KI();
-  kd                        = get_KD();
+  max_limit_pwm            = TIM1->ARR;
+  max_pwm                  = max_limit_pwm;
+  min_limit_pwm            = (uint16_t)(max_limit_pwm * 0.05f);
+  pwm_speed_range_relation = (float)(max_limit_pwm - min_limit_pwm) / (float)speed_sensor_get_speed_range();
+  if (speed_setpoint_rpm == 0U) {
+    speed_setpoint_rpm = 1000;
+  }
   motor_control_config_done = 1;
 }
 
@@ -306,7 +301,7 @@ uint16_t period_to_pwm(uint16_t period)
  * @note Solo opera cuando app_state == CLOSEDLOOP
  * @warning No utiliza protección de interrupciones, debe ser llamada desde contexto seguro
  */
-void pi_control()
+__attribute__((optimize("Os"))) void pi_control()
 {
 
   speed_measure = period_to_pwm(measured_speed_period());
@@ -314,8 +309,13 @@ void pi_control()
     uint16_t target_period = rpm_to_period(speed_setpoint_rpm);
     uint16_t target_pwm    = period_to_pwm(target_period);
     speed_error        = target_pwm - speed_measure;
-    speed_proportional = (kp * speed_error) / SCALE;
-    speed_integral += ki * (speed_error + speed_prev_error) * dt;
+    if (diff_speed == 0) {
+      diff_speed = speed_measure;
+    }
+    speed_proportional = (current_esc_params.speed_kp * speed_error) / SCALE;
+    speed_proportional -= (current_esc_params.speed_kd * ((int32_t)speed_measure - diff_speed)) / dt;
+    diff_speed = speed_measure;
+    speed_integral += current_esc_params.speed_ki * (speed_error + speed_prev_error) * dt;
     speed_prev_error = speed_error;
     if (max_limit_pwm > speed_proportional) {
       max_speed_integral = (max_limit_pwm - speed_proportional);
@@ -420,10 +420,9 @@ void hil_stop(void)
   app_state = IDLE;
 }
 
-void hil_set_inputs(uint16_t speed_rpm, uint16_t zero_crossing_period, int16_t load_torque, uint8_t flags)
+void hil_set_inputs(uint16_t speed_rpm, int16_t load_torque, uint8_t flags)
 {
   hil_speed_rpm = speed_rpm;
-  hil_zero_crossing_period = zero_crossing_period;
   hil_load_torque = load_torque;
   hil_flags = flags;
   hil_last_input_tick = HAL_GetTick();
@@ -457,6 +456,7 @@ uint8_t hil_get_flags(void)
 {
   return hil_flags;
 }
+
 uint16_t convert_speed_ticks(uint16_t value, bool to_ticks)
 {
   if (to_ticks) {

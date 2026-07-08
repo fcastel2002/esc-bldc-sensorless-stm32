@@ -2,7 +2,6 @@ namespace Esc.Protocol;
 
 public sealed record HilInputs(
     ushort SpeedRpm,
-    ushort ZeroCrossingPeriod,
     short LoadTorque,
     byte Flags,
     bool Enable);

@@ -2,6 +2,7 @@ using Esc.Bridge;
 using Esc.Protocol;
 using Esc.Transport;
 using Microsoft.Extensions.Logging;
+using System.Net;
 
 namespace Esc.Tests;
 
@@ -92,7 +93,7 @@ public sealed class BridgeTests
         await bridge.ConnectAsync();
         await bridge.SetModeAsync(ControlMode.SimulinkControl);
 
-        CommandResult input = await bridge.HilSetInputsAsync(new HilInputs(1800, 0, 0, 2, true));
+        CommandResult input = await bridge.HilSetInputsAsync(new HilInputs(1800, 0, 2, true));
         HilOutputs output = await bridge.HilGetOutputsAsync();
 
         Assert.True(input.Success);
@@ -100,6 +101,85 @@ public sealed class BridgeTests
         Assert.Equal(1800, output.MeasuredRpm);
         Assert.Contains(CommOpcode.HilSetInputs, transport.RequestedOpcodes);
         Assert.Contains(CommOpcode.HilGetOutputs, transport.RequestedOpcodes);
+    }
+
+    [Fact]
+    public void ConsecutiveIdenticalHilFramesAreCollapsedWithRepeatCount()
+    {
+        var bridge = CreateBridge();
+
+        bridge.RecordHilFrame("Simulink -> Bridge", "UDP", 7, "HilInputs", "7,137,1");
+        bridge.RecordHilFrame("Simulink -> Bridge", "UDP", 7, "HilInputs", "7,137,1");
+        bridge.RecordHilFrame("Simulink -> Bridge", "UDP", 7, "HilInputs", "7,138,1");
+
+        IReadOnlyList<HilFrameTraceEntry> frames = bridge.Snapshot.Hil.RecentFrames;
+
+        Assert.Equal(2, frames.Count);
+        Assert.Equal((uint)1, frames[0].RepeatCount);
+        Assert.Equal("7,138,1", frames[0].Payload);
+        Assert.Equal((uint)2, frames[1].RepeatCount);
+        Assert.Equal("7,137,1", frames[1].Payload);
+    }
+
+    [Fact]
+    public void HilSnapshotCanExposeLastAcceptedUdpInputs()
+    {
+        var bridge = CreateBridge();
+
+        bridge.UpdateHilStats(new HilBridgeStats(
+            true,
+            12,
+            0,
+            10,
+            3,
+            0.5,
+            null,
+            new HilInputs(245, 0, 0, true)));
+
+        Assert.Equal((ushort)245, bridge.Snapshot.Hil.LastInputs?.SpeedRpm);
+        Assert.True(bridge.Snapshot.Hil.LastInputs?.Enable);
+    }
+
+    [Fact]
+    public void LowerSequenceCanTakeOwnershipFromAnotherUdpSender()
+    {
+        HilUdpSenderSession session = new(250);
+        IPEndPoint senderA = new(IPAddress.Loopback, 1);
+        IPEndPoint senderB = new(IPAddress.Loopback, 50571);
+
+        session.Accept(senderA, 101, 0);
+
+        Assert.True(session.CanAccept(senderB, 2, false, false, 50));
+
+        session.Accept(senderB, 2, 50);
+
+        Assert.False(session.CanAccept(senderA, 101, false, false, 60));
+    }
+
+    [Fact]
+    public void StartCommandCanForceTakeoverFromAnotherUdpSender()
+    {
+        HilUdpSenderSession session = new(250);
+        IPEndPoint senderA = new(IPAddress.Loopback, 1);
+        IPEndPoint senderB = new(IPAddress.Loopback, 50571);
+
+        session.Accept(senderA, 101, 0);
+
+        Assert.True(session.WouldTakeOver(senderB, null, true, 50));
+        Assert.False(session.WouldTakeOver(senderA, 102, false, 50));
+    }
+
+    [Fact]
+    public void SenderLeaseExpiresAfterIdleGap()
+    {
+        HilUdpSenderSession session = new(250);
+        IPEndPoint senderA = new(IPAddress.Loopback, 1);
+        IPEndPoint senderB = new(IPAddress.Loopback, 50571);
+
+        session.Accept(senderA, 40, 0);
+
+        Assert.False(session.CanAccept(senderB, 41, false, false, 100));
+        Assert.True(session.CanAccept(senderB, 41, false, false, 400));
     }
 
     private static EscBridgeService CreateBridge(FakeEscTransport? transport = null)

@@ -200,8 +200,11 @@ Formatos relevantes:
   - `HIL_START`, `START`
   - `HIL_STOP`, `STOP`
 - entradas HIL:
-  - `seq,speed_rpm,zero_crossing_period,load_torque,flags,enable`
-  - tambien acepta la misma forma sin `seq`
+  - recomendado: `seq,speed_rpm,enable`
+  - prefijado: `PIL,speed_rpm,enable`
+  - prefijado con secuencia: `PIL,seq,speed_rpm,enable`
+  - compatibilidad legacy: `seq,speed_rpm,reserved,load_torque,flags,enable`
+  - `reserved` se ignora; Simulink simula ESC/conmutacion y el MCU solo recibe velocidad
 
 ## 12. Superficie HTTP/WebSocket
 

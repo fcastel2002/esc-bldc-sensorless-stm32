@@ -8,14 +8,21 @@
 #include "state_machine.h"
 #include "usart.h"
 
+#define RUNNING_RESTART_TIMEOUT_MS 1500U
+#define RUNNING_RESTART_BRAKE_MS 500U
+
 volatile App_States_t app_state = IDLE;
 
-App_States_t handleState(void)
+__attribute__((optimize("Os"))) App_States_t handleState(void)
 {
 
   static uint8_t  comm_initialized  = 0;
   static uint32_t last_comm_check   = 0;
   static uint8_t  flash_initialized = 0;
+  static App_States_t last_state = IDLE;
+  static uint32_t running_enter_time = 0;
+  static uint32_t restart_brake_start_time = 0;
+  static uint8_t  restart_pending = 0;
   uint32_t        current_time      = HAL_GetTick();
 
   if (!comm_initialized) {
@@ -54,6 +61,29 @@ App_States_t handleState(void)
     cmd_received_ack = 0;
   }
 
+  if (app_state != last_state) {
+    if (app_state == RUNNING) {
+      running_enter_time = current_time;
+      restart_pending = 0;
+    } else {
+      if (app_state != CLOSEDLOOP) {
+        restart_pending = 0;
+      }
+    }
+    last_state = app_state;
+  }
+
+  if (restart_pending) {
+    if (app_state != RUNNING && app_state != CLOSEDLOOP) {
+      restart_pending = 0;
+    } else if ((uint32_t)(current_time - restart_brake_start_time) >= RUNNING_RESTART_BRAKE_MS) {
+      restart_pending = 0;
+      motor_stalled = false;
+      foc_startup();
+    }
+    return app_state;
+  }
+
   switch (app_state) {
   case IDLE:
     break;
@@ -64,12 +94,19 @@ App_States_t handleState(void)
   case FOC_STARTUP:
     break;
   case RUNNING:
-    if (motor_stalled) {
-      foc_startup();
-      motor_stalled = false;
-    }
-    if (consistent_zero_crossing)
+    if (consistent_zero_crossing) {
       app_state = READY;
+      break;
+    }
+    if (motor_stalled ||
+        (uint32_t)(current_time - running_enter_time) >= RUNNING_RESTART_TIMEOUT_MS) {
+      PWM_STOP();
+      bldc_set_pwm(0);
+      restart_brake_start_time = current_time;
+      restart_pending = 1;
+      motor_stalled = false;
+      break;
+    }
     break;
 
   case CONFIG:
@@ -84,8 +121,12 @@ App_States_t handleState(void)
     HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
     current_time = HAL_GetTick();
     if (!hil_is_active() && motor_stalled) {
-      foc_startup();
+      PWM_STOP();
+      bldc_set_pwm(0);
+      restart_brake_start_time = current_time;
+      restart_pending = 1;
       motor_stalled = false;
+      break;
     }
     if (!hil_is_active() && 0 == consistent_zero_crossing)
       app_state = RUNNING;

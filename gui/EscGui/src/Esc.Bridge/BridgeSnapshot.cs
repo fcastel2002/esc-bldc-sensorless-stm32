@@ -32,4 +32,17 @@ public sealed record HilBridgeStats(
     double EffectiveRateHz,
     double AverageRoundTripMs,
     double JitterMs,
-    HilOutputs? LastOutputs);
+    HilOutputs? LastOutputs,
+    HilInputs? LastInputs)
+{
+    public IReadOnlyList<HilFrameTraceEntry> RecentFrames { get; init; } = Array.Empty<HilFrameTraceEntry>();
+}
+
+public sealed record HilFrameTraceEntry(
+    DateTimeOffset Timestamp,
+    string Direction,
+    string Transport,
+    uint? Sequence,
+    string Summary,
+    string Payload,
+    uint RepeatCount = 1);

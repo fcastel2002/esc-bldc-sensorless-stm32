@@ -36,6 +36,11 @@ El firmware STM32 se encuentra en [firmware/](firmware/). Esta carpeta contiene 
 
 ## Documentacion del codigo
 
+- Indice general de documentacion: [docs/README.md](docs/README.md)
+- Comandos de build y test: [docs/build-and-test.md](docs/build-and-test.md)
+- CI/CD y releases: [docs/ci-cd.md](docs/ci-cd.md)
+- Flujo SSD de features: [specs/README.md](specs/README.md)
+- Ownership de protocolo compartido: [docs/architecture/protocol-ownership.md](docs/architecture/protocol-ownership.md)
 - Flujo actual del firmware: [docs/PROJECT_FLOW.md](docs/PROJECT_FLOW.md)
 - Configuracion Doxygen: [docs/Doxyfile](docs/Doxyfile)
 - Salida HTML generada localmente: `docs/api/html/index.html`
@@ -44,12 +49,17 @@ El firmware STM32 se encuentra en [firmware/](firmware/). Esta carpeta contiene 
 
 ```text
 .
-|-- firmware/   Proyecto embebido STM32F103C8T6
-|-- INFORME/    Paper, proyecto Overleaf, esquematicos e imagenes
-|-- docs/       Documentacion del codigo y guia de flujo
-|-- out/        Diagramas y salidas auxiliares del proyecto
-|-- README.md   Resumen visual y tecnico del repositorio
+|-- firmware/              Proyecto embebido STM32F103C8T6
+|-- gui/EscGui/            GUI local Blazor, bridge, protocolo y tests
+|-- .agents/               Convenciones neutrales para agentes
+|-- docs/                  Documentacion del proyecto, build/test y CI/CD
+|-- specs/                 Specs SSD versionadas por feature
+|-- simulacion_agitador/   Soporte PIL/HIL/Simulink
+|-- INFORME/               Paper, proyecto Overleaf, esquematicos e imagenes
+|-- README.md              Resumen visual y tecnico del repositorio
 ```
+
+`slprj/` y `out/` son salidas generadas localmente por Simulink, diagramas o herramientas auxiliares. No son raices fuente versionadas y estan ignoradas por Git.
 
 ## Resultados reportados
 

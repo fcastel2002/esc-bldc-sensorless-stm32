@@ -1,0 +1,36 @@
+name: docs
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doxygen:
+    name: doxygen
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Doxygen
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake doxygen graphviz
+
+      - name: Generate code docs
+        run: cmake -DREPO_ROOT="${{ github.workspace }}" -P docs/GenerateCodeDocs.cmake
+
+      - name: Upload Doxygen HTML
+        uses: actions/upload-artifact@v7
+        with:
+          name: doxygen-html
+          path: docs/api/html
+          if-no-files-found: error
+          retention-days: 30
