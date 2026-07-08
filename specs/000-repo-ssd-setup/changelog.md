@@ -7,4 +7,4 @@
 - Added: synchronized `CLAUDE.md` and subproject `AGENTS.md` files.
 - Added: GitHub Actions CI/CD workflows and Dependabot configuration.
 - Added: root README links to docs, SSD, CI/CD, and protocol ownership.
-- Pending: local verification results.
+- Tests: local repo hygiene, SSD docs validation, firmware Debug build, GUI build, and GUI tests passed.

@@ -2,20 +2,20 @@
 
 ## Local Checks
 
-- [ ] `git status --short --branch`
-- [ ] `if ((Get-FileHash AGENTS.md -Algorithm SHA256).Hash -eq (Get-FileHash CLAUDE.md -Algorithm SHA256).Hash) { "ok" } else { exit 1 }`
-- [ ] From `firmware/`: `cmake --preset Debug -DESC_BUILD_CODE_DOCS=OFF`
-- [ ] From `firmware/`: `cmake --build --preset Debug`
-- [ ] From repo root: `dotnet build gui\EscGui\src\Esc.Web\Esc.Web.csproj`
-- [ ] From repo root: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj`
+- [x] `git status --short --branch`
+- [x] `if ((Get-FileHash AGENTS.md -Algorithm SHA256).Hash -eq (Get-FileHash CLAUDE.md -Algorithm SHA256).Hash) { "ok" } else { exit 1 }`
+- [x] From `firmware/`: `cmake --preset Debug -DESC_BUILD_CODE_DOCS=OFF`
+- [x] From `firmware/`: `cmake --build --preset Debug`
+- [x] From repo root: `dotnet build gui\EscGui\src\Esc.Web\Esc.Web.csproj`
+- [x] From repo root: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj`
 
 ## CI Checks
 
-- [ ] `repo-hygiene`
-- [ ] `firmware-debug`
-- [ ] `gui-build-test`
-- [ ] `protocol-guard`
-- [ ] `ssd-docs`
+- [ ] `repo-hygiene` pending GitHub Actions.
+- [ ] `firmware-debug` pending GitHub Actions.
+- [ ] `gui-build-test` pending GitHub Actions.
+- [ ] `protocol-guard` pending GitHub Actions.
+- [ ] `ssd-docs` pending GitHub Actions.
 
 ## Hardware / HIL Checks
 
@@ -30,4 +30,17 @@
 
 ## Results
 
-Pending local execution in this branch.
+Local execution on 2026-07-08 used a detached temporary worktree at `C:\Users\Francisco\AppData\Local\Temp\esc-bldc-stm32-verify-20260708171038` so tracked generated artifacts in the main worktree were not modified.
+
+- PASS: `repo-hygiene` PowerShell validation.
+- PASS: `ssd-docs` PowerShell validation.
+- PASS: firmware `cmake --preset Debug -DESC_BUILD_CODE_DOCS=OFF`.
+- PASS: firmware `cmake --build --preset Debug`.
+- PASS: `dotnet build gui\EscGui\src\Esc.Web\Esc.Web.csproj`.
+- PASS: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj` with 18 passed, 0 failed, 0 skipped.
+
+Notes:
+
+- Firmware build emitted existing unused-parameter warnings in generated HAL/USB sources.
+- GUI commands emitted `NETSDK1057` because the installed local .NET 10 SDK is a preview build.
+- GitHub Actions jobs are not executed locally; they remain pending until the branch is pushed and a PR or matching branch workflow runs.

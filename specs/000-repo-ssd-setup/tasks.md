@@ -10,9 +10,9 @@
 - [x] T006 Add initial `000-repo-ssd-setup` spec package.
 - [x] T007 Add GitHub Actions CI, release, docs workflows, and Dependabot.
 - [x] T008 Update root README with SSD and CI/CD links.
-- [ ] T009 Run local firmware Debug configure/build.
-- [ ] T010 Run local GUI build and tests.
-- [ ] T011 Record verification results.
+- [x] T009 Run local firmware Debug configure/build.
+- [x] T010 Run local GUI build and tests.
+- [x] T011 Record verification results.
 
 ## Notes
 
