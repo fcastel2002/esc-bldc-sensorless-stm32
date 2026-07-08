@@ -1,0 +1,219 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+      - pil_simul
+  pull_request:
+    branches:
+      - main
+      - pil_simul
+
+permissions:
+  contents: read
+
+jobs:
+  repo-hygiene:
+    name: repo-hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate repository hygiene
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $badSpecDirs = @(
+            Get-ChildItem -Path specs -Directory -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -ne "templates" -and $_.Name -notmatch "^\d{3}-[a-z0-9]+(-[a-z0-9]+)*$" }
+          )
+          if ($badSpecDirs.Count -gt 0) {
+            $badSpecDirs | ForEach-Object { Write-Error "Invalid specs directory name: $($_.FullName)" }
+            exit 1
+          }
+
+          $transientLogs = @(git ls-files -- "*hil_udp_log*.jsonl")
+          if ($transientLogs.Count -gt 0) {
+            $transientLogs | ForEach-Object { Write-Error "Transient HIL log should not be committed: $_" }
+            exit 1
+          }
+
+          if (-not (Test-Path AGENTS.md) -or -not (Test-Path CLAUDE.md)) {
+            Write-Error "AGENTS.md and CLAUDE.md must both exist."
+            exit 1
+          }
+
+          $agentsHash = (Get-FileHash AGENTS.md -Algorithm SHA256).Hash
+          $claudeHash = (Get-FileHash CLAUDE.md -Algorithm SHA256).Hash
+          if ($agentsHash -ne $claudeHash) {
+            Write-Error "AGENTS.md and CLAUDE.md are not synchronized."
+            exit 1
+          }
+
+          "Repository hygiene checks passed."
+
+  firmware-debug:
+    name: firmware-debug
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install firmware toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake ninja-build gcc-arm-none-eabi
+
+      - name: Configure firmware Debug
+        working-directory: firmware
+        run: cmake --preset Debug -DESC_BUILD_CODE_DOCS=OFF
+
+      - name: Build firmware Debug
+        working-directory: firmware
+        run: cmake --build --preset Debug
+
+      - name: Upload firmware Debug artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: firmware-debug
+          path: |
+            firmware/build/Debug/*.elf
+            firmware/build/Debug/*.map
+            firmware/build/Debug/*.bin
+            firmware/build/Debug/*.hex
+          if-no-files-found: warn
+          retention-days: 7
+
+  gui-build-test:
+    name: gui-build-test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore GUI
+        run: dotnet restore gui/EscGui/src/Esc.Web/Esc.Web.csproj
+
+      - name: Restore GUI tests
+        run: dotnet restore gui/EscGui/tests/Esc.Tests/Esc.Tests.csproj
+
+      - name: Build GUI
+        run: dotnet build gui/EscGui/src/Esc.Web/Esc.Web.csproj --no-restore
+
+      - name: Test GUI
+        run: dotnet test gui/EscGui/tests/Esc.Tests/Esc.Tests.csproj --no-restore --verbosity normal
+
+  protocol-guard:
+    name: protocol-guard
+    runs-on: ubuntu-latest
+    env:
+      BEFORE_SHA: ${{ github.event.before }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Validate protocol change coverage
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          if ($env:GITHUB_EVENT_NAME -eq "pull_request") {
+            git fetch origin $env:GITHUB_BASE_REF --depth=1
+            $changed = @(git diff --name-only "origin/$($env:GITHUB_BASE_REF)...HEAD")
+          } elseif (-not [string]::IsNullOrWhiteSpace($env:BEFORE_SHA) -and $env:BEFORE_SHA -notmatch "^0+$") {
+            $changed = @(git diff --name-only "$($env:BEFORE_SHA)..HEAD")
+          } else {
+            $parent = git rev-parse HEAD^ 2>$null
+            if ($LASTEXITCODE -eq 0) {
+              $changed = @(git diff --name-only "$parent..HEAD")
+            } else {
+              $changed = @(git ls-tree -r --name-only HEAD)
+            }
+          }
+
+          $protocolCodeChanged = @(
+            $changed | Where-Object {
+              $_ -match "^firmware/Core/.*/comm[^/]*" -or
+              $_ -match "^gui/EscGui/src/Esc\.Protocol/"
+            }
+          )
+
+          if ($protocolCodeChanged.Count -eq 0) {
+            "No protocol implementation changes detected."
+            exit 0
+          }
+
+          $protocolDocChanged = @(
+            $changed | Where-Object {
+              $_ -match "^firmware/COMM_PROTOCOL\.md$" -or
+              $_ -match "^docs/architecture/protocol-ownership\.md$" -or
+              $_ -match "^specs/.*/(spec|test-plan|changelog)\.md$"
+            }
+          )
+
+          $protocolTestChanged = @(
+            $changed | Where-Object {
+              $_ -match "^gui/EscGui/tests/Esc\.Tests/.*Protocol.*\.cs$"
+            }
+          )
+
+          $missing = @()
+          if ($protocolDocChanged.Count -eq 0) {
+            $missing += "protocol documentation"
+          }
+          if ($protocolTestChanged.Count -eq 0) {
+            $missing += "protocol tests"
+          }
+
+          if ($missing.Count -gt 0) {
+            Write-Error "Protocol implementation changed without required updates: $($missing -join ', ')."
+            Write-Error "Changed protocol implementation files:"
+            $protocolCodeChanged | ForEach-Object { Write-Error "  $_" }
+            exit 1
+          }
+
+          "Protocol implementation changes include documentation and tests."
+
+  ssd-docs:
+    name: ssd-docs
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Validate SSD feature folders
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          $featureDirs = @(
+            Get-ChildItem -Path specs -Directory -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -ne "templates" }
+          )
+
+          foreach ($dir in $featureDirs) {
+            if ($dir.Name -notmatch "^\d{3}-[a-z0-9]+(-[a-z0-9]+)*$") {
+              Write-Error "Invalid feature spec folder: $($dir.FullName)"
+              exit 1
+            }
+
+            foreach ($requiredFile in @("spec.md", "tasks.md", "test-plan.md")) {
+              $path = Join-Path $dir.FullName $requiredFile
+              if (-not (Test-Path $path)) {
+                Write-Error "Missing required SSD file: $path"
+                exit 1
+              }
+            }
+          }
+
+          "SSD docs checks passed."
