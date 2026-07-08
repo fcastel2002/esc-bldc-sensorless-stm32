@@ -6,4 +6,5 @@
 - Added: documentation indexes for build/test, CI/CD, repo map, and protocol ownership.
 - Added: synchronized `CLAUDE.md` and subproject `AGENTS.md` files.
 - Added: GitHub Actions CI/CD workflows and Dependabot configuration.
-- Pending: README links and local verification results.
+- Added: root README links to docs, SSD, CI/CD, and protocol ownership.
+- Pending: local verification results.
