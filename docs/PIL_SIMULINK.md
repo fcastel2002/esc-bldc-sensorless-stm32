@@ -2,6 +2,8 @@
 
 Este flujo deja en Simulink la planta, el ESC y la conmutacion del BLDC. El MCU fisico se usa para validar el controlador de velocidad y, mas adelante, el observador o generador de trayectorias. En esta arquitectura el MCU no recibe cruces por cero ni conoce el paso de conmutacion: solo recibe velocidad simulada como realimentacion y devuelve el PWM logico calculado por el controlador.
 
+El modelo selecciona el sector six-step a partir de la posicion mecanica ideal del rotor: `theta_e = mod(2 * theta_m, 2*pi)`. Los dos pares de polos coinciden con el bloque BLDC y el offset electrico inicial es cero. Es una abstraccion de simulacion; no representa una estrategia aplicable al STM32 sin sensor de posicion.
+
 Simulink no abre el HID directamente. Envia UDP al bridge de la GUI en `127.0.0.1:5055`, y el bridge traduce esas entradas a frames binarios `HIL_*` hacia el MCU.
 
 ## Entrada minima desde Simulink
@@ -126,11 +128,16 @@ y guarda en workspace:
 | `hil_mcu_duty` | `pwm_command / HIL PWM Full Scale`, saturado entre `0` y `1`. |
 | `hil_sim_pi_duty` | Duty calculado por un PI local simple, solo como referencia de comparacion. |
 | `hil_mcu_packet_valid` | `1` cuando se recibio un paquete `ok,...` completo. |
+| `motor_rpm` | Velocidad mecanica real de la planta, en rpm. |
 | `six_step_dsw` | Vector de seis comandos que entra al inversor promedio. |
-| `six_step_rpm_ref` | Rampa open-loop que usa el generador de sectores del modelo. |
-| `six_step_fe_hz` | Frecuencia electrica de esa rampa. |
-| `six_step_sector` | Sector six-step activo. Si queda clavado, las tensiones tambien quedan clavadas. |
+| `six_step_sector` | Sector six-step activo (`1` a `6`); vale `0` cuando el drive esta deshabilitado. |
 
-El duty que entra al bloque de conmutacion six-step viene del PWM del MCU cuando el paquete es valido. Si no hay respuesta UDP valida, el modelo usa `HIL Fallback Duty` para no ocultar el problema con un PI local saturado. La senal pasa por `HIL Duty Delay` con `Ts = 20 ms`, que evita lazos algebraicos y representa el retardo discreto del ciclo Simulink-bridge-MCU.
+El duty que entra al conmutador ideal viene del PWM del MCU cuando el paquete es valido. Si no hay respuesta UDP valida, el modelo usa `HIL Fallback Duty` (`0.3`) para no ocultar el problema con un PI local saturado. La senal pasa por `HIL Duty Delay` con `Ts = 20 ms`, que evita lazos algebraicos y representa el retardo discreto del ciclo Simulink-bridge-MCU.
 
-Importante: en esta arquitectura HIL el MCU solo devuelve el PWM logico del PI. La conmutacion/sector sigue quedando del lado de Simulink. Por eso, si la velocidad aparece sinusoidal u oscilante, revisar primero `six_step_sector`, `six_step_dsw` y la alineacion entre el sector aplicado y el angulo del rotor.
+El interruptor manual del modelo alimenta `enable`. Por defecto selecciona `1` y habilita el drive local; al seleccionar `0`, el conmutador entrega `Dsw = [0 0 0 0 0 0]`. La rama BEMF de resistencias, sensores de fase y comparadores ya no participa en el control. Se conserva la medicion de tension de linea y sus scopes.
+
+Importante: en esta arquitectura HIL el MCU solo devuelve el PWM logico del PI. La conmutacion/sector sigue quedando del lado de Simulink y no depende de `target_rpm`, del paquete UDP ni de cruces por cero. Si la velocidad aparece sinusoidal u oscilante, revisar primero `six_step_sector`, `six_step_dsw` y la alineacion entre el sector aplicado y el angulo del rotor.
+
+## Verificacion rapida
+
+Ejecutar una simulacion finita con el interruptor en `enable=1`. Sin respuesta UDP, `hil_mcu_packet_valid` debe quedar en cero, el duty debe usar `0.3`, `six_step_sector` debe recorrer `1` a `6` y la velocidad debe salir de reposo. Al seleccionar `enable=0`, `six_step_dsw` debe ser nulo y el accionamiento debe detenerse. Con una respuesta MCU valida, `hil_mcu_duty` reemplaza el fallback y los cuatro logs `hil_*` se mantienen disponibles.

@@ -1,10 +1,10 @@
 function configure_hil_udp_receive()
-%CONFIGURE_HIL_UDP_RECEIVE Add the HIL UDP receive and PI wiring to sim_motor.
+%CONFIGURE_HIL_UDP_RECEIVE Configure HIL UDP and ideal rotor commutation.
 %
 % The model sends simulated speed to the GUI bridge/proxy and receives the
 % decoded MCU HIL output packet back as ASCII CSV. The parsed PWM command is
-% used as inverter duty. If no valid packet is available, the plant uses a
-% conservative fixed duty while the local PI is only logged as a reference.
+% used as inverter duty. Sector selection is local to Simulink and follows
+% the ideal mechanical rotor position, not a time ramp or BEMF crossings.
 
 modelDir = fileparts(mfilename("fullpath"));
 modelPath = fullfile(modelDir, "sim_motor.mdl");
@@ -13,7 +13,6 @@ mdl = "sim_motor";
 udpTargetPort = "5057";      % proxy/logger default; use 5055 to bypass it
 simulinkLocalPort = "5058";  % fixed source/receive port for UDP responses
 hilSampleTime = "0.02";      % below the 50 ms firmware HIL timeout
-sixStepSampleTime = "1e-3";  % matches the Ts input used by six_step_ramp_rt
 
 if bdIsLoaded(mdl)
     close_system(mdl, 0);
@@ -34,7 +33,7 @@ counter = mdl + "/" + sprintf("Counter\nFree-Running");
 set_param(counter, "tsamp", hilSampleTime);
 
 udpReceive = mdl + "/UDP Receive MCU";
-replaceBlock("instrumentlib/UDP Receive", udpReceive, [1245 175 1375 230]);
+ensureBlock("instrumentlib/UDP Receive", udpReceive, [1245 175 1375 230]);
 set_param(udpReceive, ...
     "LocalAddress", "0.0.0.0", ...
     "LocalPort", simulinkLocalPort, ...
@@ -49,54 +48,46 @@ set_param(udpReceive, ...
     "Timeout", "0.001");
 
 parser = mdl + "/Parse MCU UDP PI";
-replaceBlock("simulink/User-Defined Functions/MATLAB Function", parser, [835 200 1045 335]);
+ensureBlock("simulink/User-Defined Functions/MATLAB Function", parser, [835 200 1045 335]);
 setMatlabFunctionScript(parser, parserScript());
 set_param(parser, "SystemSampleTime", hilSampleTime);
 
 dutyDelay = mdl + "/HIL Duty Delay";
-replaceBlock("simulink/Discrete/Unit Delay", dutyDelay, [1085 188 1120 222]);
+ensureBlock("simulink/Discrete/Unit Delay", dutyDelay, [1085 188 1120 222]);
 set_param(dutyDelay, ...
     "SampleTime", hilSampleTime, ...
     "InitialCondition", "0.3");
 
 speedSampler = mdl + "/HIL Speed ZOH";
-replaceBlock("simulink/Discrete/Zero-Order Hold", speedSampler, [755 257 790 293]);
+ensureBlock("simulink/Discrete/Zero-Order Hold", speedSampler, [755 257 790 293]);
 set_param(speedSampler, "SampleTime", hilSampleTime);
 
 pwmFullScale = mdl + "/HIL PWM Full Scale";
-replaceBlock("simulink/Sources/Constant", pwmFullScale, [755 315 800 345]);
+ensureBlock("simulink/Sources/Constant", pwmFullScale, [755 315 800 345]);
 set_param(pwmFullScale, ...
     "Value", "2000", ...
     "SampleTime", hilSampleTime);
 
 fallbackDuty = mdl + "/HIL Fallback Duty";
-replaceBlock("simulink/Sources/Constant", fallbackDuty, [755 370 800 400]);
+ensureBlock("simulink/Sources/Constant", fallbackDuty, [755 370 800 400]);
 set_param(fallbackDuty, ...
     "Value", "0.3", ...
     "SampleTime", hilSampleTime);
 
 udpStatusTerminator = mdl + "/UDP Receive Status Terminator";
-replaceBlock("simulink/Sinks/Terminator", udpStatusTerminator, [1415 206 1435 226]);
-
-legacyDutyTerminator = mdl + "/Legacy Duty Terminator";
-replaceBlock("simulink/Sinks/Terminator", legacyDutyTerminator, [-425 -82 -405 -62]);
+ensureBlock("simulink/Sinks/Terminator", udpStatusTerminator, [1415 206 1435 226]);
 
 addSink(mdl + "/MCU Packet To Workspace", "hil_mcu_packet", [1110 214 1240 246]);
 addSink(mdl + "/MCU Duty To Workspace", "hil_mcu_duty", [1110 254 1240 286]);
 addSink(mdl + "/Sim PI Duty To Workspace", "hil_sim_pi_duty", [1110 294 1240 326]);
 addSink(mdl + "/MCU Packet Valid To Workspace", "hil_mcu_packet_valid", [1110 334 1240 366]);
 addSink(mdl + "/SixStep Dsw To Workspace", "six_step_dsw", [205 -95 335 -63]);
-addSink(mdl + "/SixStep RpmRef To Workspace", "six_step_rpm_ref", [205 -55 335 -23]);
-addSink(mdl + "/SixStep FeHz To Workspace", "six_step_fe_hz", [205 -15 335 17]);
 addSink(mdl + "/SixStep Sector To Workspace", "six_step_sector", [205 25 335 57]);
-
-sixStep = mdl + "/MATLAB Function";
-set_param(sixStep, "SystemSampleTime", sixStepSampleTime);
-disconnectInport(sixStep, 2);
+motorRpmLog = mdl + "/Motor RPM To Workspace";
+addSink(motorRpmLog, "motor_rpm", [970 -5 1100 27]);
 
 connect(udpReceive, 1, parser, 1);
 connect(udpReceive, 2, udpStatusTerminator, 1);
-connect(mdl + "/Constant3", 1, legacyDutyTerminator, 1);
 connect(mdl + "/Constant5", 1, parser, 2);
 connect(mdl + "/" + sprintf("PS-Simulink\nConverter"), 1, speedSampler, 1);
 connect(speedSampler, 1, parser, 3);
@@ -104,43 +95,30 @@ connect(mdl + "/Manual Switch", 1, parser, 4);
 connect(pwmFullScale, 1, parser, 5);
 connect(fallbackDuty, 1, parser, 6);
 connect(parser, 1, dutyDelay, 1);
-connect(dutyDelay, 1, sixStep, 2);
 connect(parser, 2, mdl + "/MCU Packet To Workspace", 1);
 connect(parser, 3, mdl + "/MCU Duty To Workspace", 1);
 connect(parser, 4, mdl + "/Sim PI Duty To Workspace", 1);
 connect(parser, 5, mdl + "/MCU Packet Valid To Workspace", 1);
-connectBranch(sixStep, 1, mdl + "/SixStep Dsw To Workspace", 1);
-connect(sixStep, 2, mdl + "/SixStep RpmRef To Workspace", 1);
-connect(sixStep, 3, mdl + "/SixStep FeHz To Workspace", 1);
-connect(sixStep, 4, mdl + "/SixStep Sector To Workspace", 1);
-
-deleteDanglingSignalLines([
-    mdl + "/Constant5"
-    mdl + "/Manual Switch"
-    mdl + "/HIL Speed ZOH"
-    mdl + "/HIL PWM Full Scale"
-    mdl + "/HIL Fallback Duty"
-    mdl + "/Parse MCU UDP PI"
-    ]);
+connect(mdl + "/Angular Velocity Conversion", 1, motorRpmLog, 1);
+configureIdealCommutator();
 
 save_system(mdl);
-fprintf("Updated %s with UDP receive, MCU packet parser, and PI duty loop.\n", modelPath);
+fprintf("Updated %s with HIL UDP, MCU duty selection, and ideal rotor commutation.\n", modelPath);
 
-    function replaceBlock(source, destination, position)
-        if blockExists(destination)
-            delete_block(destination);
+    function ensureBlock(source, destination, position)
+        if ~blockExists(destination)
+            add_block(source, destination, "Position", position);
         end
-        add_block(source, destination, "Position", position);
     end
 
     function addSink(path, variableName, position)
-        if blockExists(path)
-            delete_block(path);
+        if ~blockExists(path)
+            add_block("simulink/Sinks/To Workspace", path, ...
+                "Position", position, ...
+                "SaveFormat", "Array");
         end
-        add_block("simulink/Sinks/To Workspace", path, ...
-            "Position", position, ...
+        set_param(path, ...
             "VariableName", variableName, ...
-            "SaveFormat", "Array", ...
             "MaxDataPoints", "5000");
     end
 
@@ -185,29 +163,221 @@ fprintf("Updated %s with UDP receive, MCU packet parser, and PI duty loop.\n", m
         chart.Script = scriptText;
     end
 
-    function deleteDanglingSignalLines(sourceBlocks)
+    function configureIdealCommutator()
+        legacyCommutator = mdl + "/MATLAB Function";
+        commutator = mdl + "/Ideal Six-Step Commutator";
+        dswLog = mdl + "/SixStep Dsw To Workspace";
+        sectorLog = mdl + "/SixStep Sector To Workspace";
+
+        % Remove all legacy inputs before Stateflow changes the function
+        % signature. In particular, target_rpm remains connected to the HIL PI
+        % parser but no longer selects the inverter sector.
+        disconnectAllInports(legacyCommutator);
+        disconnectAllInports(commutator);
+        disconnectInport(sectorLog, 1);
+        deleteBlockIfExists(mdl + "/SixStep RpmRef To Workspace");
+        deleteBlockIfExists(mdl + "/SixStep FeHz To Workspace");
+        deleteBlockIfExists(mdl + "/Constant4");
+        deleteBlockIfExists(mdl + "/Constant6");
+
+        if blockExists(commutator)
+            deleteBlockIfExists(legacyCommutator);
+            setMatlabFunctionScript(commutator, commutatorScript());
+        elseif blockExists(legacyCommutator)
+            setMatlabFunctionScript(legacyCommutator, commutatorScript());
+            set_param(legacyCommutator, "Name", "Ideal Six-Step Commutator");
+        else
+            add_block("simulink/User-Defined Functions/MATLAB Function", ...
+                commutator, "Position", [-315 -62 -190 -3]);
+            setMatlabFunctionScript(commutator, commutatorScript());
+        end
+
+        % The angle source is a Simscape rotational position measurement. State
+        % its physical unit at the Simulink boundary and sample it at the
+        % model's existing 1 ms maximum step; this is position-based, not a
+        % temporal commutation ramp.
+        angleConverter = mdl + "/" + sprintf("PS-Simulink\nConverter1");
+        set_param(angleConverter, "Unit", "rad");
+        set_param(commutator, "SystemSampleTime", "1e-3");
+
+        % Upper switch input is 0 and lower input is explicitly 1. In a Manual
+        % Switch, CurrentSetting=0 selects the lower input, so local drive is
+        % enabled by default while an operator can select the upper 0 input.
+        set_param(mdl + "/Zero", "Value", "0");
+        set_param(mdl + "/Zero1", "Value", "1");
+        set_param(mdl + "/Manual Switch", "CurrentSetting", "0");
+
+        % Position-based commutation takes angle, HIL-selected duty, and enable.
+        connect(angleConverter, 1, commutator, 1);
+        connect(mdl + "/HIL Duty Delay", 1, commutator, 2);
+        connect(mdl + "/Manual Switch", 1, commutator, 3);
+        connect(commutator, 1, mdl + "/BLDC Average-Value Inverter", 1);
+        connectBranch(commutator, 1, dswLog, 1);
+        connect(commutator, 2, sectorLog, 1);
+
+        deleteBemfBranch();
+        deleteDanglingSignalLines();
+    end
+
+    function disconnectAllInports(blockPath)
+        if ~blockExists(blockPath)
+            return;
+        end
+        ports = get_param(blockPath, "PortHandles");
+        for portHandle = reshape(ports.Inport, 1, [])
+            line = get_param(portHandle, "Line");
+            if line ~= -1
+                delete_line(line);
+            end
+        end
+    end
+
+    function deleteBlockIfExists(path)
+        if blockExists(path)
+            delete_block(path);
+        end
+    end
+
+    function deleteBemfBranch()
+        bemfBlocks = [
+            mdl + "/" + sprintf("Compare\nTo Zero")
+            mdl + "/" + sprintf("Compare\nTo Zero1")
+            mdl + "/" + sprintf("Compare\nTo Zero2")
+            mdl + "/" + sprintf("PS-Simulink\nConverter3")
+            mdl + "/" + sprintf("PS-Simulink\nConverter4")
+            mdl + "/" + sprintf("PS-Simulink\nConverter5")
+            mdl + "/Voltage Sensor"
+            mdl + "/Voltage Sensor1"
+            mdl + "/Voltage Sensor2"
+            mdl + "/Resistor"
+            mdl + "/Resistor1"
+            mdl + "/Resistor2"
+            ];
+
+        for blockPath = bemfBlocks'
+            deleteBlockIfExists(blockPath);
+        end
+
+        % The neutral-voltage sum/gain only supported the removed BEMF branch.
+        deleteBlockIfExists(mdl + "/Sum");
+        deleteBlockIfExists(mdl + "/Gain");
+        rewireLineVoltageMeasurement();
+        deleteBemfOrphanConnections();
+    end
+
+    function rewireLineVoltageMeasurement()
+        source = mdl + "/" + sprintf("Controlled Voltage Source\n(Three-Phase)");
+        motor = mdl + "/BLDC";
+        lineSensor = mdl + "/" + sprintf("Line Voltage Sensor\n(Three-Phase)");
+        sourcePorts = get_param(source, "PortHandles");
+        motorPorts = get_param(motor, "PortHandles");
+        sensorPorts = get_param(lineSensor, "PortHandles");
+
+        % Remove every segment of each former phase network so the stale BEMF
+        % branches cannot survive as graphical stubs. Then rebuild the intended
+        % three-terminal node: voltage source, BLDC phase, and line sensor.
+        for phase = 1:3
+            lineHandles = [
+                get_param(sourcePorts.RConn(phase), "Line")
+                get_param(motorPorts.LConn(phase), "Line")
+                get_param(sensorPorts.LConn(phase), "Line")
+                ];
+            for line = unique(lineHandles(:)).'
+                try
+                    if line ~= -1 && ishandle(line)
+                        delete_line(line);
+                    end
+                catch
+                    % Deleting a neighboring physical segment can invalidate
+                    % this handle; the rebuilt node below is authoritative.
+                end
+            end
+        end
+        for phase = 1:3
+            add_line(mdl, sourcePorts.RConn(phase), motorPorts.LConn(phase), "autorouting", "on");
+            add_line(mdl, sourcePorts.RConn(phase), sensorPorts.LConn(phase), "autorouting", "on");
+        end
+    end
+
+    function deleteBemfOrphanConnections()
         lineHandles = find_system(mdl, "FindAll", "on", "Type", "Line");
         for lineIndex = 1:numel(lineHandles)
             try
                 lineHandle = lineHandles(lineIndex);
-                if ~ishandle(lineHandle) || strcmp(get_param(lineHandle, "LineType"), "Connection")
+                if ~strcmpi(get_param(lineHandle, "LineType"), "Connection")
+                    continue;
+                end
+
+                points = get_param(lineHandle, "Points");
+                % The deleted BEMF sensors occupied the right-hand column
+                % beginning at x=500, y=160. Their residual graphic segments
+                % have no terminals after the phase nodes are rebuilt.
+                if ~isempty(points) && all(points(:, 1) >= 500) && all(points(:, 2) >= 160)
+                    delete_line(lineHandle);
+                end
+            catch
+                % Ignore stale physical line handles while the BEMF remnants go away.
+            end
+        end
+    end
+
+    function deleteDanglingSignalLines()
+        lineHandles = find_system(mdl, "FindAll", "on", "Type", "Line");
+        for lineIndex = 1:numel(lineHandles)
+            try
+                lineHandle = lineHandles(lineIndex);
+                if ~ishandle(lineHandle) || strcmpi(get_param(lineHandle, "LineType"), "Connection")
                     continue;
                 end
 
                 srcPort = get_param(lineHandle, "SrcPortHandle");
                 dstPorts = get_param(lineHandle, "DstPortHandle");
-                if srcPort == -1 || ~(isempty(dstPorts) || all(dstPorts == -1))
-                    continue;
-                end
-
-                srcBlock = string(get_param(srcPort, "Parent"));
-                if any(srcBlock == sourceBlocks)
+                if srcPort == -1 || isempty(dstPorts) || all(dstPorts == -1)
                     delete_line(lineHandle);
                 end
             catch
-                % Ignore stale line handles while deleting selected dangling branches.
+                % Ignore stale line handles while selected dangling lines are removed.
             end
         end
+    end
+
+    function scriptText = commutatorScript()
+        scriptText = strjoin([
+            "function [Dsw, sector] = ideal_six_step_commutator(theta_m, duty, enable)"
+            "%#codegen"
+            ""
+            "% BLDC block has two pole pairs. theta_m arrives in radians."
+            "pole_pairs = 2.0;"
+            "electrical_offset = 0.0;"
+            "Dsw = zeros(1, 6);"
+            "sector = 0.0;"
+            ""
+            "if enable == 0"
+            "    return;"
+            "end"
+            ""
+            "d = min(1.0, max(0.0, double(duty)));"
+            "theta_e = mod(pole_pairs * double(theta_m) + electrical_offset, 2.0*pi);"
+            "sector = floor(theta_e / (2.0*pi/6.0)) + 1.0;"
+            "if sector > 6.0"
+            "    sector = 6.0;"
+            "end"
+            ""
+            "switch sector"
+            "    case 1"
+            "        Dsw = [d 0 0 1 0 0]; % A+ B-"
+            "    case 2"
+            "        Dsw = [d 0 0 0 0 1]; % A+ C-"
+            "    case 3"
+            "        Dsw = [0 0 d 0 0 1]; % B+ C-"
+            "    case 4"
+            "        Dsw = [0 1 d 0 0 0]; % B+ A-"
+            "    case 5"
+            "        Dsw = [0 1 0 0 d 0]; % C+ A-"
+            "    otherwise"
+            "        Dsw = [0 0 0 1 d 0]; % C+ B-"
+            "end"
+            ], newline);
     end
 
     function scriptText = parserScript()
@@ -246,10 +416,17 @@ fprintf("Updated %s with UDP receive, MCU packet parser, and PI duty loop.\n", m
             ""
             "raw = uint8(bytes(:));"
             "n = numel(raw);"
-            "if n >= 4"
-            "    is_ok = (raw(1) == 111 || raw(1) == 79) && ... % o/O"
-            "            (raw(2) == 107 || raw(2) == 75) && ... % k/K"
-            "            raw(3) == 44;"
+            "start = 1;"
+            "% UDP Receive prepends the datagram length to uint8 payloads."
+            "if n >= 5 && raw(1) ~= 111 && raw(1) ~= 79 && ..."
+            "        (raw(2) == 111 || raw(2) == 79) && ..."
+            "        (raw(3) == 107 || raw(3) == 75) && raw(4) == 44"
+            "    start = 2;"
+            "end"
+            "if n - start + 1 >= 4"
+            "    is_ok = (raw(start) == 111 || raw(start) == 79) && ... % o/O"
+            "            (raw(start + 1) == 107 || raw(start + 1) == 75) && ... % k/K"
+            "            raw(start + 2) == 44;"
             "    if is_ok"
             "        index = 1;"
             "        value = 0.0;"
@@ -257,7 +434,7 @@ fprintf("Updated %s with UDP receive, MCU packet parser, and PI duty loop.\n", m
             "        fraction = 0.1;"
             "        in_fraction = false;"
             "        have_digit = false;"
-            "        for k = 4:n"
+            "        for k = start + 3:n"
             "            c = raw(k);"
             "            if c == 0 || c == 10 || c == 13"
             "                break;"
