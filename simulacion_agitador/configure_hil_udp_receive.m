@@ -101,6 +101,7 @@ connect(parser, 4, mdl + "/Sim PI Duty To Workspace", 1);
 connect(parser, 5, mdl + "/MCU Packet Valid To Workspace", 1);
 connect(mdl + "/Angular Velocity Conversion", 1, motorRpmLog, 1);
 configureIdealCommutator();
+configureFixedStepSolver();
 
 save_system(mdl);
 fprintf("Updated %s with HIL UDP, MCU duty selection, and ideal rotor commutation.\n", modelPath);
@@ -378,6 +379,12 @@ fprintf("Updated %s with HIL UDP, MCU duty selection, and ideal rotor commutatio
             "        Dsw = [0 0 d 0 0 1]; % B+ C-"
             "end"
             ], newline);
+    end
+
+    function configureFixedStepSolver()
+        set_param(mdl, "Solver", "FixedStepAuto");
+        set_param(mdl, "FixedStep", hilSampleTime);
+        set_param(mdl, "MaxStep", hilSampleTime);
     end
 
     function scriptText = parserScript()

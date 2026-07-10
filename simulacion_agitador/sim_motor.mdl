@@ -912,7 +912,7 @@ __MWOPC_PART_BEGIN__ /simulink/configSet0.xml
         <P Name="StopTime" Class="char">inf</P>
         <P Name="AbsTol" Class="char">1e-3</P>
         <P Name="AutoScaleAbsTol" Class="char">off</P>
-        <P Name="FixedStep" Class="char">auto</P>
+        <P Name="FixedStep" Class="char">0.02</P>
         <P Name="InitialStep" Class="char">auto</P>
         <P Name="MaxOrder" Class="double">5.0</P>
         <P Name="ZcThreshold" Class="char">auto</P>
@@ -920,14 +920,14 @@ __MWOPC_PART_BEGIN__ /simulink/configSet0.xml
         <P Name="MaxConsecutiveZCs" Class="char">1000</P>
         <P Name="ExtrapolationOrder" Class="double">4.0</P>
         <P Name="NumberNewtonIterations" Class="double">1.0</P>
-        <P Name="MaxStep" Class="char">1e-3</P>
+        <P Name="MaxStep" Class="char">0.02</P>
         <P Name="MinStep" Class="char">auto</P>
         <P Name="MaxConsecutiveMinStep" Class="char">1</P>
         <P Name="RelTol" Class="char">1e-3</P>
         <P Name="EnableMultiTasking" Class="char">off</P>
         <P Name="AllowMultiTaskInputOutput" Class="char">off</P>
         <P Name="ConcurrentTasks" Class="char">off</P>
-        <P Name="SolverName" Class="char">VariableStepAuto</P>
+        <P Name="SolverName" Class="char">FixedStepAuto</P>
         <P Name="SolverJacobianMethodControl" Class="char">auto</P>
         <P Name="DaesscMode" Class="char">auto</P>
         <P Name="StateRefinementMethod" Class="char">solver-interpolation</P>
