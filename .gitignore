@@ -1,4 +1,4 @@
-# IDE and workspace metadata
+﻿# IDE and workspace metadata
 .metadata/
 .idea/
 .vscode/
@@ -6,6 +6,10 @@
 
 # Logs
 *.log
+
+# Simulink auto-generated backup files
+*.mdl.original
+simulacion_agitador/simulacion_agitador/
 
 # CMake and embedded build outputs
 CMakeFiles/
