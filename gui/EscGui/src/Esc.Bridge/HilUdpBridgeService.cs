@@ -13,7 +13,7 @@ public sealed class HilUdpBridgeService : BackgroundService
 {
     public const int DefaultPort = 5055;
     private const int MaxDrainPackets = 256;
-    private const double HilOutputPollPeriodMs = 100;
+    private const double HilOutputPollPeriodMs = 20;
     private const double ActiveSenderLeaseMs = 250;
 
     private readonly EscBridgeService _bridge;
