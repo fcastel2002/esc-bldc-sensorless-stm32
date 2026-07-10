@@ -147,6 +147,10 @@ In `HIL_SIM`, the MCU is blind to ESC commutation and real TIM2 input-capture ev
 | 4..5 | `int16` | load torque, reserved for future use |
 | 6 | `uint8` | input flags |
 | 7 | `uint8` | enable: `0=stop`, nonzero=start/update |
+| 8..11 | `uint32` | optional validated-input `run_id` |
+| 12..15 | `uint32` | optional validated-input `source_seq` |
+
+The legacy payload is exactly 8 bytes and remains supported. The validated payload is exactly 16 bytes; its first 8 bytes are identical to the legacy payload. Other payload lengths are rejected. For a legacy input, validation provenance reports `run_id=0` and `source_seq=0`.
 
 `HIL_GET_OUTPUTS` payload:
 
@@ -161,6 +165,15 @@ In `HIL_SIM`, the MCU is blind to ESC commutation and real TIM2 input-capture ev
 | 12 | `int8` | commutation step |
 | 13 | `uint8` | HIL flags |
 | 14 | `uint8` | HIL timeout |
+| 15..18 | `uint32` | accepted `run_id` |
+| 19..22 | `uint32` | accepted `source_seq` |
+| 23..26 | `uint32` | output generation observed when that input was accepted |
+| 27..30 | `uint32` | `run_id` used for the current logical PWM |
+| 31..34 | `uint32` | `source_seq` used for the current logical PWM |
+| 35..38 | `uint32` | current logical-PWM output generation |
+| 39..42 | `uint32` | `HAL_GetTick()` when that logical PWM was updated |
+
+`HIL_GET_OUTPUTS` now has a 43-byte payload. Bytes `0..14` retain their legacy layout exactly. The extension is an interrupt-safe snapshot: `accepted_*` identifies the most recently accepted HIL input and the controller output generation already present at acceptance, while `applied_*`, `output_generation`, and `pwm_update_tick` identify the input and control update that produced the current logical PWM. `HIL_START` resets the PI dynamic state and all validation provenance to zero; each HIL PI update increments `output_generation` and records its tick.
 
 The ESC Bridge exposes a UDP loopback bridge for Simulink on `127.0.0.1:5055`. Send ASCII CSV:
 
@@ -172,15 +185,27 @@ The bridge also accepts command-prefixed packets:
 
 `PIL,seq,speed_rpm,enable`
 
+For offline controller validation, the bridge accepts:
+
+`PILV,run_id,seq,speed_rpm,enable`
+
+`PILV` carries its `run_id` and `seq` in the validated 16-byte `HIL_SET_INPUTS` payload. Validation inputs are not UDP-coalesced, and the bridge performs a fresh `HIL_GET_OUTPUTS` poll after each accepted input.
+
 For compatibility with older HIL blocks, the bridge still accepts:
 
 `seq,speed_rpm,reserved,load_torque,flags,enable`
 
 The `reserved` field is ignored and no zero-crossing or commutation event is generated. The GUI exposes a `/pil` page that shows recent UDP frames from Simulink and recent binary HID frames exchanged with the MCU for PIL/HIL commands.
 
-The response is ASCII CSV:
+The legacy response prefix is ASCII CSV:
 
 `ok,seq,tick_ms,app_state,mode,setpoint_rpm,measured_rpm,pwm_command,commutation_step,flags,timeout,rx_frames,lost_frames,effective_hz,avg_rtt_ms,jitter_ms`
+
+Responses to `PILV` retain that numeric prefix and append:
+
+`input_run_id,accepted_run_id,accepted_source_seq,accepted_generation,applied_run_id,applied_source_seq,output_generation,pwm_update_tick_ms,fresh_output,cache_age_ms`
+
+The response `seq` remains the source sequence. `applied_*` and `output_generation` are the authoritative fields for offline matching; response arrival time and the echoed input sequence do not prove which input produced the PWM.
 
 The bridge treats high-rate UDP values as latest-value signals, not as a command
 FIFO. If packets accumulate while the HID transaction is in progress, older

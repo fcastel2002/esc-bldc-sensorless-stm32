@@ -87,6 +87,36 @@ static volatile uint16_t hil_speed_rpm = 0;
 static volatile int16_t  hil_load_torque = 0;
 static volatile uint8_t  hil_flags = 0;
 static volatile uint32_t hil_last_input_tick = 0;
+static volatile uint32_t hil_input_run_id = 0;
+static volatile uint32_t hil_input_source_seq = 0;
+static volatile HilValidationProvenance hil_validation_provenance = {0};
+
+__attribute__((optimize("Os"))) static uint32_t hil_lock(void)
+{
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  return primask;
+}
+
+__attribute__((optimize("Os"))) static void hil_unlock(uint32_t primask)
+{
+  if (primask == 0U) {
+    __enable_irq();
+  }
+}
+
+__attribute__((optimize("Os"))) static void hil_reset_dynamic_state(void)
+{
+  speed_prev_error = 0;
+  speed_measure = 0;
+  speed_error = 0;
+  speed_output = 0;
+  speed_integral = 0.0f;
+  speed_proportional = 0.0f;
+  max_speed_integral = 0.0f;
+  min_speed_integral = 0.0f;
+  diff_speed = 0;
+}
 
 static inline bool hil_mode_active(void)
 {
@@ -338,6 +368,12 @@ __attribute__((optimize("Os"))) void pi_control()
     if (speed_output > max_limit_pwm)
       speed_output = max_limit_pwm;
     bldc_set_pwm((uint16_t)speed_output);
+    if (hil_mode_active()) {
+      hil_validation_provenance.applied_run_id = hil_input_run_id;
+      hil_validation_provenance.applied_source_seq = hil_input_source_seq;
+      hil_validation_provenance.output_generation++;
+      hil_validation_provenance.pwm_update_tick = HAL_GetTick();
+    }
   }
 }
 
@@ -393,40 +429,63 @@ uint8_t control_mode_set(uint8_t mode)
   return 1;
 }
 
-uint8_t hil_start(void)
+__attribute__((optimize("Os"))) uint8_t hil_start(void)
 {
   if (!hil_mode_active()) {
     return 0;
   }
 
+  uint32_t primask = hil_lock();
   PWM_STOP();
   bldc_set_pwm(0);
+  hil_reset_dynamic_state();
+  hil_speed_rpm = 0;
+  hil_load_torque = 0;
+  hil_flags = 0;
+  hil_input_run_id = 0;
+  hil_input_source_seq = 0;
+  hil_validation_provenance = (HilValidationProvenance){0};
   hil_last_input_tick = HAL_GetTick();
   motor_stalled = false;
   consistent_zero_crossing = 1;
   TIM4->PSC = 2;
   TIM4->ARR = 0xFFFF;
   __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, 48000);
-  HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
   app_state = CLOSEDLOOP;
+  HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
+  hil_unlock(primask);
   return 1;
 }
 
-void hil_stop(void)
+__attribute__((optimize("Os"))) void hil_stop(void)
 {
+  uint32_t primask = hil_lock();
   PWM_STOP();
   bldc_set_pwm(0);
   HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
   app_state = IDLE;
+  hil_unlock(primask);
 }
 
-void hil_set_inputs(uint16_t speed_rpm, int16_t load_torque, uint8_t flags)
+__attribute__((optimize("Os"))) void hil_set_inputs(uint16_t speed_rpm,
+                                                      int16_t load_torque,
+                                                      uint8_t flags,
+                                                      uint32_t run_id,
+                                                      uint32_t source_seq)
 {
+  uint32_t primask = hil_lock();
   hil_speed_rpm = speed_rpm;
   hil_load_torque = load_torque;
   hil_flags = flags;
+  hil_input_run_id = run_id;
+  hil_input_source_seq = source_seq;
+  hil_validation_provenance.accepted_run_id = run_id;
+  hil_validation_provenance.accepted_source_seq = source_seq;
+  hil_validation_provenance.accepted_generation =
+      hil_validation_provenance.output_generation;
   hil_last_input_tick = HAL_GetTick();
   consistent_zero_crossing = 1;
+  hil_unlock(primask);
 }
 
 uint8_t hil_is_active(void)
@@ -455,6 +514,18 @@ uint16_t hil_get_pwm_command(void)
 uint8_t hil_get_flags(void)
 {
   return hil_flags;
+}
+
+__attribute__((optimize("Os"))) void
+hil_get_validation_provenance(HilValidationProvenance* provenance)
+{
+  if (provenance == NULL) {
+    return;
+  }
+
+  uint32_t primask = hil_lock();
+  *provenance = hil_validation_provenance;
+  hil_unlock(primask);
 }
 
 uint16_t convert_speed_ticks(uint16_t value, bool to_ticks)

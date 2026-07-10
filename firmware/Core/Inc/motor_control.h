@@ -20,6 +20,16 @@ typedef enum {
   CONTROL_RUNTIME_HIL_SIM = 2,
 } ControlRuntimeMode;
 
+typedef struct {
+  uint32_t accepted_run_id;
+  uint32_t accepted_source_seq;
+  uint32_t accepted_generation;
+  uint32_t applied_run_id;
+  uint32_t applied_source_seq;
+  uint32_t output_generation;
+  uint32_t pwm_update_tick;
+} HilValidationProvenance;
+
 
 
 
@@ -50,12 +60,17 @@ extern uint16_t period_to_pwm(uint16_t period);
 extern uint8_t  control_mode_set(uint8_t mode);
 extern uint8_t  hil_start(void);
 extern void     hil_stop(void);
-extern void     hil_set_inputs(uint16_t speed_rpm, int16_t load_torque, uint8_t flags);
+extern void     hil_set_inputs(uint16_t speed_rpm,
+                               int16_t load_torque,
+                               uint8_t flags,
+                               uint32_t run_id,
+                               uint32_t source_seq);
 extern uint8_t  hil_is_active(void);
 extern uint8_t  hil_has_timeout(void);
 extern uint16_t hil_get_speed_rpm(void);
 extern uint16_t hil_get_pwm_command(void);
 extern uint8_t  hil_get_flags(void);
+extern void     hil_get_validation_provenance(HilValidationProvenance* provenance);
 
 // MACROS PARA MEDICION DE VELOCIDAD
 

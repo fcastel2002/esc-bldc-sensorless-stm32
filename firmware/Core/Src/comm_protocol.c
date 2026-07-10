@@ -29,6 +29,12 @@ static int16_t read_i16_le(const uint8_t* data)
   return (int16_t)read_u16_le(data);
 }
 
+static uint32_t read_u32_le(const uint8_t* data)
+{
+  return (uint32_t)data[0] | ((uint32_t)data[1] << 8) |
+         ((uint32_t)data[2] << 16) | ((uint32_t)data[3] << 24);
+}
+
 static void write_u16_le(uint8_t* data, uint16_t value)
 {
   data[0] = (uint8_t)(value & 0xFFU);
@@ -370,10 +376,11 @@ static uint8_t logging_variable_from_param(uint8_t param, LoggeableVariable* var
   }
 }
 
-static uint8_t execute_request(const uint8_t request[COMM_FRAME_SIZE],
-                               uint16_t payload_len,
-                               uint8_t* payload_out,
-                               uint16_t* payload_out_len)
+__attribute__((optimize("Os"))) static uint8_t
+execute_request(const uint8_t request[COMM_FRAME_SIZE],
+                uint16_t payload_len,
+                uint8_t* payload_out,
+                uint16_t* payload_out_len)
 {
   const uint8_t opcode = request[5];
   const uint8_t param = request[6];
@@ -491,7 +498,7 @@ static uint8_t execute_request(const uint8_t request[COMM_FRAME_SIZE],
     return COMM_STATUS_OK;
 
   case COMM_OPCODE_HIL_SET_INPUTS:
-    if (payload_len != 8U) return COMM_STATUS_BAD_LENGTH;
+    if (payload_len != 8U && payload_len != 16U) return COMM_STATUS_BAD_LENGTH;
     if (!hil_is_active() && payload[7] != 0U) {
       (void)control_mode_set(CONTROL_RUNTIME_HIL_SIM);
       (void)hil_start();
@@ -503,11 +510,14 @@ static uint8_t execute_request(const uint8_t request[COMM_FRAME_SIZE],
     }
     hil_set_inputs(read_u16_le(payload),
                    read_i16_le(&payload[4]),
-                   payload[6]);
+                   payload[6],
+                   payload_len == 16U ? read_u32_le(&payload[8]) : 0U,
+                   payload_len == 16U ? read_u32_le(&payload[12]) : 0U);
     return COMM_STATUS_OK;
 
-  case COMM_OPCODE_HIL_GET_OUTPUTS:
+  case COMM_OPCODE_HIL_GET_OUTPUTS: {
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
+    HilValidationProvenance provenance;
     write_u32_le(&payload_out[0], HAL_GetTick());
     payload_out[4] = (uint8_t)app_state;
     payload_out[5] = (uint8_t)control_runtime_mode;
@@ -517,8 +527,17 @@ static uint8_t execute_request(const uint8_t request[COMM_FRAME_SIZE],
     payload_out[12] = (uint8_t)bldc_get_commutation_step();
     payload_out[13] = hil_get_flags();
     payload_out[14] = hil_has_timeout();
-    *payload_out_len = 15;
+    hil_get_validation_provenance(&provenance);
+    write_u32_le(&payload_out[15], provenance.accepted_run_id);
+    write_u32_le(&payload_out[19], provenance.accepted_source_seq);
+    write_u32_le(&payload_out[23], provenance.accepted_generation);
+    write_u32_le(&payload_out[27], provenance.applied_run_id);
+    write_u32_le(&payload_out[31], provenance.applied_source_seq);
+    write_u32_le(&payload_out[35], provenance.output_generation);
+    write_u32_le(&payload_out[39], provenance.pwm_update_tick);
+    *payload_out_len = 43;
     return COMM_STATUS_OK;
+  }
 
   default:
     return COMM_STATUS_UNKNOWN_OPCODE;
