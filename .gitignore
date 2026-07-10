@@ -7,6 +7,10 @@
 # Logs
 *.log
 
+# Simulink auto-generated backup files
+*.mdl.original
+simulacion_agitador/simulacion_agitador/
+
 # CMake and embedded build outputs
 CMakeFiles/
 CMakeCache.txt
