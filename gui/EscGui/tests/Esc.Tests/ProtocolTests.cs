@@ -75,6 +75,16 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public void ValidatedHilInputsPayloadAppendsRunAndSourceSequence()
+    {
+        byte[] payload = EscProtocol.HilInputsPayload(new HilInputs(1500, -4, 0xA5, true, 0x10203040, 0x50607080));
+
+        Assert.Equal(
+            [0xDC, 0x05, 0x00, 0x00, 0xFC, 0xFF, 0xA5, 0x01, 0x40, 0x30, 0x20, 0x10, 0x80, 0x70, 0x60, 0x50],
+            payload);
+    }
+
+    [Fact]
     public void DecodeHilOutputsReadsResponsePayload()
     {
         byte[] payload = new byte[15];
@@ -95,5 +105,33 @@ public sealed class ProtocolTests
         Assert.Equal(ControlRuntimeMode.HilSim, outputs.Mode);
         Assert.Equal(1800, outputs.MeasuredRpm);
         Assert.Equal(-1, outputs.CommutationStep);
+    }
+
+    [Fact]
+    public void DecodeHilOutputsReadsValidationProvenanceExtension()
+    {
+        byte[] payload = new byte[43];
+        BitConverter.GetBytes(1234u).CopyTo(payload, 0);
+        payload[5] = (byte)ControlRuntimeMode.HilSim;
+        BitConverter.GetBytes((ushort)900).CopyTo(payload, 10);
+        BitConverter.GetBytes(11u).CopyTo(payload, 15);
+        BitConverter.GetBytes(12u).CopyTo(payload, 19);
+        BitConverter.GetBytes(13u).CopyTo(payload, 23);
+        BitConverter.GetBytes(14u).CopyTo(payload, 27);
+        BitConverter.GetBytes(15u).CopyTo(payload, 31);
+        BitConverter.GetBytes(16u).CopyTo(payload, 35);
+        BitConverter.GetBytes(17u).CopyTo(payload, 39);
+
+        byte[] raw = EscProtocol.BuildFrame(4, CommOpcode.HilGetOutputs, 0, payload, CommFrameType.Response, CommStatus.Ok);
+        HilOutputs outputs = EscProtocol.DecodeHilOutputs(EscProtocol.Parse(raw));
+
+        Assert.True(outputs.HasValidationProvenance);
+        Assert.Equal(11u, outputs.AcceptedRunId);
+        Assert.Equal(12u, outputs.AcceptedSourceSequence);
+        Assert.Equal(13u, outputs.AcceptedGeneration);
+        Assert.Equal(14u, outputs.AppliedRunId);
+        Assert.Equal(15u, outputs.AppliedSourceSequence);
+        Assert.Equal(16u, outputs.OutputGeneration);
+        Assert.Equal(17u, outputs.PwmUpdateTickMs);
     }
 }

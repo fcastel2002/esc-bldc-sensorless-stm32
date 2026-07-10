@@ -104,6 +104,22 @@ public sealed class BridgeTests
     }
 
     [Fact]
+    public async Task ValidatedHilInputsPropagateRunAndSourceSequence()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        await bridge.SetModeAsync(ControlMode.SimulinkControl);
+
+        CommandResult result = await bridge.HilSetInputsAsync(new HilInputs(1800, 0, 0, true, 44, 55));
+
+        Assert.True(result.Success);
+        byte[] payload = Assert.Single(transport.RequestPayloads, payload => payload.Length == 16);
+        Assert.Equal(44u, BitConverter.ToUInt32(payload, 8));
+        Assert.Equal(55u, BitConverter.ToUInt32(payload, 12));
+    }
+
+    [Fact]
     public void ConsecutiveIdenticalHilFramesAreCollapsedWithRepeatCount()
     {
         var bridge = CreateBridge();
@@ -220,6 +236,7 @@ public sealed class BridgeTests
         public bool IsOpen { get; private set; }
         public HidDeviceDescriptor? CurrentDevice { get; private set; }
         public List<CommOpcode> RequestedOpcodes { get; } = [];
+        public List<byte[]> RequestPayloads { get; } = [];
 
         public Task OpenAsync(HidDeviceDescriptor descriptor, CancellationToken cancellationToken = default)
         {
@@ -239,6 +256,7 @@ public sealed class BridgeTests
         {
             EscFrame request = EscProtocol.Parse(frame);
             RequestedOpcodes.Add(request.Opcode);
+            RequestPayloads.Add(request.Payload);
 
             byte[] payload = request.Opcode switch
             {

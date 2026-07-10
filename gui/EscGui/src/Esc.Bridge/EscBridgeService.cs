@@ -353,6 +353,16 @@ public sealed class EscBridgeService
         Notify();
     }
 
+    public void ClearHilOutputs()
+    {
+        lock (_stateGate)
+        {
+            _hilStats = _hilStats with { LastOutputs = null };
+        }
+
+        Notify();
+    }
+
     public void RecordHilFrame(
         string direction,
         string transport,

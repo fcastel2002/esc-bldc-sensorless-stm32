@@ -38,6 +38,8 @@
             <span>Enable UDP</span><strong>@BoolText(Snapshot.Hil.LastInputs?.Enable)</strong>
             <span>Velocidad MCU</span><strong>@(Snapshot.Hil.LastOutputs?.MeasuredRpm.ToString() ?? "-") rpm</strong>
             <span>PWM logico</span><strong>@(Snapshot.Hil.LastOutputs?.PwmCommand.ToString() ?? "-")</strong>
+            <span>Seq PWM MCU</span><strong>@(Snapshot.Hil.LastOutputs?.HasValidationProvenance == true ? Snapshot.Hil.LastOutputs.AppliedSourceSequence.ToString() : "-")</strong>
+            <span>Generacion PWM</span><strong>@(Snapshot.Hil.LastOutputs?.HasValidationProvenance == true ? Snapshot.Hil.LastOutputs.OutputGeneration.ToString() : "-")</strong>
             <span>Timeout</span><strong>@BoolText(Snapshot.Hil.LastOutputs?.TimedOut)</strong>
         </div>
     </section>

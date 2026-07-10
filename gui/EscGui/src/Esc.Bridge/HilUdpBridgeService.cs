@@ -19,6 +19,7 @@ public sealed class HilUdpBridgeService : BackgroundService
     private readonly EscBridgeService _bridge;
     private readonly ILogger<HilUdpBridgeService> _logger;
     private readonly HilUdpSenderSession _senderSession = new(ActiveSenderLeaseMs);
+    private readonly HilValidationLogWriter _validationLog = new();
     private readonly Stopwatch _uptime = Stopwatch.StartNew();
     private uint _rxFrames;
     private uint _lostFrames;
@@ -28,6 +29,7 @@ public sealed class HilUdpBridgeService : BackgroundService
     private double? _lastArrivalMs;
     private double? _lastPeriodMs;
     private double _lastHilOutputPollMs = double.NegativeInfinity;
+    private double _lastHilOutputReceivedMs = double.NegativeInfinity;
 
     public HilUdpBridgeService(EscBridgeService bridge, ILogger<HilUdpBridgeService> logger)
     {
@@ -88,6 +90,12 @@ public sealed class HilUdpBridgeService : BackgroundService
             return selected;
         }
 
+        // Validation replay must retain every source sequence for offline matching.
+        if (IsValidationInput(selectedText))
+        {
+            return selected;
+        }
+
         bool selectedAllowed = CanAcceptSender(selected.RemoteEndPoint, selectedKind, selectedText);
         IPEndPoint? preferredSender = WouldSenderTakeOver(selected.RemoteEndPoint, selectedKind, selectedText)
             ? CloneEndPoint(selected.RemoteEndPoint)
@@ -101,6 +109,11 @@ public sealed class HilUdpBridgeService : BackgroundService
             PacketKind nextKind = ClassifyPacket(next.Buffer);
 
             if (nextKind == PacketKind.EmergencyStop)
+            {
+                return next;
+            }
+
+            if (IsValidationInput(nextText))
             {
                 return next;
             }
@@ -217,13 +230,13 @@ public sealed class HilUdpBridgeService : BackgroundService
 
         if (command is "SETPOINT" or "SP" or "SPEED")
         {
-            string response = await HandleSetpointCommandAsync(commandParts, cancellationToken).ConfigureAwait(false);
-            if (response.StartsWith("ok,", StringComparison.OrdinalIgnoreCase))
+            string setpointResponse = await HandleSetpointCommandAsync(commandParts, cancellationToken).ConfigureAwait(false);
+            if (setpointResponse.StartsWith("ok,", StringComparison.OrdinalIgnoreCase))
             {
                 _senderSession.Accept(remoteEndPoint, requestSequence, requestNowMs);
             }
 
-            return response;
+            return setpointResponse;
         }
 
         if (command is "RUN" or "MOTOR_RUN")
@@ -265,6 +278,7 @@ public sealed class HilUdpBridgeService : BackgroundService
             if (started.Success)
             {
                 _senderSession.Accept(remoteEndPoint, requestSequence, requestNowMs);
+                ResetOutputCache();
             }
 
             return started.Success ? "ok,start" : $"err,{started.Message}";
@@ -276,6 +290,7 @@ public sealed class HilUdpBridgeService : BackgroundService
             if (stopped.Success)
             {
                 _senderSession.Release(remoteEndPoint);
+                ResetOutputCache();
             }
 
             return stopped.Success ? "ok,stop" : $"err,{stopped.Message}";
@@ -307,10 +322,14 @@ public sealed class HilUdpBridgeService : BackgroundService
         HilOutputs? outputs = null;
         HilBridgeStats currentStats = _bridge.Snapshot.Hil;
         double nowMs = _uptime.Elapsed.TotalMilliseconds;
-        if (currentStats.LastOutputs is null || nowMs - _lastHilOutputPollMs >= HilOutputPollPeriodMs)
+        bool freshOutput = inputs.HasValidationProvenance ||
+            currentStats.LastOutputs is null ||
+            nowMs - _lastHilOutputPollMs >= HilOutputPollPeriodMs;
+        if (freshOutput)
         {
             outputs = await _bridge.HilGetOutputsAsync(cancellationToken).ConfigureAwait(false);
             _lastHilOutputPollMs = _uptime.Elapsed.TotalMilliseconds;
+            _lastHilOutputReceivedMs = _lastHilOutputPollMs;
         }
 
         roundTrip.Stop();
@@ -318,14 +337,21 @@ public sealed class HilUdpBridgeService : BackgroundService
 
         HilBridgeStats stats = _bridge.Snapshot.Hil;
         outputs ??= stats.LastOutputs;
+        double cacheAgeMs = freshOutput || double.IsNegativeInfinity(_lastHilOutputReceivedMs)
+            ? 0
+            : Math.Max(0, _uptime.Elapsed.TotalMilliseconds - _lastHilOutputReceivedMs);
+        string response;
         if (outputs is null)
         {
-            return BuildHilInputResponse(sequence, inputs, stats);
+            response = BuildHilInputResponse(sequence, inputs, stats, false, cacheAgeMs);
+        }
+        else
+        {
+            response = BuildHilOutputResponse(sequence, inputs, stats, outputs, freshOutput, cacheAgeMs);
         }
 
-        return string.Create(
-            CultureInfo.InvariantCulture,
-            $"ok,{sequence},{outputs.TargetTickMs},{outputs.AppState},{(byte)outputs.Mode},{outputs.SetpointRpm},{outputs.MeasuredRpm},{outputs.PwmCommand},{outputs.CommutationStep},{outputs.Flags},{(outputs.TimedOut ? 1 : 0)},{stats.RxFrames},{stats.LostFrames},{stats.EffectiveRateHz:0.###},{stats.AverageRoundTripMs:0.###},{stats.JitterMs:0.###}");
+        _validationLog.Append(inputs, sequence, text, response, outputs, freshOutput, cacheAgeMs);
+        return response;
     }
 
     private async Task<string> HandleSetpointCommandAsync(string[] parts, CancellationToken cancellationToken)
@@ -364,13 +390,37 @@ public sealed class HilUdpBridgeService : BackgroundService
             $"ok,{command},{sequence},{status?.SpeedSetpointRpm ?? 0},{status?.ActualSpeedRpm ?? 0},{status?.AppState ?? 0}");
     }
 
-    private string BuildHilInputResponse(uint sequence, HilInputs inputs, HilBridgeStats stats)
+    private string BuildHilInputResponse(
+        uint sequence,
+        HilInputs inputs,
+        HilBridgeStats stats,
+        bool freshOutput,
+        double cacheAgeMs)
     {
         EscStatus? status = _bridge.Snapshot.Status;
         byte mode = inputs.Enable ? (byte)ControlRuntimeMode.HilSim : (byte)ControlRuntimeMode.Normal;
-        return string.Create(
+        string legacyResponse = string.Create(
             CultureInfo.InvariantCulture,
             $"ok,{sequence},0,{status?.AppState ?? 0},{mode},{status?.SpeedSetpointRpm ?? 0},{inputs.SpeedRpm},0,0,{inputs.Flags},0,{stats.RxFrames},{stats.LostFrames},{stats.EffectiveRateHz:0.###},{stats.AverageRoundTripMs:0.###},{stats.JitterMs:0.###}");
+        return inputs.HasValidationProvenance
+            ? string.Create(CultureInfo.InvariantCulture, $"{legacyResponse},{inputs.RunId!.Value},0,0,0,0,0,0,0,{(freshOutput ? 1 : 0)},{cacheAgeMs:0.###}")
+            : legacyResponse;
+    }
+
+    private static string BuildHilOutputResponse(
+        uint sequence,
+        HilInputs inputs,
+        HilBridgeStats stats,
+        HilOutputs outputs,
+        bool freshOutput,
+        double cacheAgeMs)
+    {
+        string legacyResponse = string.Create(
+            CultureInfo.InvariantCulture,
+            $"ok,{sequence},{outputs.TargetTickMs},{outputs.AppState},{(byte)outputs.Mode},{outputs.SetpointRpm},{outputs.MeasuredRpm},{outputs.PwmCommand},{outputs.CommutationStep},{outputs.Flags},{(outputs.TimedOut ? 1 : 0)},{stats.RxFrames},{stats.LostFrames},{stats.EffectiveRateHz:0.###},{stats.AverageRoundTripMs:0.###},{stats.JitterMs:0.###}");
+        return inputs.HasValidationProvenance
+            ? string.Create(CultureInfo.InvariantCulture, $"{legacyResponse},{inputs.RunId!.Value},{outputs.AcceptedRunId},{outputs.AcceptedSourceSequence},{outputs.AcceptedGeneration},{outputs.AppliedRunId},{outputs.AppliedSourceSequence},{outputs.OutputGeneration},{outputs.PwmUpdateTickMs},{(freshOutput ? 1 : 0)},{cacheAgeMs:0.###}")
+            : legacyResponse;
     }
 
     private static string DecodePacket(byte[] buffer)
@@ -392,6 +442,23 @@ public sealed class HilUdpBridgeService : BackgroundService
         }
 
         string command = parts[0].ToUpperInvariant();
+        if (command == "PILV")
+        {
+            if (parts.Length != 5 ||
+                !uint.TryParse(parts[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out uint runId) ||
+                runId == 0 ||
+                !uint.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out sequence) ||
+                !ushort.TryParse(parts[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out ushort speedRpm) ||
+                !byte.TryParse(parts[4], NumberStyles.Integer, CultureInfo.InvariantCulture, out byte enable))
+            {
+                error = "expected PILV,run_id,seq,speed_rpm,enable";
+                return false;
+            }
+
+            inputs = new HilInputs(speedRpm, 0, 0, enable != 0, runId, sequence);
+            return true;
+        }
+
         int offset = command is "PIL" or "HIL" ? 1 : 0;
         int fieldCount = parts.Length - offset;
 
@@ -442,6 +509,11 @@ public sealed class HilUdpBridgeService : BackgroundService
 
         inputs = new HilInputs(legacySpeedRpm, loadTorque, flags, legacyEnable != 0);
         return true;
+    }
+
+    private static bool IsValidationInput(string text)
+    {
+        return TryParseInputs(text, out _, out HilInputs inputs, out _) && inputs.HasValidationProvenance;
     }
 
     private static uint? TryReadSequence(string text)
@@ -498,6 +570,13 @@ public sealed class HilUdpBridgeService : BackgroundService
     private static IPEndPoint CloneEndPoint(IPEndPoint endPoint)
     {
         return new IPEndPoint(endPoint.Address, endPoint.Port);
+    }
+
+    private void ResetOutputCache()
+    {
+        _lastHilOutputPollMs = double.NegativeInfinity;
+        _lastHilOutputReceivedMs = double.NegativeInfinity;
+        _bridge.ClearHilOutputs();
     }
 
     private static bool EndpointsEqual(IPEndPoint left, IPEndPoint right)

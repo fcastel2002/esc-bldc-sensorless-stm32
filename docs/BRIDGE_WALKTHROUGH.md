@@ -1443,7 +1443,7 @@ Eso manda al MCU:
 HIL_SET_INPUTS
 ```
 
-### Por qué no se pide `HIL_GET_OUTPUTS` en cada paquete
+### Poll HIL y validacion offline
 
 Igual que con setpoint, si cada entrada HIL hiciera:
 
@@ -1457,12 +1457,15 @@ la tasa efectiva se reduce.
 Por eso:
 
 ```csharp
-private const double HilOutputPollPeriodMs = 100;
+private const double HilOutputPollPeriodMs = 20;
 ```
 
-El Bridge aplica entradas rápido, pero pide salidas HIL para monitoreo a menor tasa.
+El Bridge aplica entradas rapido y pide salidas HIL cada 20 ms para monitoreo.
 
-El response UDP puede usar la última salida cacheada.
+El response UDP normal puede usar la ultima salida cacheada. El formato
+`PILV,run_id,seq,speed_rpm,enable` se reserva para replay de validacion:
+no se coalesce, fuerza una lectura `HIL_GET_OUTPUTS` fresca y registra la
+proveniencia `run_id`/`source_seq`/`output_generation` para comparar offline.
 
 ## 26. Recorrido completo: Simulink cambia setpoint real
 

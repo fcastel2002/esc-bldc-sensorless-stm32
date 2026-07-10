@@ -136,12 +136,23 @@ public static class EscProtocol
 
     public static byte[] HilInputsPayload(HilInputs inputs)
     {
-        var payload = new byte[8];
+        if (inputs.RunId.HasValue != inputs.SourceSequence.HasValue)
+        {
+            throw new ArgumentException("HIL validation inputs require both run ID and source sequence.", nameof(inputs));
+        }
+
+        var payload = new byte[inputs.HasValidationProvenance ? 16 : 8];
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(0, 2), inputs.SpeedRpm);
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(2, 2), 0);
         BinaryPrimitives.WriteInt16LittleEndian(payload.AsSpan(4, 2), inputs.LoadTorque);
         payload[6] = inputs.Flags;
         payload[7] = inputs.Enable ? (byte)1 : (byte)0;
+        if (inputs.HasValidationProvenance)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(8, 4), inputs.RunId!.Value);
+            BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(12, 4), inputs.SourceSequence!.Value);
+        }
+
         return payload;
     }
 
@@ -153,6 +164,7 @@ public static class EscProtocol
             throw new EscProtocolException("HIL_GET_OUTPUTS response payload is shorter than 15 bytes.");
         }
 
+        bool hasValidationProvenance = frame.Payload.Length >= 43;
         return new HilOutputs(
             BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(0, 4)),
             frame.Payload[4],
@@ -162,7 +174,15 @@ public static class EscProtocol
             BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(10, 2)),
             unchecked((sbyte)frame.Payload[12]),
             frame.Payload[13],
-            frame.Payload[14] != 0);
+            frame.Payload[14] != 0,
+            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(15, 4)) : 0,
+            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(19, 4)) : 0,
+            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(23, 4)) : 0,
+            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(27, 4)) : 0,
+            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(31, 4)) : 0,
+            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(35, 4)) : 0,
+            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(39, 4)) : 0,
+            hasValidationProvenance);
     }
 
     public static object DecodeConfigValue(ConfigParam parameter, ReadOnlySpan<byte> payload)
