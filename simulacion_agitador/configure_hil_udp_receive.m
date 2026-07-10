@@ -199,7 +199,7 @@ fprintf("Updated %s with HIL UDP, MCU duty selection, and ideal rotor commutatio
         % temporal commutation ramp.
         angleConverter = mdl + "/" + sprintf("PS-Simulink\nConverter1");
         set_param(angleConverter, "Unit", "rad");
-        set_param(commutator, "SystemSampleTime", hilSampleTime);
+        set_param(commutator, "SystemSampleTime", "1e-3");
 
         % Upper switch input is 0 and lower input is explicitly 1. In a Manual
         % Switch, CurrentSetting=0 selects the lower input, so local drive is
