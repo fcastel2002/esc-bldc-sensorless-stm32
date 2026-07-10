@@ -81,6 +81,7 @@ addSink(mdl + "/MCU Packet To Workspace", "hil_mcu_packet", [1110 214 1240 246])
 addSink(mdl + "/MCU Duty To Workspace", "hil_mcu_duty", [1110 254 1240 286]);
 addSink(mdl + "/Sim PI Duty To Workspace", "hil_sim_pi_duty", [1110 294 1240 326]);
 addSink(mdl + "/MCU Packet Valid To Workspace", "hil_mcu_packet_valid", [1110 334 1240 366]);
+addSink(mdl + "/Plant Duty To Workspace", "hil_plant_duty", [1205 334 1335 366]);
 addSink(mdl + "/SixStep Dsw To Workspace", "six_step_dsw", [205 -95 335 -63]);
 addSink(mdl + "/SixStep Sector To Workspace", "six_step_sector", [205 25 335 57]);
 motorRpmLog = mdl + "/Motor RPM To Workspace";
@@ -95,6 +96,7 @@ connect(mdl + "/Manual Switch", 1, parser, 4);
 connect(pwmFullScale, 1, parser, 5);
 connect(fallbackDuty, 1, parser, 6);
 connect(parser, 1, dutyDelay, 1);
+connect(dutyDelay, 1, mdl + "/Plant Duty To Workspace", 1);
 connect(parser, 2, mdl + "/MCU Packet To Workspace", 1);
 connect(parser, 3, mdl + "/MCU Duty To Workspace", 1);
 connect(parser, 4, mdl + "/Sim PI Duty To Workspace", 1);
@@ -103,7 +105,7 @@ connect(mdl + "/Angular Velocity Conversion", 1, motorRpmLog, 1);
 configureIdealCommutator();
 
 save_system(mdl);
-fprintf("Updated %s with HIL UDP, MCU duty selection, and ideal rotor commutation.\n", modelPath);
+fprintf("Updated %s with HIL UDP, local PI plant control, and MCU validation logs.\n", modelPath);
 
     function ensureBlock(source, destination, position)
         if ~blockExists(destination)
@@ -397,8 +399,8 @@ fprintf("Updated %s with HIL UDP, MCU duty selection, and ideal rotor commutatio
             "full_scale = max(1.0, double(pwm_full_scale));"
             "fallback = min(1.0, max(0.0, double(fallback_duty)));"
             ""
-            "% Local PI reference in duty units. It is logged, not used as the"
-            "% plant command unless the MCU packet path is made valid upstream."
+            "% The plant is controlled locally. MCU duty is validation-only so"
+            "% HID latency and cached responses cannot perturb the plant."
             "Ts = 0.02;"
             "Kp = 6.0e-4;"
             "Ki = 2.0e-4;"
@@ -480,11 +482,7 @@ fprintf("Updated %s with HIL UDP, MCU duty selection, and ideal rotor commutatio
             "end"
             ""
             "if enable ~= 0"
-            "    if valid"
-            "        duty = mcu_duty;"
-            "    else"
-            "        duty = fallback;"
-            "    end"
+            "    duty = pi_duty;"
             "else"
             "    duty = 0.0;"
             "end"

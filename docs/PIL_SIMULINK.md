@@ -1,6 +1,6 @@
 # PIL Simulink
 
-Este flujo deja en Simulink la planta, el ESC y la conmutacion del BLDC. El MCU fisico se usa para validar el controlador de velocidad y, mas adelante, el observador o generador de trayectorias. En esta arquitectura el MCU no recibe cruces por cero ni conoce el paso de conmutacion: solo recibe velocidad simulada como realimentacion y devuelve el PWM logico calculado por el controlador.
+Este flujo deja en Simulink la planta, el ESC y la conmutacion del BLDC. La planta usa su PI local; el MCU fisico recibe el mismo vector de velocidad para validar el controlador offline. En esta arquitectura el MCU no recibe cruces por cero ni conoce el paso de conmutacion: solo recibe velocidad simulada como realimentacion y devuelve el PWM logico calculado por el controlador.
 
 El modelo selecciona el sector six-step a partir de la posicion mecanica ideal del rotor: `theta_e = mod(2 * theta_m, 2*pi)`. Los dos pares de polos coinciden con el bloque BLDC y el offset electrico inicial es cero. Es una abstraccion de simulacion; no representa una estrategia aplicable al STM32 sin sensor de posicion.
 
@@ -28,6 +28,14 @@ Campos:
 | `seq` | Secuencia monotona para estadisticas de perdida. |
 | `speed_rpm` | Velocidad simulada que usa el controlador del MCU como medicion. |
 | `enable` | `0` detiene HIL, distinto de cero inicia/actualiza HIL. |
+
+Para una validacion trazable, el replay usa:
+
+```text
+PILV,run_id,seq,speed_rpm,enable
+```
+
+`run_id` identifica una corrida y `seq` es un `uint32` monotono. El bridge fuerza una lectura fresca de salida para cada `PILV`, registra un JSONL append-only en `%LOCALAPPDATA%\EscGui\hil-validation`, y el MCU devuelve la secuencia que produjo el PWM.
 
 Ejemplo:
 
@@ -114,7 +122,7 @@ Configuracion actual:
 
 Esto asume el proxy/logger en `5057`. Para enviar directo a la GUI, cambiar el puerto destino de `5057` a `5055` en el script o en ambos bloques. `HIL PWM Full Scale` debe coincidir con `TIM1->ARR`; con la configuracion por defecto del firmware, `72 MHz / (2 * 18 kHz) = 2000`.
 
-El parser `Parse MCU UDP PI` decodifica la respuesta:
+El parser `Parse MCU UDP PI` decodifica la respuesta base:
 
 ```text
 ok,seq,tick_ms,app_state,mode,setpoint_rpm,measured_rpm,pwm_command,commutation_step,flags,timeout,rx_frames,lost_frames,effective_hz,avg_rtt_ms,jitter_ms
@@ -126,18 +134,34 @@ y guarda en workspace:
 | --- | --- |
 | `hil_mcu_packet` | Vector `[valid, seq, tick_ms, app_state, mode, setpoint_rpm, measured_rpm, pwm_command, commutation_step, flags, timeout, rx_frames, lost_frames, effective_hz, avg_rtt_ms, jitter_ms]`. |
 | `hil_mcu_duty` | `pwm_command / HIL PWM Full Scale`, saturado entre `0` y `1`. |
-| `hil_sim_pi_duty` | Duty calculado por un PI local simple, solo como referencia de comparacion. |
+| `hil_sim_pi_duty` | Duty del PI local que acciona la planta. |
+| `hil_plant_duty` | Duty efectivamente aplicado despues de `HIL Duty Delay`. |
 | `hil_mcu_packet_valid` | `1` cuando se recibio un paquete `ok,...` completo. |
 | `motor_rpm` | Velocidad mecanica real de la planta, en rpm. |
 | `six_step_dsw` | Vector de seis comandos que entra al inversor promedio. |
 | `six_step_sector` | Sector six-step activo (`1` a `6`); vale `0` cuando el drive esta deshabilitado. |
 
-El duty que entra al conmutador ideal viene del PWM del MCU cuando el paquete es valido. Si no hay respuesta UDP valida, el modelo usa `HIL Fallback Duty` (`0.3`) para no ocultar el problema con un PI local saturado. La senal pasa por `HIL Duty Delay` con `Ts = 20 ms`, que evita lazos algebraicos y representa el retardo discreto del ciclo Simulink-bridge-MCU.
+El duty que entra al conmutador ideal viene siempre del PI local de Simulink. `hil_mcu_duty` no controla la planta: es una observacion del controlador fisico. La senal local pasa por `HIL Duty Delay` con `Ts = 20 ms`, que representa un retardo discreto del actuador local y evita lazos algebraicos; no representa una latencia USB.
 
 El interruptor manual del modelo alimenta `enable`. Por defecto selecciona `1` y habilita el drive local; al seleccionar `0`, el conmutador entrega `Dsw = [0 0 0 0 0 0]`. La rama BEMF de resistencias, sensores de fase y comparadores ya no participa en el control. Se conserva la medicion de tension de linea y sus scopes.
 
 Importante: en esta arquitectura HIL el MCU solo devuelve el PWM logico del PI. La conmutacion/sector sigue quedando del lado de Simulink y no depende de `target_rpm`, del paquete UDP ni de cruces por cero. Si la velocidad aparece sinusoidal u oscilante, revisar primero `six_step_sector`, `six_step_dsw` y la alineacion entre el sector aplicado y el angulo del rotor.
 
+## Validacion offline
+
+No se sincroniza el step del solver con HID. Simscape conserva su solver variable y el vector HIL se toma cada 20 ms. Primero se ejecuta la planta localmente y se exporta un vector; luego se reproduce contra el MCU y se compara el PWM por identidad logica, no por hora de llegada.
+
+```matlab
+config = struct("targetRpm", 1000, "runId", uint32(1));
+[vector, manifest, vectorPath] = export_hil_validation_vector(motor_rpm, config);
+[responses, responsePath] = replay_hil_validation(vectorPath);
+report = compare_hil_validation(vectorPath, responsePath, plot=true);
+```
+
+`firmware_pi_reference_step` reproduce el PI de firmware con paso de 2 ms. `compare_hil_validation` une `ExpectedPwm` con el `pwm_command` del MCU por `run_id` y `applied_source_seq`, elimina outputs cacheados por `output_generation` y reporta cobertura y error PWM.
+
+Por defecto `replay_hil_validation` aplica `KP`, `KI`, `KD`, pares de polos y frecuencia PWM del manifiesto en RAM mediante la API local del bridge, luego cambia a `SimulinkControl`. No usa `SAVE_CONFIG`; la corrida no modifica la configuracion persistente. Se puede desactivar con `configureBridge=false` si esos parametros ya fueron preparados externamente.
+
 ## Verificacion rapida
 
-Ejecutar una simulacion finita con el interruptor en `enable=1`. Sin respuesta UDP, `hil_mcu_packet_valid` debe quedar en cero, el duty debe usar `0.3`, `six_step_sector` debe recorrer `1` a `6` y la velocidad debe salir de reposo. Al seleccionar `enable=0`, `six_step_dsw` debe ser nulo y el accionamiento debe detenerse. Con una respuesta MCU valida, `hil_mcu_duty` reemplaza el fallback y los cuatro logs `hil_*` se mantienen disponibles.
+Ejecutar una simulacion finita con el interruptor en `enable=1`. Sin respuesta UDP, `hil_mcu_packet_valid` puede quedar en cero, pero `hil_sim_pi_duty` y `hil_plant_duty` siguen controlando la planta. `six_step_sector` debe recorrer `1` a `6` y la velocidad debe salir de reposo. Al seleccionar `enable=0`, `six_step_dsw` debe ser nulo y el accionamiento debe detenerse. Una respuesta MCU valida solo actualiza `hil_mcu_packet` y `hil_mcu_duty` para validacion.

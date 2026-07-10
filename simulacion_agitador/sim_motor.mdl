@@ -51,8 +51,8 @@ __MWOPC_PART_BEGIN__ /metadata/coreProperties.xml
   <dcterms:created xsi:type="dcterms:W3CDTF">2026-06-16T23:14:09Z</dcterms:created>
   <dc:creator>Francisco</dc:creator>
   <cp:lastModifiedBy>Francisco</cp:lastModifiedBy>
-  <dcterms:modified xsi:type="dcterms:W3CDTF">2026-07-10T00:58:49Z</dcterms:modified>
-  <cp:revision>1.20</cp:revision>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">2026-07-10T18:27:34Z</dcterms:modified>
+  <cp:revision>1.21</cp:revision>
   <cp:version>R2025b</cp:version>
 </cp:coreProperties>
 
@@ -338,7 +338,7 @@ __MWOPC_PART_BEGIN__ /simulink/blockdiagram.xml
     <ConfigManagerSettings>
       <P Name="ModifiedByFormat">%&lt;Auto&gt;</P>
       <P Name="ModifiedDateFormat">%&lt;Auto&gt;</P>
-      <P Name="ModelVersionFormat">%&lt;AutoIncrement:1.20&gt;</P>
+      <P Name="ModelVersionFormat">%&lt;AutoIncrement:1.21&gt;</P>
     </ConfigManagerSettings>
     <EditorSettings>
       <P Name="MultithreadedSim">on</P>
@@ -2489,8 +2489,8 @@ mcu_duty = 0.0;
 full_scale = max(1.0, double(pwm_full_scale));
 fallback = min(1.0, max(0.0, double(fallback_duty)));
 
-% Local PI reference in duty units. It is logged, not used as the
-% plant command unless the MCU packet path is made valid upstream.
+% The plant is controlled locally. MCU duty is validation-only so
+% HID latency and cached responses cannot perturb the plant.
 Ts = 0.02;
 Kp = 6.0e-4;
 Ki = 2.0e-4;
@@ -2572,11 +2572,7 @@ if valid
 end
 
 if enable ~= 0
-    if valid
-        duty = mcu_duty;
-    else
-        duty = fallback;
-    end
+    duty = pi_duty;
 else
     duty = 0.0;
 end
@@ -3240,7 +3236,7 @@ __MWOPC_PART_BEGIN__ /simulink/systems/system_root.xml
   <P Name="Location">[-1, -8, 1921, 1051]</P>
   <P Name="ZoomFactor">80</P>
   <P Name="ReportName">simulink-default.rpt</P>
-  <P Name="SIDHighWatermark">139</P>
+  <P Name="SIDHighWatermark">140</P>
   <Block BlockType="Reference" Name="Angular Velocity&#xA;Conversion" SID="60">
     <PortCounts in="1" out="1"/>
     <P Name="Position">[855, -5, 945, 25]</P>
@@ -3949,6 +3945,15 @@ Converter</P>
     </PortProperties>
     <System Ref="system_123"/>
   </Block>
+  <Block BlockType="ToWorkspace" Name="Plant Duty To Workspace" SID="140">
+    <PortCounts in="1"/>
+    <P Name="Position">[1205, 334, 1335, 366]</P>
+    <P Name="ZOrder">100000</P>
+    <P Name="VariableName">hil_plant_duty</P>
+    <P Name="MaxDataPoints">5000</P>
+    <P Name="FixptAsFi">on</P>
+    <P Name="SampleTime">-1</P>
+  </Block>
   <Block BlockType="Scope" Name="Scope" SID="56">
     <PortCounts in="1"/>
     <P Name="Position">[1120, 447, 1135, 463]</P>
@@ -4288,16 +4293,16 @@ Configuration</P>
     <P Name="Dst">26#in:2</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1055</P>
+    <P Name="ZOrder">1133</P>
     <P Name="Src">45#out:1</P>
     <P Name="Points">[0, 0]</P>
     <Branch>
-      <P Name="ZOrder">1054</P>
+      <P Name="ZOrder">1132</P>
       <P Name="Points">[20, 0]</P>
       <P Name="Dst">26#in:1</P>
     </Branch>
     <Branch>
-      <P Name="ZOrder">1056</P>
+      <P Name="ZOrder">1134</P>
       <P Name="Points">[230, 0; 0, -30]</P>
       <P Name="Dst">134#in:1</P>
     </Branch>
@@ -4320,25 +4325,25 @@ Configuration</P>
   </Line>
   <Line>
     <P Name="Name">w_motor</P>
-    <P Name="ZOrder">1036</P>
+    <P Name="ZOrder">1110</P>
     <P Name="Src">49#out:1</P>
     <P Name="Points">[0, 0]</P>
     <Branch>
-      <P Name="ZOrder">1035</P>
+      <P Name="ZOrder">1109</P>
       <P Name="Labels">[3, 1]</P>
       <P Name="Points">[70, 0; 0, 10; 15, 0]</P>
       <Branch>
-        <P Name="ZOrder">1034</P>
+        <P Name="ZOrder">1108</P>
         <P Name="Points">[0, 85]</P>
         <P Name="Dst">89#in:2</P>
       </Branch>
       <Branch>
-        <P Name="ZOrder">1033</P>
+        <P Name="ZOrder">1107</P>
         <P Name="Dst">60#in:1</P>
       </Branch>
     </Branch>
     <Branch>
-      <P Name="ZOrder">1037</P>
+      <P Name="ZOrder">1111</P>
       <P Name="Points">[70, 0; 0, 320]</P>
       <P Name="Dst">125#in:1</P>
     </Branch>
@@ -4408,120 +4413,113 @@ Configuration</P>
       <P Name="Dst">89#in:3</P>
     </Branch>
     <Branch>
-      <P Name="ZOrder">1039</P>
+      <P Name="ZOrder">1113</P>
       <P Name="Points">[0, 100; -100, 0; 0, 115]</P>
       <P Name="Dst">123#in:4</P>
     </Branch>
     <Branch>
-      <P Name="ZOrder">1050</P>
+      <P Name="ZOrder">1128</P>
       <P Name="Points">[0, -105; -480, 0; 0, -25; -845, 0]</P>
       <P Name="Dst">45#in:3</P>
     </Branch>
   </Line>
   <Line>
-    <P Name="ZOrder">1030</P>
+    <P Name="ZOrder">1126</P>
+    <P Name="Src">124#out:1</P>
+    <P Name="Points">[0, 0]</P>
+    <Branch>
+      <P Name="ZOrder">1124</P>
+      <P Name="Points">[30, 0; 0, 85]</P>
+      <P Name="Dst">140#in:1</P>
+    </Branch>
+    <Branch>
+      <P Name="ZOrder">1127</P>
+      <P Name="Points">[0, -105; -220, 0; 0, -15; -595, 0; 0, -140; -645, 0]</P>
+      <P Name="Dst">45#in:2</P>
+    </Branch>
+  </Line>
+  <Line>
+    <P Name="ZOrder">1104</P>
     <P Name="Src">122#out:1</P>
     <P Name="Points">[5, 0; 0, 50; -345, 0; 0, -5; -140, 0]</P>
     <P Name="Dst">123#in:1</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1031</P>
+    <P Name="ZOrder">1105</P>
     <P Name="Src">122#out:2</P>
     <P Name="Points">[20, 0]</P>
     <P Name="Dst">128#in:1</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1032</P>
+    <P Name="ZOrder">1106</P>
     <P Name="Src">94#out:1</P>
     <P Name="Points">[1245, 0; 0, 395]</P>
     <P Name="Dst">123#in:2</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1038</P>
+    <P Name="ZOrder">1112</P>
     <P Name="Src">125#out:1</P>
     <P Name="Dst">123#in:3</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1040</P>
+    <P Name="ZOrder">1114</P>
     <P Name="Src">126#out:1</P>
     <P Name="Dst">123#in:5</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1041</P>
+    <P Name="ZOrder">1115</P>
     <P Name="Src">127#out:1</P>
     <P Name="Dst">123#in:6</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1042</P>
+    <P Name="ZOrder">1116</P>
     <P Name="Src">123#out:1</P>
     <P Name="Dst">124#in:1</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1043</P>
+    <P Name="ZOrder">1119</P>
     <P Name="Src">123#out:2</P>
-    <P Name="Points">[95, 0; 0, -5]</P>
+    <P Name="Points">[190, 0]</P>
     <P Name="Dst">130#in:1</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1044</P>
+    <P Name="ZOrder">1120</P>
     <P Name="Src">123#out:3</P>
     <P Name="Dst">131#in:1</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1045</P>
+    <P Name="ZOrder">1121</P>
     <P Name="Src">123#out:4</P>
     <P Name="Dst">132#in:1</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1046</P>
+    <P Name="ZOrder">1122</P>
     <P Name="Src">123#out:5</P>
     <P Name="Dst">133#in:1</P>
   </Line>
   <Line>
     <P Name="Name">rpm</P>
-    <P Name="ZOrder">1047</P>
+    <P Name="ZOrder">1123</P>
     <P Name="Labels">[0, 0]</P>
     <P Name="Src">60#out:1</P>
     <P Name="Dst">139#in:1</P>
   </Line>
   <Line>
     <P Name="Name">angle</P>
-    <P Name="ZOrder">1048</P>
+    <P Name="ZOrder">1125</P>
     <P Name="Labels">[0, 0]</P>
     <P Name="Src">50#out:1</P>
     <P Name="Points">[0, 15; -165, 0; 0, -25; -845, 0]</P>
     <P Name="Dst">45#in:1</P>
   </Line>
   <Line>
-    <P Name="ZOrder">1049</P>
-    <P Name="Src">124#out:1</P>
-    <P Name="Points">[0, -105; -220, 0; 0, -15; -595, 0; 0, -140; -645, 0]</P>
-    <P Name="Dst">45#in:2</P>
-  </Line>
-  <Line>
-    <P Name="ZOrder">1057</P>
+    <P Name="ZOrder">1135</P>
     <P Name="Src">45#out:2</P>
     <P Name="Points">[255, 0]</P>
     <P Name="Dst">137#in:1</P>
   </Line>
   <Line LineType="Connection">
-    <P Name="ZOrder">1062</P>
-    <P Name="Points">[310, 140; 50, 0; 0, 43; 188, 0]</P>
-    <Branch ConnectType="SRC_DEST">
-      <P Name="Src">35#rconn:2</P>
-      <P Name="Points">[0, 0]</P>
-    </Branch>
-    <Branch ConnectType="SRC_SRC">
-      <P Name="Points">[50, 0; 0, -80]</P>
-      <P Name="Dst">10#lconn:2</P>
-    </Branch>
-    <Branch ConnectType="SRC_SRC">
-      <P Name="Points">[30, 0]</P>
-      <P Name="Dst">53#lconn:2</P>
-    </Branch>
-  </Line>
-  <Line LineType="Connection">
-    <P Name="ZOrder">1066</P>
+    <P Name="ZOrder">1139</P>
     <P Name="Points">[310, 115; 95, 0; 0, -80; 5, 0]</P>
     <P Name="Dst">10#lconn:1</P>
     <Branch ConnectType="SRC_DEST">
@@ -4534,7 +4532,20 @@ Configuration</P>
     </Branch>
   </Line>
   <Line LineType="Connection">
-    <P Name="ZOrder">1072</P>
+    <P Name="ZOrder">1142</P>
+    <P Name="Points">[310, 140; 95, 0; 0, -80; 5, 0]</P>
+    <P Name="Dst">10#lconn:2</P>
+    <Branch ConnectType="SRC_DEST">
+      <P Name="Src">35#rconn:2</P>
+      <P Name="Points">[0, 0]</P>
+    </Branch>
+    <Branch ConnectType="SRC_SRC">
+      <P Name="Points">[30, 0]</P>
+      <P Name="Dst">53#lconn:2</P>
+    </Branch>
+  </Line>
+  <Line LineType="Connection">
+    <P Name="ZOrder">1145</P>
     <P Name="Points">[310, 165; 95, 0; 0, -80; 5, 0]</P>
     <P Name="Dst">10#lconn:3</P>
     <Branch ConnectType="SRC_DEST">
@@ -4681,7 +4692,7 @@ __MWOPC_PART_BEGIN__ /simulink/windowsInfo.xml
       <Array PropName="PersistedApps" Type="Cell" Dimension="0*1"/>
       <P Name="WindowUuid" Class="char">5de2172d-773b-4865-92ff-e533e50b4491</P>
     </Object>
-    <P Name="BDUuid" Class="char">9e006349-2047-4c7a-90f6-8e48c59d595a</P>
+    <P Name="BDUuid" Class="char">a28e4444-9212-475e-b6b2-3b63763bbf6f</P>
   </Object>
 </WindowsInfo>
 
