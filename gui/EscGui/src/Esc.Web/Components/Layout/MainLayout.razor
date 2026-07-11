@@ -1,6 +1,46 @@
 ﻿@inherits LayoutComponentBase
 
-@Body
+<div class="app-shell">
+    <aside class="app-rail">
+        <a class="brand" href="/" aria-label="ESC Console, ir al dashboard">
+            <span class="brand-mark">EC</span>
+            <span class="brand-copy">
+                <span>STM32 / BLDC</span>
+                <strong>ESC.CONSOLE</strong>
+            </span>
+        </a>
+
+        <nav class="primary-nav" aria-label="Navegacion principal">
+            <NavLink href="/" Match="NavLinkMatch.All">
+                <span class="nav-index">01</span>
+                <span>Dashboard</span>
+            </NavLink>
+            <NavLink href="/runs">
+                <span class="nav-index">02</span>
+                <span>Validaciones</span>
+            </NavLink>
+            <NavLink href="/pil">
+                <span class="nav-index">03</span>
+                <span>PIL Monitor</span>
+            </NavLink>
+        </nav>
+
+        <div class="rail-footer">
+            <span class="status-led" aria-hidden="true"></span>
+            <span>LOCAL BRIDGE</span>
+        </div>
+    </aside>
+
+    <div class="app-workspace">
+        <header class="workspace-header">
+            <span>CONTROL / TELEMETRY / VALIDATION</span>
+            <span>OPERATOR PANEL</span>
+        </header>
+        <div class="page-content">
+            @Body
+        </div>
+    </div>
+</div>
 
 <div id="blazor-error-ui" data-nosnippet>
     An unhandled error has occurred.
