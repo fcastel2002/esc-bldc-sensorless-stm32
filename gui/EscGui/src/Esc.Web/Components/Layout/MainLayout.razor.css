@@ -17,6 +17,36 @@
     color: #7ddcff;
 }
 
+.led-connected {
+    background: var(--green);
+    box-shadow: 0 0 0 0 rgba(72, 213, 144, 0.48);
+    animation: led-pulse 2.4s ease-out infinite;
+}
+
+.led-detected {
+    background: var(--amber);
+    box-shadow: 0 0 0 0 rgba(245, 185, 66, 0.35);
+}
+
+.led-connecting {
+    background: var(--amber);
+    animation: led-blink 0.8s ease-in-out infinite;
+}
+
+.led-error {
+    background: var(--red);
+    box-shadow: 0 0 0 0 rgba(255, 98, 105, 0.35);
+}
+
+.led-notdetected {
+    background: #435a68;
+}
+
+@keyframes led-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
     #blazor-error-ui .dismiss {
         cursor: pointer;
         position: absolute;

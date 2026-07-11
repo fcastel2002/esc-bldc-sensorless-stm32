@@ -1,4 +1,6 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject EscBridgeService Bridge
 
 <div class="app-shell">
     <aside class="app-rail">
@@ -26,8 +28,8 @@
         </nav>
 
         <div class="rail-footer">
-            <span class="status-led" aria-hidden="true"></span>
-            <span>LOCAL BRIDGE</span>
+            <span class="status-led @_ledClass" aria-hidden="true"></span>
+            <span>@_ledLabel</span>
         </div>
     </aside>
 
@@ -43,7 +45,42 @@
 </div>
 
 <div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
+    Se produjo un error no controlado.
+    <a href="." class="reload">Recargar</a>
     <span class="dismiss">🗙</span>
 </div>
+
+@code {
+    private string _ledClass = "led-notdetected";
+    private string _ledLabel = "SIN CONEXION";
+
+    protected override void OnInitialized()
+    {
+        UpdateLed(Bridge.Snapshot.State);
+        Bridge.SnapshotChanged += HandleSnapshotChanged;
+    }
+
+    private void HandleSnapshotChanged(object? sender, EventArgs args)
+    {
+        UpdateLed(Bridge.Snapshot.State);
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void UpdateLed(DeviceConnectionState state)
+    {
+        (_ledClass, _ledLabel) = state switch
+        {
+            DeviceConnectionState.Connected => ("led-connected", "CONECTADO"),
+            DeviceConnectionState.Detected => ("led-detected", "DETECTADO"),
+            DeviceConnectionState.Connecting => ("led-connecting", "CONECTANDO"),
+            DeviceConnectionState.Error => ("led-error", "ERROR"),
+            DeviceConnectionState.Disconnected => ("led-error", "DESCONECTADO"),
+            _ => ("led-notdetected", "SIN CONEXION")
+        };
+    }
+
+    public void Dispose()
+    {
+        Bridge.SnapshotChanged -= HandleSnapshotChanged;
+    }
+}
