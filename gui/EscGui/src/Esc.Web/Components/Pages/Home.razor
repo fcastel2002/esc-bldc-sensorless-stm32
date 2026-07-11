@@ -8,13 +8,11 @@
 <main class="dashboard">
     <section class="topbar">
         <div>
-            <p class="eyebrow">ESC BLDC STM32</p>
-            <h1>ESC Bridge</h1>
+            <p class="eyebrow">ESC BLDC STM32 / LIVE CONTROL</p>
+            <h1>Consola de control del motor</h1>
         </div>
 
         <div class="topbar-actions">
-            <a class="nav-link" href="/runs">Validaciones</a>
-            <a class="nav-link" href="/pil">Tramas PIL</a>
             <div class="connection-state @StateClass">
                 <span>@Snapshot.State</span>
                 <strong>@ConnectionLabel</strong>
@@ -67,7 +65,7 @@
     <section class="grid">
         <article class="panel status-panel">
             <div class="panel-title">
-                <h2>Estado</h2>
+                <h2>Estado del ESC</h2>
                 <button @onclick="RefreshStatusAsync" disabled="@(!IsConnected)">Actualizar</button>
             </div>
             <div class="status-grid">
@@ -83,7 +81,7 @@
 
         <article class="panel command-panel">
             <div class="panel-title">
-                <h2>Control</h2>
+                <h2>Comandos de potencia</h2>
             </div>
             <div class="action-grid">
                 <button class="run" @onclick="RunAsync" disabled="@(!CanSendControl)">RUN</button>
@@ -96,7 +94,7 @@
 
     <section class="panel">
         <div class="panel-title">
-            <h2>Controles modulares</h2>
+            <h2>Ajuste de parametros</h2>
             <span>controls.json</span>
         </div>
         <div class="controls-grid">
@@ -148,7 +146,7 @@
 
     <section class="panel telemetry-panel">
         <div class="panel-title">
-            <h2>Adquisicion</h2>
+            <h2>Adquisicion de velocidad</h2>
             <span>@Snapshot.SpeedTelemetry.SampleCount muestras</span>
         </div>
         <div class="telemetry-toolbar">
@@ -171,7 +169,7 @@
 
     <section class="panel hil-panel">
         <div class="panel-title">
-            <h2>HIL Simulink</h2>
+            <h2>Enlace HIL / Simulink</h2>
             <span>UDP localhost:5055</span>
         </div>
         <div class="hil-grid">

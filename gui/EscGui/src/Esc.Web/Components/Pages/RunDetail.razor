@@ -13,8 +13,7 @@
     else
     {
         <section class="topbar">
-            <div><p class="eyebrow">VALIDACION OFFLINE</p><h1>@_run.Summary.ExperimentName</h1></div>
-            <div class="topbar-actions"><a class="nav-link" href="/runs">Runs</a><a class="nav-link" href="/">Bridge</a></div>
+            <div><p class="eyebrow">VALIDACION OFFLINE / DETALLE DE RUN</p><h1>@_run.Summary.ExperimentName</h1></div>
         </section>
         <section class="grid">
             <article class="panel status-panel">
@@ -32,7 +31,7 @@
                 @if (!string.IsNullOrWhiteSpace(_run.Summary.FailureReason)) { <p class="alert">@_run.Summary.FailureReason</p> }
             </article>
             <article class="panel status-panel">
-                <div class="panel-title"><h2>Controlador</h2></div>
+                <div class="panel-title"><h2>Referencia del controlador</h2></div>
                 <div class="status-grid">
                     <span>Referencia</span><strong>@_run.Manifest.TargetRpm rpm</strong>
                     <span>Periodo</span><strong>@_run.Manifest.SamplePeriodUs us</strong>
