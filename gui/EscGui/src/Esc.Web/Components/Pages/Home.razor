@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject EscBridgeService Bridge
 @inject ModularControlProvider ControlProvider
+@inject IJSRuntime JS
 
 <PageTitle>ESC Bridge</PageTitle>
 
@@ -268,11 +269,19 @@
 
     private async Task SetModeAsync(ChangeEventArgs args) => await BusyExecAsync(async () =>
     {
-        if (Enum.TryParse(args.Value?.ToString(), out ControlMode mode))
+        if (!Enum.TryParse(args.Value?.ToString(), out ControlMode mode))
         {
-            await Bridge.SetModeAsync(mode);
-            Snapshot = Bridge.Snapshot;
+            return;
         }
+
+        if (!await JS.InvokeAsync<bool>("confirm", $"Cambiar modo a {mode}?"))
+        {
+            StateHasChanged();
+            return;
+        }
+
+        await Bridge.SetModeAsync(mode);
+        Snapshot = Bridge.Snapshot;
     });
 
     private async Task RefreshStatusAsync() => await BusyExecAsync(async () =>
