@@ -6,15 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
     <ResourcePreloader />
-    <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["industrial.css"]" />
     <link rel="stylesheet" href="@Assets["Esc.Web.styles.css"]" />
     <ImportMap />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    <HeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="new InteractiveServerRenderMode(prerender: false)" />
     <ReconnectModal />
     <script src="@Assets["_framework/blazor.web.js"]"></script>
 </body>

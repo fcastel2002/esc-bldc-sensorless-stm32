@@ -55,6 +55,7 @@ button {
     border-radius: 2px;
     background: var(--bg-control);
     color: var(--text);
+    cursor: pointer;
     padding: 0 13px;
     font-size: 0.78rem;
     font-weight: 700;
@@ -369,6 +370,7 @@ input[type="range"] {
 
 h1,
 h2,
+p {
     margin-top: 0;
 }
 
@@ -551,6 +553,7 @@ h2 {
 .hil-grid strong {
     color: var(--text-bright);
     font-size: 0.78rem;
+    font-weight: 700;
     text-align: right;
 }
 
@@ -697,6 +700,7 @@ h2 {
     flex-wrap: wrap;
     gap: 10px;
     margin-top: 12px;
+    color: var(--text-muted);
 }
 
 .telemetry-stats span {
@@ -754,6 +758,7 @@ h2 {
     background: #13232e;
     color: #9fc2d4;
     font-size: 0.67rem;
+    font-weight: 700;
     letter-spacing: 0.055em;
     text-transform: uppercase;
 }
@@ -791,6 +796,7 @@ h2 {
 }
 
 .payload-cell {
+    font-family: var(--mono);
     overflow-wrap: anywhere;
     color: #b8d5e2 !important;
 }
