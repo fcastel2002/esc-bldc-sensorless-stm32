@@ -39,9 +39,9 @@
         </label>
 
         <div class="button-row">
-            <button @onclick="RefreshDevicesAsync">Refrescar</button>
-            <button class="primary" @onclick="ConnectAsync" disabled="@(!Snapshot.Devices.Any() || Snapshot.State == DeviceConnectionState.Connected)">Conectar</button>
-            <button @onclick="DisconnectAsync" disabled="@(Snapshot.State != DeviceConnectionState.Connected)">Desconectar</button>
+            <button @onclick="RefreshDevicesAsync" disabled="@_isBusy">Refrescar</button>
+            <button class="primary" @onclick="ConnectAsync" disabled="@(_isBusy || !Snapshot.Devices.Any() || Snapshot.State == DeviceConnectionState.Connected)">Conectar</button>
+            <button @onclick="DisconnectAsync" disabled="@(_isBusy || Snapshot.State != DeviceConnectionState.Connected)">Desconectar</button>
         </div>
     </section>
 
@@ -53,7 +53,7 @@
     <section class="mode-band">
         <label>
             Modo
-            <select value="@Snapshot.Mode" @onchange="SetModeAsync">
+            <select value="@Snapshot.Mode" @onchange="SetModeAsync" disabled="@_isBusy">
                 <option value="@ControlMode.GuiControl">GUI control</option>
                 <option value="@ControlMode.SimulinkControl">Simulink control</option>
                 <option value="@ControlMode.MonitorOnly">Monitor only</option>
@@ -66,7 +66,7 @@
         <article class="panel status-panel">
             <div class="panel-title">
                 <h2>Estado del ESC</h2>
-                <button @onclick="RefreshStatusAsync" disabled="@(!IsConnected)">Actualizar</button>
+                <button @onclick="RefreshStatusAsync" disabled="@(_isBusy || !IsConnected)">Actualizar</button>
             </div>
             <div class="status-grid">
                 <span>App state</span><strong>@(Snapshot.Status?.AppStateName ?? "-")</strong>
@@ -84,9 +84,9 @@
                 <h2>Comandos de potencia</h2>
             </div>
             <div class="action-grid">
-                <button class="run" @onclick="RunAsync" disabled="@(!CanSendControl)">RUN</button>
-                <button @onclick="StopAsync" disabled="@(!CanSendControl)">STOP</button>
-                <button class="estop" @onclick="EmergencyStopAsync" disabled="@(!IsConnected)">ESTOP</button>
+                <button class="run" @onclick="RunAsync" disabled="@(_isBusy || !CanSendControl)">RUN</button>
+                <button @onclick="StopAsync" disabled="@(_isBusy || !CanSendControl)">STOP</button>
+                <button class="estop" @onclick="EmergencyStopAsync" disabled="@(_isBusy || !IsConnected)">ESTOP</button>
             </div>
             <p class="result">@_lastCommandResult</p>
         </article>
@@ -155,9 +155,9 @@
                 <input type="number" min="100" max="5000" step="50" @bind="_logRateMs" />
                 <span>ms</span>
             </label>
-            <button @onclick="SetLogRateAsync" disabled="@(!IsConnected)">Aplicar tasa</button>
-            <button class="primary" @onclick="StartSpeedLogAsync" disabled="@(!IsConnected || Snapshot.SpeedLoggingEnabled)">Start velocidad</button>
-            <button @onclick="StopSpeedLogAsync" disabled="@(!IsConnected || !Snapshot.SpeedLoggingEnabled)">Stop velocidad</button>
+            <button @onclick="SetLogRateAsync" disabled="@(_isBusy || !IsConnected)">Aplicar tasa</button>
+            <button class="primary" @onclick="StartSpeedLogAsync" disabled="@(_isBusy || !IsConnected || Snapshot.SpeedLoggingEnabled)">Start velocidad</button>
+            <button @onclick="StopSpeedLogAsync" disabled="@(_isBusy || !IsConnected || !Snapshot.SpeedLoggingEnabled)">Stop velocidad</button>
         </div>
         <SpeedChart Samples="@_speedSamples" />
         <div class="telemetry-stats">
@@ -195,6 +195,7 @@
     private string? _selectedDevicePath;
     private ushort _logRateMs = 500;
     private string _lastCommandResult = "Listo.";
+    private bool _isBusy;
 
     private bool IsConnected => Snapshot.State == DeviceConnectionState.Connected;
     private bool CanSendControl => IsConnected && Snapshot.Mode == ControlMode.GuiControl;
@@ -211,6 +212,7 @@
     protected override async Task OnInitializedAsync()
     {
         Snapshot = Bridge.Snapshot;
+        await Bridge.ScanAsync();
         _controls = await ControlProvider.GetControlsAsync();
         foreach (DashboardControl control in _controls)
         {
@@ -235,14 +237,14 @@
         _ = InvokeAsync(StateHasChanged);
     }
 
-    private async Task RefreshDevicesAsync()
+    private async Task RefreshDevicesAsync() => await BusyExecAsync(async () =>
     {
         await Bridge.ScanAsync();
         Snapshot = Bridge.Snapshot;
         PickDefaultDevice();
-    }
+    });
 
-    private async Task ConnectAsync()
+    private async Task ConnectAsync() => await BusyExecAsync(async () =>
     {
         CommandResult result = await Bridge.ConnectAsync(_selectedDevicePath);
         _lastCommandResult = result.Message;
@@ -251,50 +253,50 @@
         {
             await LoadConfigValuesAsync();
         }
-    }
+    });
 
-    private async Task DisconnectAsync()
+    private async Task DisconnectAsync() => await BusyExecAsync(async () =>
     {
         await Bridge.DisconnectAsync();
         _lastCommandResult = "Desconectado.";
         Snapshot = Bridge.Snapshot;
-    }
+    });
 
-    private async Task SetModeAsync(ChangeEventArgs args)
+    private async Task SetModeAsync(ChangeEventArgs args) => await BusyExecAsync(async () =>
     {
         if (Enum.TryParse(args.Value?.ToString(), out ControlMode mode))
         {
             await Bridge.SetModeAsync(mode);
             Snapshot = Bridge.Snapshot;
         }
-    }
+    });
 
-    private async Task RefreshStatusAsync()
+    private async Task RefreshStatusAsync() => await BusyExecAsync(async () =>
     {
         await Bridge.RefreshStatusAsync();
         Snapshot = Bridge.Snapshot;
-    }
+    });
 
-    private async Task RunAsync() => await StoreResultAsync(Bridge.RunAsync());
-    private async Task StopAsync() => await StoreResultAsync(Bridge.StopAsync());
-    private async Task EmergencyStopAsync() => await StoreResultAsync(Bridge.EmergencyStopAsync());
+    private async Task RunAsync() => await BusyExecAsync(() => StoreResultAsync(Bridge.RunAsync()));
+    private async Task StopAsync() => await BusyExecAsync(() => StoreResultAsync(Bridge.StopAsync()));
+    private async Task EmergencyStopAsync() => await BusyExecAsync(() => StoreResultAsync(Bridge.EmergencyStopAsync()));
 
-    private async Task SetLogRateAsync()
+    private async Task SetLogRateAsync() => await BusyExecAsync(async () =>
     {
         await StoreResultAsync(Bridge.SetLogRateAsync(_logRateMs));
-    }
+    });
 
-    private async Task StartSpeedLogAsync()
+    private async Task StartSpeedLogAsync() => await BusyExecAsync(async () =>
     {
         await StoreResultAsync(Bridge.StartSpeedLogAsync());
-    }
+    });
 
-    private async Task StopSpeedLogAsync()
+    private async Task StopSpeedLogAsync() => await BusyExecAsync(async () =>
     {
         await StoreResultAsync(Bridge.StopSpeedLogAsync());
-    }
+    });
 
-    private async Task ApplyControlAsync(DashboardControl control)
+    private async Task ApplyControlAsync(DashboardControl control) => await BusyExecAsync(async () =>
     {
         double value = ControlValue(control);
         Task<CommandResult> operation = control.Command switch
@@ -308,9 +310,9 @@
         };
 
         await StoreResultAsync(operation);
-    }
+    });
 
-    private async Task SaveControlAsync(DashboardControl control)
+    private async Task SaveControlAsync(DashboardControl control) => await BusyExecAsync(async () =>
     {
         if (!CanPersistControl(control) || !TryParseConfig(control.Param, out ConfigParam parameter))
         {
@@ -319,7 +321,7 @@
         }
 
         await StoreResultAsync(Bridge.SaveConfigAsync(parameter));
-    }
+    });
 
     private async Task LoadConfigValuesAsync()
     {
@@ -345,6 +347,20 @@
         }
 
         Snapshot = Bridge.Snapshot;
+    }
+
+    private async Task BusyExecAsync(Func<Task> operation)
+    {
+        if (_isBusy) return;
+        _isBusy = true;
+        try
+        {
+            await operation();
+        }
+        finally
+        {
+            _isBusy = false;
+        }
     }
 
     private async Task StoreResultAsync(Task<CommandResult> operation)
