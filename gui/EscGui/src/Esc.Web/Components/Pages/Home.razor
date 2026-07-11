@@ -97,6 +97,10 @@
             <h2>Ajuste de parametros</h2>
             <span>controls.json</span>
         </div>
+        @if (_controls.Count == 0 && !string.IsNullOrWhiteSpace(ControlProvider.LastError))
+        {
+            <p class="result" style="color: var(--red);">@ControlProvider.LastError</p>
+        }
         <div class="controls-grid">
             @foreach (var control in _controls)
             {

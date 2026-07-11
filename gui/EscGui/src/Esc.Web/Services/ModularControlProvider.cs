@@ -8,6 +8,8 @@ public sealed class ModularControlProvider
     private readonly ILogger<ModularControlProvider> _logger;
     private IReadOnlyList<DashboardControl>? _cachedControls;
 
+    public string? LastError { get; private set; }
+
     public ModularControlProvider(IWebHostEnvironment environment, ILogger<ModularControlProvider> logger)
     {
         _environment = environment;
@@ -24,6 +26,7 @@ public sealed class ModularControlProvider
         string path = Path.Combine(_environment.WebRootPath, "controls.json");
         if (!File.Exists(path))
         {
+            LastError = "El archivo controls.json no existe en wwwroot.";
             _cachedControls = Array.Empty<DashboardControl>();
             return _cachedControls;
         }
@@ -36,11 +39,13 @@ public sealed class ModularControlProvider
                 new JsonSerializerOptions(JsonSerializerDefaults.Web),
                 cancellationToken);
 
+            LastError = null;
             _cachedControls = controls ?? Array.Empty<DashboardControl>();
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not load modular controls from {Path}.", path);
+            LastError = $"No se pudieron cargar los controles de controls.json: {ex.Message}";
             _cachedControls = Array.Empty<DashboardControl>();
         }
 
