@@ -6,9 +6,19 @@
 <PageTitle>Detalle de validacion</PageTitle>
 
 <main class="dashboard">
-    @if (_run is null)
+    @if (_run is null && !_loaded)
     {
         <section class="panel"><p>Cargando run...</p></section>
+    }
+    else if (_run is null && _loaded)
+    {
+        <section class="topbar">
+            <div><p class="eyebrow">VALIDACION OFFLINE / NO ENCONTRADA</p><h1>Run no encontrado</h1></div>
+        </section>
+        <section class="panel">
+            <p>No existe ninguna validacion con el ID especificado.</p>
+            <a class="nav-link" href="/runs">Volver a validaciones</a>
+        </section>
     }
     else
     {
@@ -60,11 +70,18 @@
     [Parameter] public Guid Id { get; set; }
     private ValidationRunDetail? _run;
     private string? _message;
+    private bool _loaded;
 
     protected override async Task OnInitializedAsync()
     {
         ValidationRuns.ProgressChanged += HandleProgressChanged;
         await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _run = await ValidationRuns.GetAsync(Id);
+        _loaded = true;
     }
 
     private async Task ExecuteAsync()
@@ -82,7 +99,6 @@
         await LoadAsync();
     }
 
-    private async Task LoadAsync() => _run = await ValidationRuns.GetAsync(Id);
     private void HandleProgressChanged(object? sender, ValidationRunProgress progress)
     {
         if (progress.RunId == Id) _ = InvokeAsync(LoadAsync);
