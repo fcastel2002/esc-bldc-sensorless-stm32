@@ -8,7 +8,7 @@
 <main class="dashboard">
     <section class="topbar">
         <div>
-            <p class="eyebrow">ESC BLDC STM32 / LIVE CONTROL</p>
+            <p class="eyebrow">ESC BLDC STM32 / CONTROL EN VIVO</p>
             <h1>Consola de control del motor</h1>
         </div>
 
@@ -56,7 +56,7 @@
             <select value="@Snapshot.Mode" @onchange="SetModeAsync" disabled="@_isBusy">
                 <option value="@ControlMode.GuiControl">GUI control</option>
                 <option value="@ControlMode.SimulinkControl">Simulink control</option>
-                <option value="@ControlMode.MonitorOnly">Monitor only</option>
+                <option value="@ControlMode.MonitorOnly">Solo monitoreo</option>
             </select>
         </label>
         <p>@ModeHint</p>
@@ -156,8 +156,8 @@
                 <span>ms</span>
             </label>
             <button @onclick="SetLogRateAsync" disabled="@(_isBusy || !IsConnected)">Aplicar tasa</button>
-            <button class="primary" @onclick="StartSpeedLogAsync" disabled="@(_isBusy || !IsConnected || Snapshot.SpeedLoggingEnabled)">Start velocidad</button>
-            <button @onclick="StopSpeedLogAsync" disabled="@(_isBusy || !IsConnected || !Snapshot.SpeedLoggingEnabled)">Stop velocidad</button>
+            <button class="primary" @onclick="StartSpeedLogAsync" disabled="@(_isBusy || !IsConnected || Snapshot.SpeedLoggingEnabled)">Iniciar velocidad</button>
+            <button @onclick="StopSpeedLogAsync" disabled="@(_isBusy || !IsConnected || !Snapshot.SpeedLoggingEnabled)">Detener velocidad</button>
         </div>
         <SpeedChart Samples="@_speedSamples" />
         <div class="telemetry-stats">

@@ -67,7 +67,7 @@ public sealed class EscBridgeService
             if (_transport.IsOpen && !currentStillPresent)
             {
                 _state = DeviceConnectionState.Disconnected;
-                _lastError = "HID device disconnected.";
+                _lastError = "Dispositivo HID desconectado.";
                 _status = null;
                 _currentDevice = null;
             }
@@ -103,8 +103,8 @@ public sealed class EscBridgeService
 
         if (descriptor is null)
         {
-            SetError(DeviceConnectionState.NotDetected, "No ESC HID device was detected.");
-            return CommandResult.Failed("No ESC HID device was detected.");
+            SetError(DeviceConnectionState.NotDetected, "No se detecto ningun dispositivo ESC HID.");
+            return CommandResult.Failed("No se detecto ningun dispositivo ESC HID.");
         }
 
         SetState(DeviceConnectionState.Connecting, descriptor, null);
@@ -129,7 +129,7 @@ public sealed class EscBridgeService
             }
 
             Notify();
-            return CommandResult.Ok("Connected.");
+            return CommandResult.Ok("Conectado.");
         }
         catch (Exception ex)
         {
@@ -185,7 +185,7 @@ public sealed class EscBridgeService
     {
         if (!AllowsGuiControl())
         {
-            return CommandResult.Failed($"Control is locked by {_mode}.");
+            return CommandResult.Failed("Control bloqueado por el modo actual.");
         }
 
         byte[] payload;
@@ -215,7 +215,7 @@ public sealed class EscBridgeService
     {
         if (!AllowsSimulinkControl())
         {
-            return CommandResult.Failed("Set GUI mode to Simulink control before sending real motor commands.");
+            return CommandResult.Failed("Cambia el modo a Simulink control para enviar comandos de motor.");
         }
 
         byte[] payload;
@@ -248,7 +248,7 @@ public sealed class EscBridgeService
     {
         if (!AllowsGuiControl())
         {
-            return CommandResult.Failed($"Control is locked by {_mode}.");
+            return CommandResult.Failed("Control bloqueado por el modo actual.");
         }
 
         byte[] payload;
@@ -268,7 +268,7 @@ public sealed class EscBridgeService
     {
         if (!AllowsGuiControl())
         {
-            return Task.FromResult(CommandResult.Failed($"Control is locked by {_mode}."));
+            return Task.FromResult(CommandResult.Failed("Control bloqueado por el modo actual."));
         }
 
         return SendCommandAsync(CommOpcode.ResetConfig, (byte)parameter, Array.Empty<byte>(), cancellationToken);
@@ -278,7 +278,7 @@ public sealed class EscBridgeService
     {
         if (!AllowsGuiControl())
         {
-            return Task.FromResult(CommandResult.Failed($"Control is locked by {_mode}."));
+            return Task.FromResult(CommandResult.Failed("Control bloqueado por el modo actual."));
         }
 
         return SendCommandAsync(CommOpcode.SaveConfig, (byte)parameter, Array.Empty<byte>(), cancellationToken);
@@ -288,7 +288,7 @@ public sealed class EscBridgeService
     {
         if (!AllowsHilControl())
         {
-            return CommandResult.Failed($"Control is locked by {_mode}.");
+            return CommandResult.Failed("Control bloqueado por el modo actual.");
         }
 
         return await SendCommandAsync(CommOpcode.SetControlMode, 0, EscProtocol.ControlModePayload(mode), cancellationToken).ConfigureAwait(false);
@@ -298,7 +298,7 @@ public sealed class EscBridgeService
     {
         if (!AllowsHilControl())
         {
-            return CommandResult.Failed($"Control is locked by {_mode}.");
+            return CommandResult.Failed("Control bloqueado por el modo actual.");
         }
 
         byte[] payload = inputTimeoutMs.HasValue ? EscProtocol.HilStartPayload(inputTimeoutMs.Value) : Array.Empty<byte>();
@@ -326,7 +326,7 @@ public sealed class EscBridgeService
     {
         if (!AllowsHilControl())
         {
-            return CommandResult.Failed($"Control is locked by {_mode}.");
+            return CommandResult.Failed("Control bloqueado por el modo actual.");
         }
 
         CommandResult result = await SendCommandAsync(CommOpcode.HilSetInputs, 0, EscProtocol.HilInputsPayload(inputs), cancellationToken, refreshStatus: false).ConfigureAwait(false);
@@ -510,7 +510,7 @@ public sealed class EscBridgeService
     {
         if (!AllowsGuiControl())
         {
-            return CommandResult.Failed($"Control is locked by {_mode}.");
+            return CommandResult.Failed("Control bloqueado por el modo actual.");
         }
 
         return await SendCommandAsync(opcode, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
@@ -520,7 +520,7 @@ public sealed class EscBridgeService
     {
         if (!AllowsSimulinkControl())
         {
-            return CommandResult.Failed("Set GUI mode to Simulink control before sending real motor commands.");
+            return CommandResult.Failed("Cambia el modo a Simulink control para enviar comandos de motor.");
         }
 
         return await SendCommandAsync(opcode, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
