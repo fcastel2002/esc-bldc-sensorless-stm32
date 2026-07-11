@@ -160,6 +160,28 @@ report = compare_hil_validation(vectorPath, responsePath, plot=true);
 
 `firmware_pi_reference_step` reproduce el PI de firmware con paso de 2 ms. `compare_hil_validation` une `ExpectedPwm` con el `pwm_command` del MCU por `run_id` y `applied_source_seq`, elimina outputs cacheados por `output_generation` y reporta cobertura y error PWM.
 
+### Contrato de importacion GUI
+
+`export_hil_validation_vector` conserva `validationVector` y `manifest` para
+los scripts MATLAB, y exporta adicionalmente `esc_validation_v1`. La GUI debe
+importar exclusivamente esta estructura plana MAT v7:
+
+| Campo | Tipo | Significado |
+| --- | --- | --- |
+| `schema_version` | `uint32` | Version del contrato, actualmente `1`. |
+| `manifest_json` | `char` | Metadatos JSON: nombre, descripcion, periodo y configuracion PI. |
+| `simulation_time_s` | `double[]` | Tiempo de simulacion de cada muestra. |
+| `run_id` | `uint32[]` | Identificador de corrida, no nulo y uniforme. |
+| `source_sequence` | `uint32[]` | Secuencia estrictamente ascendente. |
+| `speed_rpm` | `uint16[]` | Entrada medida del controlador. |
+| `enable` | `uint8[]` | `0` deshabilita, distinto de cero habilita. |
+| `target_rpm` | `uint16[]` | Referencia usada por el controlador. |
+| `expected_pwm` | `uint16[]` | Salida esperada en cuentas PWM logicas. |
+
+`expected_pwm` se compara directamente contra `pwm_command` devuelto por el
+MCU. Ambos estan en cuentas PWM, no en porcentaje. Los artefactos de
+validacion deben conservar el MAT original junto con los resultados.
+
 Por defecto `replay_hil_validation` aplica `KP`, `KI`, `KD`, pares de polos y frecuencia PWM del manifiesto en RAM mediante la API local del bridge, luego cambia a `SimulinkControl`. No usa `SAVE_CONFIG`; la corrida no modifica la configuracion persistente. Se puede desactivar con `configureBridge=false` si esos parametros ya fueron preparados externamente.
 
 ## Verificacion rapida
