@@ -35,7 +35,9 @@
 // STALL HANDLING
 #define TIMEOUT_MOTOR_STALL_MS 200
 #define STALL_CHECK_TIME_MS 25
-#define HIL_INPUT_TIMEOUT_MS 50
+#define HIL_DEFAULT_INPUT_TIMEOUT_MS 50U
+#define HIL_MIN_INPUT_TIMEOUT_MS 10U
+#define HIL_MAX_INPUT_TIMEOUT_MS 5000U
 ////////
 
 
@@ -87,6 +89,7 @@ static volatile uint16_t hil_speed_rpm = 0;
 static volatile int16_t  hil_load_torque = 0;
 static volatile uint8_t  hil_flags = 0;
 static volatile uint32_t hil_last_input_tick = 0;
+static volatile uint16_t hil_input_timeout_ms = HIL_DEFAULT_INPUT_TIMEOUT_MS;
 static volatile uint32_t hil_input_run_id = 0;
 static volatile uint32_t hil_input_source_seq = 0;
 static volatile HilValidationProvenance hil_validation_provenance = {0};
@@ -429,7 +432,7 @@ uint8_t control_mode_set(uint8_t mode)
   return 1;
 }
 
-__attribute__((optimize("Os"))) uint8_t hil_start(void)
+__attribute__((optimize("Os"))) uint8_t hil_start(uint16_t input_timeout_ms)
 {
   if (!hil_mode_active()) {
     return 0;
@@ -445,6 +448,7 @@ __attribute__((optimize("Os"))) uint8_t hil_start(void)
   hil_input_run_id = 0;
   hil_input_source_seq = 0;
   hil_validation_provenance = (HilValidationProvenance){0};
+  hil_input_timeout_ms = input_timeout_ms == 0U ? HIL_DEFAULT_INPUT_TIMEOUT_MS : input_timeout_ms;
   hil_last_input_tick = HAL_GetTick();
   motor_stalled = false;
   consistent_zero_crossing = 1;
@@ -498,7 +502,7 @@ uint8_t hil_has_timeout(void)
   if (!hil_mode_active()) {
     return 0U;
   }
-  return (uint32_t)(HAL_GetTick() - hil_last_input_tick) > HIL_INPUT_TIMEOUT_MS ? 1U : 0U;
+  return (uint32_t)(HAL_GetTick() - hil_last_input_tick) > hil_input_timeout_ms ? 1U : 0U;
 }
 
 uint16_t hil_get_speed_rpm(void)

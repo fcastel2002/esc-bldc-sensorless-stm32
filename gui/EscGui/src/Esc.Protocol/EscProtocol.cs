@@ -134,6 +134,11 @@ public static class EscProtocol
         return [(byte)mode];
     }
 
+    public static byte[] HilStartPayload(ushort inputTimeoutMs)
+    {
+        return UInt16Payload(inputTimeoutMs);
+    }
+
     public static byte[] HilInputsPayload(HilInputs inputs)
     {
         if (inputs.RunId.HasValue != inputs.SourceSequence.HasValue)

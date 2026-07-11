@@ -67,7 +67,7 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 | `0x31` | `LOG_STOP` | log param or `0xFF` | empty | empty |
 | `0x32` | `LOG_RATE` | ignored | `uint16 ms` | empty |
 | `0x33` | `TELEMETRY_EVENT` | log param | event only | event payload below |
-| `0x40` | `HIL_START` | ignored | empty | empty |
+| `0x40` | `HIL_START` | ignored | empty or `uint16 input_timeout_ms` (`10..5000`) | empty |
 | `0x41` | `HIL_STOP` | ignored | empty | empty |
 | `0x42` | `HIL_SET_INPUTS` | ignored | HIL input payload below | empty |
 | `0x43` | `HIL_GET_OUTPUTS` | ignored | empty | HIL output payload below |
@@ -136,7 +136,7 @@ Control modes:
 | `1` | `MONITOR_ONLY` |
 | `2` | `HIL_SIM` |
 
-In `HIL_SIM`, the MCU is blind to ESC commutation and real TIM2 input-capture events are ignored. Simulink owns the simulated plant and ESC/conmutation. The MCU keeps the PI control tick, uses the latest simulated speed received by `HIL_SET_INPUTS` as feedback, and exposes the logical PWM command with `HIL_GET_OUTPUTS`. If no HIL input arrives for 50 ms, the firmware stops the logical HIL run and returns to `IDLE`.
+In `HIL_SIM`, the MCU is blind to ESC commutation and real TIM2 input-capture events are ignored. Simulink owns the simulated plant and ESC/conmutation. The MCU keeps the PI control tick, uses the latest simulated speed received by `HIL_SET_INPUTS` as feedback, and exposes the logical PWM command with `HIL_GET_OUTPUTS`. `HIL_START` without payload retains the 50 ms input timeout; a validation run can provide `input_timeout_ms` to allow its sequential replay deadline without stopping the logical HIL run.
 
 `HIL_SET_INPUTS` payload:
 

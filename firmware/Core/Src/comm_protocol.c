@@ -487,10 +487,13 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
     return set_logging_rate_ms(read_u16_le(payload));
 
-  case COMM_OPCODE_HIL_START:
-    if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
+  case COMM_OPCODE_HIL_START: {
+    if (payload_len != 0U && payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
+    uint16_t hil_timeout_ms = payload_len == 2U ? read_u16_le(payload) : 0U;
+    if (payload_len == 2U && (hil_timeout_ms < 10U || hil_timeout_ms > 5000U)) return COMM_STATUS_OVERLIMIT;
     (void)control_mode_set(CONTROL_RUNTIME_HIL_SIM);
-    return hil_start() ? COMM_STATUS_OK : COMM_STATUS_INVALID_STATE;
+    return hil_start(hil_timeout_ms) ? COMM_STATUS_OK : COMM_STATUS_INVALID_STATE;
+  }
 
   case COMM_OPCODE_HIL_STOP:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
@@ -501,7 +504,7 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     if (payload_len != 8U && payload_len != 16U) return COMM_STATUS_BAD_LENGTH;
     if (!hil_is_active() && payload[7] != 0U) {
       (void)control_mode_set(CONTROL_RUNTIME_HIL_SIM);
-      (void)hil_start();
+      (void)hil_start(0U);
     }
     if (!hil_is_active()) return COMM_STATUS_INVALID_STATE;
     if (payload[7] == 0U) {

@@ -11,6 +11,9 @@ public static class EscBridgeServiceCollectionExtensions
         services.AddSingleton<IEscTransport, HidSharpEscTransport>();
         services.AddSingleton<TelemetryStore>();
         services.AddSingleton<EscBridgeService>();
+        services.AddSingleton<MatValidationImporter>();
+        services.AddSingleton<ValidationRunStore>();
+        services.AddSingleton<ValidationRunService>();
         services.AddHostedService<EscBridgeWorker>();
         services.AddHostedService<HilUdpBridgeService>();
         return services;

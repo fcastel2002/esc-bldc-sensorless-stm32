@@ -274,7 +274,7 @@ public sealed class HilUdpBridgeService : BackgroundService
 
         if (command is "HIL_START" or "START")
         {
-            CommandResult started = await _bridge.HilStartAsync(cancellationToken).ConfigureAwait(false);
+            CommandResult started = await _bridge.HilStartAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
             if (started.Success)
             {
                 _senderSession.Accept(remoteEndPoint, requestSequence, requestNowMs);

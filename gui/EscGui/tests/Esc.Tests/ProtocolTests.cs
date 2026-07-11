@@ -75,6 +75,14 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public void HilStartPayloadUsesLittleEndianSessionTimeout()
+    {
+        byte[] payload = EscProtocol.HilStartPayload(500);
+
+        Assert.Equal([0xF4, 0x01], payload);
+    }
+
+    [Fact]
     public void ValidatedHilInputsPayloadAppendsRunAndSourceSequence()
     {
         byte[] payload = EscProtocol.HilInputsPayload(new HilInputs(1500, -4, 0xA5, true, 0x10203040, 0x50607080));

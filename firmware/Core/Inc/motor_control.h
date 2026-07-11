@@ -58,7 +58,7 @@ extern void     stop_motor(uint8_t mode);
 extern uint16_t convert_speed_ticks(uint16_t value, bool to_ticks);
 extern uint16_t period_to_pwm(uint16_t period);
 extern uint8_t  control_mode_set(uint8_t mode);
-extern uint8_t  hil_start(void);
+extern uint8_t  hil_start(uint16_t input_timeout_ms);
 extern void     hil_stop(void);
 extern void     hil_set_inputs(uint16_t speed_rpm,
                                int16_t load_torque,

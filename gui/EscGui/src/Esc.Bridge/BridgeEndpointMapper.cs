@@ -65,7 +65,7 @@ public static class BridgeEndpointMapper
             await bridge.StopSpeedLogAsync(cancellationToken));
 
         group.MapPost("/hil/start", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
-            await bridge.HilStartAsync(cancellationToken));
+            await bridge.HilStartAsync(cancellationToken: cancellationToken));
         group.MapPost("/hil/stop", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.HilStopAsync(cancellationToken));
         group.MapPost("/hil/inputs", async (HilInputRequest request, EscBridgeService bridge, CancellationToken cancellationToken) =>
@@ -77,6 +77,22 @@ public static class BridgeEndpointMapper
                 cancellationToken));
         group.MapGet("/hil/outputs", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.HilGetOutputsAsync(cancellationToken));
+
+        RouteGroupBuilder validation = endpoints.MapGroup("/api/validation");
+        validation.MapGet("/runs", async (ValidationRunService runs, CancellationToken cancellationToken) =>
+            await runs.ListAsync(cancellationToken));
+        validation.MapGet("/runs/{id:guid}", async (Guid id, ValidationRunService runs, CancellationToken cancellationToken) =>
+        {
+            ValidationRunDetail? run = await runs.GetAsync(id, cancellationToken);
+            return run is null ? Results.NotFound() : Results.Ok(run);
+        });
+        validation.MapPost("/import", async (ValidationImportRequest request, ValidationRunService runs, CancellationToken cancellationToken) =>
+        {
+            ValidationRunSummary run = await runs.ImportAsync(request.Path, request.Options ?? new ValidationRunOptions(), cancellationToken);
+            return Results.Created($"/api/validation/runs/{run.Id}", run);
+        });
+        validation.MapPost("/runs/{id:guid}/execute", async (Guid id, ValidationRunService runs, CancellationToken cancellationToken) =>
+            await runs.ExecuteAsync(id, cancellationToken));
 
         endpoints.Map("/ws/bridge", HandleWebSocketAsync);
         return endpoints;
@@ -132,4 +148,5 @@ public static class BridgeEndpointMapper
         short LoadTorque,
         byte Flags,
         bool Enable);
+    public sealed record ValidationImportRequest(string Path, ValidationRunOptions? Options);
 }

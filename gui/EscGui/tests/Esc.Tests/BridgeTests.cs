@@ -104,6 +104,21 @@ public sealed class BridgeTests
     }
 
     [Fact]
+    public async Task HilStartCanConfigureValidationInputTimeout()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        await bridge.SetModeAsync(ControlMode.SimulinkControl);
+
+        CommandResult result = await bridge.HilStartAsync(500);
+
+        Assert.True(result.Success);
+        byte[] payload = Assert.Single(transport.RequestPayloads, payload => payload.Length == 2);
+        Assert.Equal(500, BitConverter.ToUInt16(payload));
+    }
+
+    [Fact]
     public async Task ValidatedHilInputsPropagateRunAndSourceSequence()
     {
         FakeEscTransport transport = new();

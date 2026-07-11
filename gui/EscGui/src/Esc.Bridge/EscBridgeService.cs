@@ -294,14 +294,15 @@ public sealed class EscBridgeService
         return await SendCommandAsync(CommOpcode.SetControlMode, 0, EscProtocol.ControlModePayload(mode), cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<CommandResult> HilStartAsync(CancellationToken cancellationToken = default)
+    public async Task<CommandResult> HilStartAsync(ushort? inputTimeoutMs = null, CancellationToken cancellationToken = default)
     {
         if (!AllowsHilControl())
         {
             return CommandResult.Failed($"Control is locked by {_mode}.");
         }
 
-        CommandResult result = await SendCommandAsync(CommOpcode.HilStart, 0, Array.Empty<byte>(), cancellationToken, refreshStatus: false).ConfigureAwait(false);
+        byte[] payload = inputTimeoutMs.HasValue ? EscProtocol.HilStartPayload(inputTimeoutMs.Value) : Array.Empty<byte>();
+        CommandResult result = await SendCommandAsync(CommOpcode.HilStart, 0, payload, cancellationToken, refreshStatus: false).ConfigureAwait(false);
         if (result.Success)
         {
             SetHilEnabled(true);
