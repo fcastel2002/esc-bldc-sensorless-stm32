@@ -11,6 +11,11 @@ accepts the flat `esc_validation_v1` structure documented in
 `pwm_command` are logical PWM counts, so they are compared without percentage
 conversion.
 
+New models should use `export_simulink_validation_run`, which runs the named
+model for a requested stop time and extracts only explicitly declared `logsout`
+signals. Its optional `experimentSignals` payload remains part of the stored
+MAT artifact for later analysis.
+
 Each import creates a persistent run under `%LOCALAPPDATA%\EscGui\validation-runs`:
 
 - `runs.db` stores run metadata, configuration, metrics, and sample results.

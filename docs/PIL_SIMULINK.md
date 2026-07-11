@@ -182,6 +182,49 @@ importar exclusivamente esta estructura plana MAT v7:
 MCU. Ambos estan en cuentas PWM, no en porcentaje. Los artefactos de
 validacion deben conservar el MAT original junto con los resultados.
 
+### Exportacion general desde `logsout`
+
+Para un modelo nuevo, usar `export_simulink_validation_run` en vez de depender
+del workspace base. El modelo debe habilitar Signal Logging y exponer en
+`logsout` solo las senales declaradas por el llamador:
+
+```matlab
+spec = struct();
+spec.validation = struct( ...
+    "speedRpm", "validation_speed_rpm", ...
+    "expectedPwm", "validation_pwm_counts", ...
+    "enable", "validation_enable", ...
+    "targetRpm", "validation_target_rpm");
+spec.extraSignals = [ ...
+    struct("name", "motor_rpm", "unit", "rpm")
+    struct("name", "load_torque", "unit", "N*m")
+    ];
+
+config = struct( ...
+    "experimentName", "Escalon 1000 RPM", ...
+    "description", "PI discreto", ...
+    "controllerPeriodSeconds", 0.002, ...
+    "targetRpm", 1000, ...
+    "kp", 0.75, "ki", 1.35, "kd", 0, ...
+    "pwmFrequency", 18000, "pwmArr", 2000, "polePairs", 2);
+
+[artifact, report, matPath] = export_simulink_validation_run( ...
+    "sim_motor", 10, spec, config, "D:\runs\escalon_1000.mat");
+```
+
+El script carga el modelo, simula hasta el tiempo solicitado y no guarda ningun
+cambio en el archivo del modelo. Si `config.runId` no esta definido, genera un
+identificador `uint32` no nulo. Las cuatro senales de `spec.validation` deben
+ser escalares y loguearse como `timeseries`. `expectedPwm` define la grilla de
+tiempo discreta; debe tener periodo exacto `controllerPeriodSeconds`.
+
+`speedRpm`, `enable` y `targetRpm` se alinean sobre esa grilla mediante
+zero-order hold. No se usa interpolacion lineal. `targetRpm` debe permanecer
+constante porque el protocolo MCU actual configura un unico setpoint por run.
+Las extras declaradas se guardan como `experimentSignals` con su propio eje de
+tiempo y unidad; la GUI actual conserva el artefacto aunque todavia no las
+grafica.
+
 Por defecto `replay_hil_validation` aplica `KP`, `KI`, `KD`, pares de polos y frecuencia PWM del manifiesto en RAM mediante la API local del bridge, luego cambia a `SimulinkControl`. No usa `SAVE_CONFIG`; la corrida no modifica la configuracion persistente. Se puede desactivar con `configureBridge=false` si esos parametros ya fueron preparados externamente.
 
 ## Verificacion rapida
