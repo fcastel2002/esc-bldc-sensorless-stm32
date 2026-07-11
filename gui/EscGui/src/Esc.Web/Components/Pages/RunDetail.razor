@@ -1,0 +1,92 @@
+@page "/runs/{Id:guid}"
+@inject ValidationRunService ValidationRuns
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Detalle de validacion</PageTitle>
+
+<main class="dashboard">
+    @if (_run is null)
+    {
+        <section class="panel"><p>Cargando run...</p></section>
+    }
+    else
+    {
+        <section class="topbar">
+            <div><p class="eyebrow">VALIDACION OFFLINE</p><h1>@_run.Summary.ExperimentName</h1></div>
+            <div class="topbar-actions"><a class="nav-link" href="/runs">Runs</a><a class="nav-link" href="/">Bridge</a></div>
+        </section>
+        <section class="grid">
+            <article class="panel status-panel">
+                <div class="panel-title"><h2>Resultado</h2><span>@_run.Summary.Status</span></div>
+                <div class="status-grid">
+                    <span>Run fuente</span><strong>@_run.Summary.SourceRunId</strong>
+                    <span>Muestras</span><strong>@_run.Summary.SampleCount</strong>
+                    <span>Correctas</span><strong>@_run.Summary.PassedCount</strong>
+                    <span>Fuera de tolerancia</span><strong>@_run.Summary.OutOfToleranceCount</strong>
+                    <span>Timeouts</span><strong>@_run.Summary.TimeoutCount</strong>
+                    <span>Tolerancia</span><strong>@_run.Summary.AbsoluteToleranceCounts cuentas</strong>
+                    <span>Deadline</span><strong>@_run.Summary.ResponseDeadlineMs ms</strong>
+                    <span>Timeout MCU</span><strong>@_run.Summary.HilInputTimeoutMs ms</strong>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_run.Summary.FailureReason)) { <p class="alert">@_run.Summary.FailureReason</p> }
+            </article>
+            <article class="panel status-panel">
+                <div class="panel-title"><h2>Controlador</h2></div>
+                <div class="status-grid">
+                    <span>Referencia</span><strong>@_run.Manifest.TargetRpm rpm</strong>
+                    <span>Periodo</span><strong>@_run.Manifest.SamplePeriodUs us</strong>
+                    <span>KP / KI / KD</span><strong>@_run.Manifest.ReferenceConfig.Kp / @_run.Manifest.ReferenceConfig.Ki / @_run.Manifest.ReferenceConfig.Kd</strong>
+                    <span>PWM ARR</span><strong>@_run.Manifest.ReferenceConfig.PwmArr</strong>
+                </div>
+            </article>
+        </section>
+        <section class="panel">
+            <div class="panel-title"><h2>Muestras</h2><button class="primary" @onclick="ExecuteAsync" disabled="@(_run.Summary.Status == ValidationRunStatus.Running)">Ejecutar validacion</button></div>
+            @if (!string.IsNullOrWhiteSpace(_message)) { <p class="result">@_message</p> }
+            <div class="table-wrap"><table>
+                <thead><tr><th>Seq</th><th>t simulacion</th><th>RPM</th><th>PWM esperado</th><th>PWM MCU</th><th>Error</th><th>RTT</th><th>Estado</th></tr></thead>
+                <tbody>
+                @foreach (ValidationSampleResult sample in _run.Samples)
+                {
+                    <tr><td>@sample.SourceSequence</td><td>@sample.SimulationTimeSeconds.ToString("0.######") s</td><td>@sample.SpeedRpm</td><td>@sample.ExpectedPwm</td><td>@(sample.ActualPwm?.ToString() ?? "-")</td><td>@(sample.AbsoluteError?.ToString() ?? "-")</td><td>@(sample.RoundTripMs?.ToString("0.###") ?? "-") ms</td><td>@sample.Status</td></tr>
+                }
+                </tbody>
+            </table></div>
+        </section>
+    }
+</main>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    private ValidationRunDetail? _run;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ValidationRuns.ProgressChanged += HandleProgressChanged;
+        await LoadAsync();
+    }
+
+    private async Task ExecuteAsync()
+    {
+        try
+        {
+            _message = "Validacion en curso...";
+            await ValidationRuns.ExecuteAsync(Id);
+            _message = "Validacion finalizada.";
+        }
+        catch (Exception exception)
+        {
+            _message = $"Validacion interrumpida: {exception.Message}";
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync() => _run = await ValidationRuns.GetAsync(Id);
+    private void HandleProgressChanged(object? sender, ValidationRunProgress progress)
+    {
+        if (progress.RunId == Id) _ = InvokeAsync(LoadAsync);
+    }
+    public void Dispose() => ValidationRuns.ProgressChanged -= HandleProgressChanged;
+}

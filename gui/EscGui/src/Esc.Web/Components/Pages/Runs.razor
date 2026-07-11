@@ -1,0 +1,113 @@
+@page "/runs"
+@inject ValidationRunService ValidationRuns
+@implements IDisposable
+
+<PageTitle>Runs de validacion</PageTitle>
+
+<main class="dashboard">
+    <section class="topbar">
+        <div>
+            <p class="eyebrow">VALIDACION OFFLINE</p>
+            <h1>Runs de simulacion</h1>
+        </div>
+        <div class="topbar-actions">
+            <a class="nav-link" href="/">Bridge</a>
+            <a class="nav-link" href="/pil">Tramas PIL</a>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-title"><h2>Importar experimento</h2><span>esc_validation_v1 MAT v7</span></div>
+        <div class="control-grid">
+            <label>Archivo MAT<InputFile OnChange="ImportAsync" accept=".mat" /></label>
+            <label>Tolerancia PWM<input type="number" min="0" @bind="_tolerance" /></label>
+            <label>Deadline (ms)<input type="number" min="1" @bind="_deadlineMs" /></label>
+            <label>Warm-up<input type="number" min="0" @bind="_warmupSamples" /></label>
+            <label>Max. timeouts<input type="number" min="0" @bind="_maximumTimeouts" /></label>
+            <label>Timeout MCU (ms)<input type="number" min="10" max="5000" @bind="_hilInputTimeoutMs" /></label>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_message))
+        {
+            <p class="result">@_message</p>
+        }
+    </section>
+
+    <section class="panel">
+        <div class="panel-title"><h2>Historial</h2><button @onclick="LoadAsync">Refrescar</button></div>
+        @if (_runs.Count == 0)
+        {
+            <p>No hay runs importadas.</p>
+        }
+        else
+        {
+            <div class="table-wrap"><table>
+                <thead><tr><th>Experimento</th><th>Estado</th><th>Muestras</th><th>Resultado</th><th>Creada</th><th></th></tr></thead>
+                <tbody>
+                @foreach (ValidationRunSummary run in _runs)
+                {
+                    <tr>
+                        <td><strong>@run.ExperimentName</strong><br /><small>@run.Description</small></td>
+                        <td>@run.Status</td>
+                        <td>@run.SampleCount</td>
+                        <td>@run.PassedCount OK, @run.OutOfToleranceCount tolerancia, @run.TimeoutCount timeout</td>
+                        <td>@run.CreatedAt.LocalDateTime.ToString("g")</td>
+                        <td><a href="@($"/runs/{run.Id}")">Ver</a></td>
+                    </tr>
+                }
+                </tbody>
+            </table></div>
+        }
+    </section>
+</main>
+
+@code {
+    private IReadOnlyList<ValidationRunSummary> _runs = Array.Empty<ValidationRunSummary>();
+    private ushort _tolerance;
+    private int _deadlineMs = 100;
+    private int _warmupSamples;
+    private int _maximumTimeouts = int.MaxValue;
+    private ushort _hilInputTimeoutMs = 500;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync()
+    {
+        ValidationRuns.ProgressChanged += HandleProgressChanged;
+        await LoadAsync();
+    }
+
+    private async Task ImportAsync(InputFileChangeEventArgs args)
+    {
+        IBrowserFile file = args.File;
+        string temporaryPath = Path.Combine(Path.GetTempPath(), $"esc-validation-{Guid.NewGuid():N}.mat");
+        try
+        {
+            await using (FileStream output = File.Create(temporaryPath))
+            {
+                await file.OpenReadStream(512L * 1024 * 1024).CopyToAsync(output);
+            }
+            ValidationRunSummary run = await ValidationRuns.ImportAsync(
+                temporaryPath,
+                new ValidationRunOptions(_tolerance, _deadlineMs, _warmupSamples, _maximumTimeouts, _hilInputTimeoutMs));
+            _message = $"Run {run.ExperimentName} importada con {run.SampleCount} muestras.";
+            await LoadAsync();
+        }
+        catch (Exception exception)
+        {
+            _message = $"No se pudo importar: {exception.Message}";
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
+    }
+
+    private async Task LoadAsync() => _runs = await ValidationRuns.ListAsync();
+
+    private void HandleProgressChanged(object? sender, ValidationRunProgress progress) =>
+        _ = InvokeAsync(LoadAsync);
+
+    public void Dispose() => ValidationRuns.ProgressChanged -= HandleProgressChanged;
+}

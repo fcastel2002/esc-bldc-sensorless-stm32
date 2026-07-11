@@ -10,6 +10,7 @@ This directory contains the durable project documentation for the mixed STM32 fi
 - [Protocol ownership](architecture/protocol-ownership.md): required checklist for shared binary protocol changes.
 - [Project flow](PROJECT_FLOW.md): firmware execution flow.
 - [PIL/Simulink](PIL_SIMULINK.md): PIL/HIL integration notes.
+- [Simulation validation runs](SIMULATION_RUNS.md): import, replay, and persistence workflow.
 - [Bridge walkthrough](BRIDGE_WALKTHROUGH.md): GUI bridge and transport details.
 
 ## SSD Specs
