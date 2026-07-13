@@ -102,11 +102,7 @@ python .\simulacion_agitador\udp_hil_logger.py listen --listen-port 5055
 
 ## Recepcion UDP en Simulink
 
-`simulacion_agitador/sim_motor.mdl` incluye un bloque `UDP Receive MCU` para leer la respuesta completa del bridge. El modelo se puede regenerar con:
-
-```matlab
-run("simulacion_agitador/configure_hil_udp_receive.m")
-```
+`simulacion_agitador/sim_motor.mdl` incluye un bloque `UDP Receive MCU` para leer la respuesta completa del bridge.
 
 Configuracion actual:
 
@@ -149,16 +145,14 @@ Importante: en esta arquitectura HIL el MCU solo devuelve el PWM logico del PI. 
 
 ## Validacion offline
 
-No se sincroniza el step del solver con HID. Simscape conserva su solver variable y el vector HIL se toma cada 20 ms. Primero se ejecuta la planta localmente y se exporta un vector; luego se reproduce contra el MCU y se compara el PWM por identidad logica, no por hora de llegada.
+No se sincroniza el step del solver con HID. Simscape conserva su solver variable y el vector HIL se toma cada 20 ms. Primero se ejecuta la planta localmente y se exporta un vector. Luego la GUI importa el MAT, reproduce sus muestras contra el MCU y compara el PWM por identidad logica, no por hora de llegada.
 
 ```matlab
 config = struct("targetRpm", 1000, "runId", uint32(1));
 [vector, manifest, vectorPath] = export_hil_validation_vector(motor_rpm, config);
-[responses, responsePath] = replay_hil_validation(vectorPath);
-report = compare_hil_validation(vectorPath, responsePath, plot=true);
 ```
 
-`firmware_pi_reference_step` reproduce el PI de firmware con paso de 2 ms. `compare_hil_validation` une `ExpectedPwm` con el `pwm_command` del MCU por `run_id` y `applied_source_seq`, elimina outputs cacheados por `output_generation` y reporta cobertura y error PWM.
+El MAT generado se importa desde `/runs`. La GUI gestiona la configuracion temporal del MCU, el replay, la correlacion por `run_id` y `source_sequence`, las tolerancias y la persistencia de resultados.
 
 ### Contrato de importacion GUI
 
@@ -224,8 +218,6 @@ constante porque el protocolo MCU actual configura un unico setpoint por run.
 Las extras declaradas se guardan como `experimentSignals` con su propio eje de
 tiempo y unidad; la GUI actual conserva el artefacto aunque todavia no las
 grafica.
-
-Por defecto `replay_hil_validation` aplica `KP`, `KI`, `KD`, pares de polos y frecuencia PWM del manifiesto en RAM mediante la API local del bridge, luego cambia a `SimulinkControl`. No usa `SAVE_CONFIG`; la corrida no modifica la configuracion persistente. Se puede desactivar con `configureBridge=false` si esos parametros ya fueron preparados externamente.
 
 ## Verificacion rapida
 
