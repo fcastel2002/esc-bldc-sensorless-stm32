@@ -724,57 +724,6 @@ h2 {
     align-items: center;
 }
 
-.chart-shell {
-    width: 100%;
-    overflow: hidden;
-    border: 1px solid var(--line);
-    border-radius: 2px;
-    background: #071218;
-}
-
-.speed-chart {
-    display: block;
-    width: 100%;
-    height: 320px;
-}
-
-.chart-bg {
-    fill: #071218;
-}
-
-.chart-grid {
-    stroke: #183343;
-    stroke-width: 1;
-}
-
-.chart-axis {
-    stroke: #50758a;
-    stroke-width: 1.2;
-}
-
-.chart-line {
-    fill: none;
-    stroke: var(--cyan);
-    stroke-width: 2.5;
-    stroke-linejoin: round;
-    stroke-linecap: round;
-    filter: drop-shadow(0 0 3px rgba(73, 198, 237, 0.52));
-    animation: chart-signal 480ms ease-out both;
-}
-
-.chart-dot {
-    fill: var(--cyan);
-    stroke: #e2fbff;
-    stroke-width: 1.5;
-}
-
-.chart-empty,
-.chart-label {
-    fill: #7e9aae;
-    font-family: var(--mono);
-    font-size: 12px;
-}
-
 .telemetry-stats {
     display: flex;
     flex-wrap: wrap;
@@ -951,16 +900,6 @@ h2 {
 
     35% {
         box-shadow: 0 0 0 6px rgba(72, 213, 144, 0.22);
-    }
-}
-
-@keyframes chart-signal {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
     }
 }
 
@@ -1174,7 +1113,4 @@ h2 {
         grid-template-columns: minmax(0, 1fr) auto;
     }
 
-    .speed-chart {
-        height: 250px;
-    }
 }

@@ -18,6 +18,7 @@ public sealed class BridgeTests
         Assert.True(result.Success);
         Assert.Equal(DeviceConnectionState.Connected, bridge.Snapshot.State);
         Assert.Equal("USB", bridge.Snapshot.Status?.Transport);
+        Assert.Equal(new ActiveSpeedLimits(200, 5400), bridge.Snapshot.ActiveSpeedLimits);
     }
 
     [Fact]
@@ -84,6 +85,26 @@ public sealed class BridgeTests
     }
 
     [Fact]
+    public async Task ClearSpeedTelemetryEmptiesBufferAndNotifiesSubscribers()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        await bridge.StartSpeedLogAsync();
+        transport.EnqueueTelemetry(2200, 1000);
+        await bridge.ReadTelemetryOnceAsync();
+        var notificationCount = 0;
+        bridge.SnapshotChanged += (_, _) => notificationCount++;
+
+        bridge.ClearSpeedTelemetry();
+
+        Assert.Empty(bridge.SpeedSamples);
+        Assert.Equal(0, bridge.Snapshot.SpeedTelemetry.SampleCount);
+        Assert.Equal(1, notificationCount);
+        Assert.True(bridge.Snapshot.SpeedLoggingEnabled);
+    }
+
+    [Fact]
     public async Task SetConfigDoesNotPersistUntilSaveConfigIsSent()
     {
         FakeEscTransport transport = new();
@@ -98,6 +119,38 @@ public sealed class BridgeTests
         Assert.Contains(CommOpcode.SetConfig, transport.RequestedOpcodes);
         Assert.Contains(CommOpcode.SaveConfig, transport.RequestedOpcodes);
         Assert.True(transport.RequestedOpcodes.IndexOf(CommOpcode.SetConfig) < transport.RequestedOpcodes.IndexOf(CommOpcode.SaveConfig));
+    }
+
+    [Fact]
+    public async Task GuiSetpointUsesActiveFirmwareSpeedLimits()
+    {
+        FakeEscTransport transport = new();
+        transport.ConfigValues[ConfigParam.MinSpeed] = 750;
+        transport.ConfigValues[ConfigParam.MaxSpeed] = 8200;
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+
+        CommandResult below = await bridge.SetSpeedRpmAsync(749);
+        CommandResult lowerBoundary = await bridge.SetSpeedRpmAsync(750);
+        CommandResult above = await bridge.SetSpeedRpmAsync(8201);
+
+        Assert.False(below.Success);
+        Assert.True(lowerBoundary.Success);
+        Assert.False(above.Success);
+        Assert.Single(transport.RequestedOpcodes, opcode => opcode == CommOpcode.SetSpeedRpm);
+    }
+
+    [Fact]
+    public async Task SpeedLimitConfigRefreshesActiveSnapshot()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+
+        CommandResult result = await bridge.SetConfigAsync(ConfigParam.MaxSpeed, 6000);
+
+        Assert.True(result.Success);
+        Assert.Equal(new ActiveSpeedLimits(200, 6000), bridge.Snapshot.ActiveSpeedLimits);
     }
 
     [Fact]
@@ -322,7 +375,9 @@ public sealed class BridgeTests
             [ConfigParam.KiRpm] = 1.00,
             [ConfigParam.KdRpm] = 0,
             [ConfigParam.PolePairs] = 2,
-            [ConfigParam.PwmFreq] = 18_000
+            [ConfigParam.PwmFreq] = 18_000,
+            [ConfigParam.MinSpeed] = 200,
+            [ConfigParam.MaxSpeed] = 5400
         };
 
         public Task OpenAsync(HidDeviceDescriptor descriptor, CancellationToken cancellationToken = default)

@@ -17,6 +17,7 @@ public sealed record BridgeSnapshot(
     HilBridgeStats Hil,
     ValidationReference? ValidationReference,
     ActiveControllerConfig? ActiveControllerConfig,
+    ActiveSpeedLimits? ActiveSpeedLimits,
     DateTimeOffset? ValidationReferenceCapturedAt,
     string? ValidationReferenceError);
 
@@ -25,6 +26,10 @@ public sealed record ActiveControllerConfig(
     double Ki,
     double Kd,
     byte PolePairs);
+
+public sealed record ActiveSpeedLimits(
+    ushort MinRpm,
+    ushort MaxRpm);
 
 public sealed record TelemetryStats(
     int SampleCount,

@@ -109,9 +109,9 @@
                     <label for="@control.Id">@control.Label</label>
                     @if (control.Kind.Equals("slider", StringComparison.OrdinalIgnoreCase))
                     {
-                        <input id="@control.Id" type="range" min="@control.Min" max="@control.Max" step="@control.Step" value="@ControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
+                        <input id="@control.Id" type="range" min="@ControlMin(control)" max="@ControlMax(control)" step="@control.Step" value="@ControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
                         <div class="inline-input">
-                            <input type="number" min="@control.Min" max="@control.Max" step="@control.Step" value="@ControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
+                            <input type="number" min="@ControlMin(control)" max="@ControlMax(control)" step="@control.Step" value="@ControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
                             <span>@control.Unit</span>
                             <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">Aplicar</button>
                             @if (CanPersistControl(control))
@@ -164,7 +164,9 @@
             <button class="primary" @onclick="StartSpeedLogAsync" disabled="@(_isBusy || !IsConnected || Snapshot.SpeedLoggingEnabled)">Iniciar velocidad</button>
             <button @onclick="StopSpeedLogAsync" disabled="@(_isBusy || !IsConnected || !Snapshot.SpeedLoggingEnabled)">Detener velocidad</button>
         </div>
-        <SpeedChart Samples="@_speedSamples" />
+        <SpeedChart Samples="@_speedSamples"
+                    SetpointRpm="@Snapshot.Status?.SpeedSetpointRpm"
+                    ClearRequested="ClearSpeedTelemetry" />
         <div class="telemetry-stats">
             <span>Ultima: @(Snapshot.SpeedTelemetry.LastValue?.ToString("0.0") ?? "-") @Snapshot.SpeedTelemetry.Unit</span>
             <span>Rate efectivo: @Snapshot.SpeedTelemetry.EffectiveRateHz.ToString("0.0") Hz</span>
@@ -327,6 +329,14 @@
         await StoreResultAsync(Bridge.StopSpeedLogAsync());
     });
 
+    private void ClearSpeedTelemetry()
+    {
+        Bridge.ClearSpeedTelemetry();
+        Snapshot = Bridge.Snapshot;
+        _speedSamples = Bridge.SpeedSamples;
+        _lastCommandResult = "Grafica de velocidad limpiada; la adquisicion continua activa.";
+    }
+
     private async Task ApplyControlAsync(DashboardControl control) => await BusyExecAsync(async () =>
     {
         double value = ControlValue(control);
@@ -403,7 +413,11 @@
 
     private void UpdateControlValue(DashboardControl control, ChangeEventArgs args)
     {
-        if (double.TryParse(args.Value?.ToString(), out double value))
+        if (double.TryParse(
+            args.Value?.ToString(),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out double value))
         {
             _controlValues[control.Id] = value;
         }
@@ -411,12 +425,26 @@
 
     private double ControlValue(DashboardControl control)
     {
-        return _controlValues.TryGetValue(control.Id, out double value) ? value : control.DefaultValue;
+        double value = _controlValues.TryGetValue(control.Id, out double currentValue) ? currentValue : control.DefaultValue;
+        return IsSpeedSetpoint(control) && Snapshot.ActiveSpeedLimits is { } limits && limits.MinRpm <= limits.MaxRpm
+            ? Math.Clamp(value, limits.MinRpm, limits.MaxRpm)
+            : value;
     }
+
+    private double ControlMin(DashboardControl control) =>
+        IsSpeedSetpoint(control) && Snapshot.ActiveSpeedLimits is { } limits ? limits.MinRpm : control.Min;
+
+    private double ControlMax(DashboardControl control) =>
+        IsSpeedSetpoint(control) && Snapshot.ActiveSpeedLimits is { } limits ? limits.MaxRpm : control.Max;
 
     private bool ControlDisabled(DashboardControl control)
     {
         if (!IsConnected)
+        {
+            return true;
+        }
+
+        if (IsSpeedSetpoint(control) && Snapshot.ActiveSpeedLimits is { } limits && limits.MinRpm > limits.MaxRpm)
         {
             return true;
         }
@@ -428,6 +456,8 @@
     {
         return control.Command is "set_config" or "reset_config";
     }
+
+    private static bool IsSpeedSetpoint(DashboardControl control) => control.Command == "set_speed_rpm";
 
     private static bool TryParseConfig(string? value, out ConfigParam parameter)
     {
