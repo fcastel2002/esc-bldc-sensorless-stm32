@@ -6,7 +6,7 @@ The repository uses GitHub Actions for pull request validation, release packagin
 
 ### `ci.yml`
 
-Runs on pushes to `main` and `pil_simul`, and on pull requests targeting those branches.
+Runs on pushes to `main` and on pull requests targeting `main`.
 
 Jobs:
 
@@ -43,17 +43,22 @@ It builds Doxygen HTML docs and uploads them as a workflow artifact. GitHub Page
 
 ## Dependabot
 
-Dependabot checks GitHub Actions and NuGet dependencies weekly. Automatic merge is not enabled in this repository configuration; branch protection and CI should be configured before considering automerge.
+Dependabot checks GitHub Actions and NuGet dependencies weekly. Version updates are grouped into one pull request per ecosystem, with at most two open version-update pull requests per ecosystem. Automatic merge is disabled; Dependabot pull requests follow the same checks and squash policy as human changes.
 
-## Branch Protection Recommendation
+## Branch Protection
 
-Protect `main` with required PR review and required passing checks:
+`main` is the only long-lived branch. Normal changes require a pull request, a current branch, resolved review conversations, linear history, and these passing checks:
 
 - `repo-hygiene`
-- `firmware-debug`
 - `gui-build-test`
+- `protocol-guard`
+- `ssd-docs`
 
-During the PIL/Simulink migration stage, protect `pil_simul` with the same checks if it remains an active integration branch.
+`firmware-debug` is temporarily non-blocking because its existing CI build fails. Add it to the required checks after the build is repaired and the job succeeds on `main`.
+
+Pull requests use squash merge only, and GitHub automatically deletes merged head branches. Merge commits, rebase merges, force pushes to `main`, and deletion of `main` are disabled. Because the repository has one maintainer, zero approving reviews are required; review conversations must still be resolved.
+
+See [Development Workflow](development-workflow.md) for branch names, SSD criteria, commit conventions, and the complete pull request lifecycle.
 
 ## Hardware Policy
 

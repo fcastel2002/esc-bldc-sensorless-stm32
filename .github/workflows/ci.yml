@@ -4,11 +4,9 @@ on:
   push:
     branches:
       - main
-      - pil_simul
   pull_request:
     branches:
       - main
-      - pil_simul
 
 permissions:
   contents: read

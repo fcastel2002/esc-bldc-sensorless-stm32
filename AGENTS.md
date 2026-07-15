@@ -23,11 +23,15 @@
 
 ## Git Workflow
 
-- For each requested feature, create a new feature branch from the current base unless the user says otherwise.
-- Commit each completed sub-feature separately. Commit messages must be clear and identify the sub-feature precisely.
+- `main` is the only long-lived branch. Start each normal change from an updated `main` on a short-lived branch.
+- Use `feat/`, `fix/`, `docs/`, `refactor/`, `test/`, or `chore/` followed by a lowercase ASCII kebab-case description. SSD-backed work uses `feat/NNN-kebab-case-feature`.
+- Do not commit directly to `main` unless the user explicitly authorizes an emergency repository recovery.
+- Use focused Conventional Commits. The pull request title must also use Conventional Commit format because it becomes the squash commit subject.
 - Before each commit, inspect `git status` and `git diff`; stage only files changed for that sub-feature and never include unrelated user changes.
-- Push the feature branch after committing when the user has asked for the feature workflow to include pushing.
-- When the overall feature is complete and verified, propose merging the feature branch into `main`; do not merge unless the user confirms.
+- Every normal change reaches `main` through a pull request. Push or open the pull request only when the user has requested remote publication.
+- Required checks are `repo-hygiene`, `gui-build-test`, `protocol-guard`, and `ssd-docs`. `firmware-debug` becomes required after its existing CI failure is repaired.
+- Merge pull requests with squash only and delete the head branch after merge. Do not merge unless the user confirms.
+- Follow [`docs/development-workflow.md`](docs/development-workflow.md) for SSD criteria, validation evidence, branch protection, Dependabot, and release rules.
 
 ## Firmware Invariants
 

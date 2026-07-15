@@ -38,6 +38,7 @@ El firmware STM32 se encuentra en [firmware/](firmware/). Esta carpeta contiene 
 
 - Indice general de documentacion: [docs/README.md](docs/README.md)
 - Comandos de build y test: [docs/build-and-test.md](docs/build-and-test.md)
+- Workflow de desarrollo: [docs/development-workflow.md](docs/development-workflow.md)
 - CI/CD y releases: [docs/ci-cd.md](docs/ci-cd.md)
 - Flujo SSD de features: [specs/README.md](specs/README.md)
 - Ownership de protocolo compartido: [docs/architecture/protocol-ownership.md](docs/architecture/protocol-ownership.md)

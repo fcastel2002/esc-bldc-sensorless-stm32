@@ -6,8 +6,13 @@ updates:
       interval: weekly
       day: monday
       time: "09:00"
-    # Temporarily paused while the repository workflow is consolidated.
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 2
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(ci)"
 
   - package-ecosystem: nuget
     directory: "/gui/EscGui"
@@ -15,5 +20,10 @@ updates:
       interval: weekly
       day: monday
       time: "09:30"
-    # Temporarily paused while the repository workflow is consolidated.
-    open-pull-requests-limit: 0
+    open-pull-requests-limit: 2
+    groups:
+      nuget:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: "chore(deps)"

@@ -1,6 +1,8 @@
 # SSD Workflow
 
-SSD means "specification-driven development" for this repository. Each non-trivial feature gets a versioned folder that describes the problem, design, tasks, tests, decisions, and changelog.
+SSD means "specification-driven development" for this repository. Changes that need durable design and cross-subsystem traceability get a versioned folder that describes the problem, design, tasks, tests, decisions, and changelog.
+
+SSD is required for protocol or persisted-data contracts, architectural ownership changes, coordinated firmware/GUI/Simulink behavior, and multi-stage features with material design decisions. It is not required for localized fixes, routine UI work, documentation, dependencies, or CI maintenance. See [`docs/development-workflow.md`](../docs/development-workflow.md) for the canonical criteria.
 
 ## Feature Folder Convention
 
@@ -11,8 +13,8 @@ specs/NNN-kebab-case-feature/
 - `NNN` is a three-digit sequence.
 - `000` is reserved for the repository SSD/CI setup.
 - Names use ASCII kebab-case.
-- Branches should use `feature/NNN-kebab-case-feature`.
-- Commits should start with `NNN:` and describe the completed sub-feature.
+- Branches use `feat/NNN-kebab-case-feature`.
+- Commits use Conventional Commit subjects and remain focused on completed sub-features.
 
 ## Required Files
 
@@ -39,7 +41,7 @@ Recommended files:
 
 ## Traceability
 
-Pull requests should include:
+Pull requests for SSD-backed changes should include:
 
 - spec link;
 - task IDs completed;
