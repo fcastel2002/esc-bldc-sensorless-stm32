@@ -94,6 +94,7 @@ SineDriveController   sine_ctrl   = {
  */
 void foc_startup(void)
 {
+  motor_control_reset_runtime();
   sine_ctrl.timer_arr = initial_arr;
   mod_q15             = 6553; // 0.2 in Q15
   phase_counter       = 0;

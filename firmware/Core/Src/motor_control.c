@@ -123,6 +123,22 @@ void updateAllMotorControl()
   motor_control_config_done = 1;
 }
 
+void motor_control_reset_runtime(void)
+{
+  uint32_t primask = hil_lock();
+  HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
+  HAL_TIM_Base_Stop_IT(&htim4);
+  __HAL_TIM_SET_COUNTER(&htim4, 0U);
+  __HAL_TIM_CLEAR_FLAG(&htim4, TIM_FLAG_UPDATE | TIM_FLAG_CC1);
+
+  motor_stalled = false;
+  consistent_zero_crossing = 0;
+  last_zc_timestamp = 0;
+  rpm_pi_reset(&rpm_controller);
+  speed_sensor_reset();
+  hil_unlock(primask);
+}
+
 void motor_control_prepare_closed_loop(void)
 {
   rpm_pi_configure(&rpm_controller, current_esc_params.speed_kp, current_esc_params.speed_ki);
@@ -288,6 +304,7 @@ void stop_motor(uint8_t mode)
   if (hil_mode_active() || control_runtime_mode == CONTROL_RUNTIME_MONITOR_ONLY) {
     PWM_STOP();
     bldc_set_pwm(0);
+    motor_control_reset_runtime();
     app_state = IDLE;
     return;
   }
@@ -296,6 +313,8 @@ void stop_motor(uint8_t mode)
   case 0:
     // gradual stop
     PWM_STOP();
+    bldc_set_pwm(0);
+    motor_control_reset_runtime();
     app_state = IDLE;
     break;
   case 1:
@@ -311,6 +330,7 @@ void stop_motor(uint8_t mode)
     PWM_STOP();
     direction = !direction;
     bldc_set_pwm(0);
+    motor_control_reset_runtime();
     app_state = IDLE;
     break;
   }

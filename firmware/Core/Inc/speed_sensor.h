@@ -38,6 +38,7 @@ extern void speed_sensor_zc_detected(uint8_t phase, uint16_t timestamp);
 extern uint16_t speed_sensor_get_speed_rpm(void);
 extern uint16_t speed_sensor_get_speed_period(void);
 extern bool speed_sensor_is_ready(void);
+extern void speed_sensor_reset(void);
 extern void speed_sensor_handle_W_measurement(void);
 extern void speed_sensor_handle_consensus(void);
 extern uint16_t speed_sensor_get_speed_range(void);

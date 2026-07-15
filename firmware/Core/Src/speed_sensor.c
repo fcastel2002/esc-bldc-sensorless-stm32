@@ -28,7 +28,6 @@ static volatile uint16_t speed_buffer[2]    = {0};
 static volatile uint16_t filtered_speed      = 0;
 static volatile uint16_t last_speed_capture  = 1;
 //====================================================
-static void reset_phase_measurements(void);
 static void get_phase_diagnostics(uint16_t* phase_speeds, uint8_t* phase_status);
 
 
@@ -195,8 +194,7 @@ static void calculate_consensus_speed(void)
   }
 }
 
-// Función para reiniciar mediciones tri-fase
-void reset_phase_measurements(void)
+void speed_sensor_reset(void)
 {
   for (uint8_t i = 0; i < PHASE_COUNT; i++) {
     phase_measurements[i].last_timestamp = 0;
@@ -211,6 +209,19 @@ void reset_phase_measurements(void)
   consensus_speed         = 0;
   active_phases_count     = 0;
   speed_measurement_ready = 0;
+  last_W_timestamp        = 0;
+  W_period_idx            = 0;
+  valid_W_zcp             = 0;
+  filtered_speed          = 0;
+  last_speed_capture      = 1;
+
+  for (uint8_t i = 0; i < ZCP_TO_CHECK; i++) {
+    W_periods[i] = 0;
+  }
+
+  for (uint8_t i = 0; i < speed_buffer_size; i++) {
+    speed_buffer[i] = 0;
+  }
 }
 
 // Función de diagnóstico para monitorear estado de mediciones
