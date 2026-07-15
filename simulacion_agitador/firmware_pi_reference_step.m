@@ -14,63 +14,51 @@ arguments
 end
 
 config = localResolveConfig(config);
-integral = single(localStateField(state, "integral", single(0)));
+integralQ16 = int64(localStateField(state, "integralQ16", int32(0)));
 previousError = int32(localStateField(state, "previousError", int32(0)));
-diffSpeed = int32(localStateField(state, "diffSpeed", int32(0)));
+speedRpm = int32(min(65535, max(0, fix(speedRpm))));
+setpointRpm = int32(min(65535, max(0, fix(setpointRpm))));
+errorRpm = setpointRpm - speedRpm;
 
-speedPeriod = localRpmToPeriod(speedRpm, config);
-targetPeriod = localRpmToPeriod(setpointRpm, config);
-speedMeasure = localPeriodToPwm(speedPeriod, config);
-targetPwm = localPeriodToPwm(targetPeriod, config);
-speedError = int32(double(targetPwm) - double(speedMeasure));
-
-if diffSpeed == 0
-    diffSpeed = int32(speedMeasure);
-end
-
-speedProportional = config.kp * single(speedError);
-speedProportional = speedProportional - ...
-    config.kd * single(int32(speedMeasure) - diffSpeed) / config.dt;
-diffSpeed = int32(speedMeasure);
-integral = integral + config.ki * single(double(speedError) + double(previousError)) * config.dt;
-previousError = speedError;
-
-maxPwm = single(config.pwmArr);
-minPwm = single(uint16(fix(double(maxPwm * single(0.05)))));
-if maxPwm > speedProportional
-    maxIntegral = maxPwm - speedProportional;
-else
-    maxIntegral = single(0);
-end
-if minPwm < speedProportional
-    minIntegral = minPwm - speedProportional;
-else
-    minIntegral = single(0);
-end
-integral = min(maxIntegral, max(minIntegral, integral));
-
-% speed_output is int32_t in firmware, so its assignment truncates before
-% the final PWM limit checks.
-speedOutput = int32(fix(double(speedProportional + integral)));
-speedOutput = min(int32(config.pwmArr), max(int32(uint16(minPwm)), speedOutput));
+kpQ16 = int64(fix(config.kp * 65536 + 0.5));
+kiDtHalfQ30 = int64(fix(config.ki * config.dt * 0.5 * 1073741824 + 0.5));
+proportionalQ16 = kpQ16 * int64(errorRpm);
+integralDeltaQ16 = bitshift(kiDtHalfQ30 * int64(errorRpm + previousError), -14);
+minimumQ16 = int64(100 * 65536);
+maximumQ16 = int64(2000 * 65536);
+integralQ16 = min(maximumQ16 - proportionalQ16, ...
+    max(minimumQ16 - proportionalQ16, integralQ16 + integralDeltaQ16));
+integralQ16 = min(int64(intmax("int32")), max(int64(intmin("int32")), integralQ16));
+outputQ16 = min(maximumQ16, max(minimumQ16, proportionalQ16 + integralQ16));
+canonicalPwm = bitshift(outputQ16, -16);
+pwm = uint16(idivide(canonicalPwm * int64(config.pwmArr) + 1000, int64(2000), "floor"));
 
 nextState = state;
-nextState.integral = single(integral);
-nextState.previousError = int32(previousError);
-nextState.diffSpeed = int32(diffSpeed);
-pwm = uint16(speedOutput);
+nextState.integralQ16 = int32(integralQ16);
+nextState.previousError = int32(errorRpm);
 end
 
 function config = localResolveConfig(config)
-config.kp = single(localConfigField(config, "kp", 0.75));
-config.ki = single(localConfigField(config, "ki", 1.35));
-config.kd = single(localConfigField(config, "kd", 0));
-config.pwmArr = localPositiveInteger(localConfigField(config, "pwmArr", 2000), "pwmArr", 65535);
-config.polePairs = localPositiveInteger(localConfigField(config, "polePairs", 2), "polePairs", 255);
-config.timerHz = localPositiveInteger(localConfigField(config, "timerHz", 180000), "timerHz", double(intmax("uint32")));
-config.speedMinPeriod = localPositiveInteger(localConfigField(config, "speedMinPeriod", 14000), "speedMinPeriod", 65535);
-config.speedMaxPeriod = localPositiveInteger(localConfigField(config, "speedMaxPeriod", 200), "speedMaxPeriod", 65535);
-config.dt = single(localConfigField(config, "dt", 0.002));
+config.kp = single(localRequiredConfigField(config, "kp"));
+config.ki = single(localRequiredConfigField(config, "ki"));
+config.kd = single(localRequiredConfigField(config, "kd"));
+config.pwmArr = localPositiveInteger(localRequiredConfigField(config, "pwmArr"), "pwmArr", 65535);
+config.polePairs = localPositiveInteger(localRequiredConfigField(config, "polePairs"), "polePairs", 255);
+config.timerHz = localPositiveInteger(localRequiredConfigField(config, "timerHz"), "timerHz", double(intmax("uint32")));
+config.speedMinPeriod = localPositiveInteger(localRequiredConfigField(config, "speedMinPeriod"), "speedMinPeriod", 65535);
+config.speedMaxPeriod = localPositiveInteger(localRequiredConfigField(config, "speedMaxPeriod"), "speedMaxPeriod", 65535);
+config.minimumPwm = localPositiveInteger(localRequiredConfigField(config, "minimumPwm"), "minimumPwm", config.pwmArr);
+config.dt = single(localRequiredConfigField(config, "dt"));
+config.algorithmVersion = localRequiredConfigField(config, "algorithmVersion");
+
+if config.algorithmVersion ~= 2
+    error("firmware_pi_reference_step:UnsupportedAlgorithm", ...
+        "Only RPM PI algorithm version 2 can generate new reference samples.");
+end
+if config.kd ~= 0
+    error("firmware_pi_reference_step:KdNotImplemented", ...
+        "KD must be zero for RPM PI algorithm version 2.");
+end
 
 if config.speedMaxPeriod > config.speedMinPeriod
     error("firmware_pi_reference_step:InvalidSpeedRange", ...
@@ -81,12 +69,11 @@ if ~isfinite(config.dt) || config.dt <= 0
 end
 end
 
-function value = localConfigField(config, name, defaultValue)
-if isfield(config, name) && ~isempty(config.(name))
-    value = config.(name);
-else
-    value = defaultValue;
+function value = localRequiredConfigField(config, name)
+if ~isfield(config, name) || isempty(config.(name))
+    error("firmware_pi_reference_step:MissingConfig", "Config field %s is required.", name);
 end
+value = config.(name);
 if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value)
     error("firmware_pi_reference_step:InvalidConfig", ...
         "Config field %s must be a finite numeric scalar.", name);
@@ -111,34 +98,4 @@ if ~isnumeric(value) || ~isscalar(value) || ~isfinite(value)
     error("firmware_pi_reference_step:InvalidState", ...
         "State field %s must be a finite numeric scalar.", name);
 end
-end
-
-function period = localRpmToPeriod(rpm, config)
-if ~isfinite(rpm)
-    error("firmware_pi_reference_step:InvalidRpm", "RPM inputs must be finite.");
-end
-rpm = min(65535, max(0, fix(rpm)));
-if rpm == 0
-    period = uint16(65535);
-    return;
-end
-
-% This is the integer division and clamp order used by rpm_to_period().
-ticks = floor((config.timerHz * 30) / (rpm * config.polePairs));
-ticks = min(config.speedMinPeriod, max(config.speedMaxPeriod, ticks));
-period = uint16(ticks);
-end
-
-function pwm = localPeriodToPwm(period, config)
-rawSpeed = double(period);
-if rawSpeed == 0
-    rawSpeed = config.speedMinPeriod;
-end
-rawSpeed = min(config.speedMinPeriod, max(config.speedMaxPeriod, rawSpeed));
-
-minPwm = uint16(fix(double(single(config.pwmArr) * single(0.05))));
-rangeRelation = single(config.pwmArr - double(minPwm)) / ...
-    single(config.speedMinPeriod - config.speedMaxPeriod);
-mapped = single(config.speedMinPeriod - rawSpeed) * rangeRelation + single(minPwm);
-pwm = uint16(fix(double(mapped)));
 end

@@ -27,9 +27,34 @@
             </NavLink>
         </nav>
 
-        <div class="rail-footer">
-            <span class="status-led @_ledClass" aria-hidden="true"></span>
-            <span>@_ledLabel</span>
+        <div class="rail-lower">
+            <section class="rail-config" aria-label="Configuracion activa del ESC">
+                <div class="rail-config-title">
+                    <span>CONFIG MCU</span>
+                    <button @onclick="RefreshReferenceAsync" disabled="@(_refreshing || _snapshot.State != DeviceConnectionState.Connected)" title="Actualizar configuracion">REF</button>
+                </div>
+                @if (_snapshot.ValidationReference is { } reference)
+                {
+                    <div class="rail-config-grid">
+                        <span>KP/KI/KD</span><strong>@GainText</strong>
+                        <span>CONTROL</span><strong>PI RPM V@reference.AlgorithmVersion</strong>
+                        <span>POLOS</span><strong>@(_snapshot.ActiveControllerConfig?.PolePairs.ToString() ?? "-")</strong>
+                        <span>PWM</span><strong>@reference.PwmFrequencyHz Hz</strong>
+                        <span>ARR</span><strong>@reference.PwmArrCounts</strong>
+                        <span>TIMER RPM</span><strong>@reference.SpeedTimerHz Hz</strong>
+                        <span>PERIODO</span><strong>@reference.SpeedMaxPeriodTicks-@reference.SpeedMinPeriodTicks</strong>
+                        <span>DT</span><strong>@reference.ControllerDtSeconds.ToString("0.000") s</strong>
+                    </div>
+                }
+                else
+                {
+                    <p>@ReferenceState</p>
+                }
+            </section>
+            <div class="rail-footer">
+                <span class="status-led @_ledClass" aria-hidden="true"></span>
+                <span>@_ledLabel</span>
+            </div>
         </div>
     </aside>
 
@@ -53,17 +78,63 @@
 @code {
     private string _ledClass = "led-notdetected";
     private string _ledLabel = "SIN CONEXION";
+    private BridgeSnapshot _snapshot = default!;
+    private bool _refreshing;
+    private bool _disposed;
+
+    private string GainText => _snapshot.ActiveControllerConfig is { } config
+        ? $"{config.Kp:0.00}/{config.Ki:0.00}/{config.Kd:0.00}"
+        : "-/-/-";
+    private string ReferenceState => _snapshot.State == DeviceConnectionState.Connected
+        ? (_snapshot.ValidationReferenceError is null ? "SIN LEER" : "LECTURA FALLIDA")
+        : "DESCONECTADO";
 
     protected override void OnInitialized()
     {
-        UpdateLed(Bridge.Snapshot.State);
+        _snapshot = Bridge.Snapshot;
+        UpdateLed(_snapshot.State);
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
         Bridge.SnapshotChanged += HandleSnapshotChanged;
     }
 
     private void HandleSnapshotChanged(object? sender, EventArgs args)
     {
-        UpdateLed(Bridge.Snapshot.State);
-        _ = InvokeAsync(StateHasChanged);
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _snapshot = Bridge.Snapshot;
+            UpdateLed(_snapshot.State);
+            StateHasChanged();
+        });
+    }
+
+    private async Task RefreshReferenceAsync()
+    {
+        _refreshing = true;
+        try
+        {
+            await Bridge.RefreshValidationReferenceAsync();
+        }
+        catch
+        {
+            // El estado de error se publica en el snapshot del bridge.
+        }
+        finally
+        {
+            _refreshing = false;
+        }
     }
 
     private void UpdateLed(DeviceConnectionState state)
@@ -81,6 +152,7 @@
 
     public void Dispose()
     {
+        _disposed = true;
         Bridge.SnapshotChanged -= HandleSnapshotChanged;
     }
 }

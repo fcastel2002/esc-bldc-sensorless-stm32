@@ -11,8 +11,18 @@
 #include "speed_sensor.h"
 #include "bldc_driver.h"
 #include "utilities.h"
+#include "rpm_pi_controller.h"
 #include <stdint.h>
 #include <stdbool.h>
+
+#define MOTOR_CONTROL_ALGORITHM_VERSION 2U
+#define MOTOR_CONTROL_DT_US 2000U
+#define MOTOR_CONTROL_DT_SECONDS RPM_PI_DT_SECONDS
+#define MOTOR_CONTROL_MIN_PWM_DIVISOR 20U
+#define MOTOR_CONTROL_SCALE 1
+#define MOTOR_CONTROL_TIMER_PSC 2U
+#define MOTOR_CONTROL_TIMER_ARR 47999U
+#define MOTOR_CONTROL_TIMER_COMPARE 47999U
 
 typedef enum {
   CONTROL_RUNTIME_NORMAL = 0,
@@ -49,14 +59,13 @@ extern volatile ControlRuntimeMode control_runtime_mode;
 
 // RUNTIME FUNCTIONS
 extern void updateAllMotorControl(void);
+extern void motor_control_prepare_closed_loop(void);
 void        pi_control(void);
 extern void detect_motor(void);
 // void commutate(int8_t step);
 extern void     zero_crossing_handler(uint8_t fase);
 extern void     check_motor_status(void);
 extern void     stop_motor(uint8_t mode);
-extern uint16_t convert_speed_ticks(uint16_t value, bool to_ticks);
-extern uint16_t period_to_pwm(uint16_t period);
 extern uint8_t  control_mode_set(uint8_t mode);
 extern uint8_t  hil_start(uint16_t input_timeout_ms);
 extern void     hil_stop(void);

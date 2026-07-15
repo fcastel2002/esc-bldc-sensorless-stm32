@@ -74,6 +74,19 @@ public sealed class MatValidationImporter
             previousSequence = sequences[i];
         }
 
+        double sampleSpan = simulationTimes[^1] - simulationTimes[0];
+        if (double.IsNaN(manifest.StopTimeSeconds))
+        {
+            manifest = manifest with
+            {
+                StopTimeSeconds = Math.Max(sampleSpan, manifest.SamplePeriodUs / 1_000_000d)
+            };
+        }
+        else if (!double.IsFinite(manifest.StopTimeSeconds) || manifest.StopTimeSeconds <= 0)
+        {
+            throw new InvalidDataException("manifest stopTimeSeconds must be finite and positive.");
+        }
+
         return new ImportedValidationVector(sourceRunId, manifest, samples, sourcePath);
     }
 
@@ -82,21 +95,61 @@ public sealed class MatValidationImporter
         using JsonDocument document = JsonDocument.Parse(json);
         JsonElement root = document.RootElement;
         JsonElement config = root.GetProperty("referenceConfig");
+        var referenceConfig = new ValidationReferenceConfig(
+            config.GetProperty("kp").GetDouble(),
+            config.GetProperty("ki").GetDouble(),
+            config.GetProperty("kd").GetDouble(),
+            config.GetProperty("pwmFrequency").GetInt32(),
+            config.GetProperty("polePairs").GetInt32(),
+            config.GetProperty("pwmArr").GetInt32(),
+            config.GetProperty("dt").GetDouble(),
+            GetOptionalUInt32(config, "timerHz", 180000),
+            GetOptionalInt32(config, "speedMinPeriod", 14000),
+            GetOptionalInt32(config, "speedMaxPeriod", 200),
+            GetOptionalInt32(config, "minimumPwm", (int)Math.Floor(config.GetProperty("pwmArr").GetInt32() * 0.05)),
+            GetOptionalInt32(config, "algorithmVersion", 1));
+        ValidateReferenceConfig(referenceConfig);
+
         return new ValidationManifest(
             schemaVersion,
             root.GetProperty("experimentName").GetString() ?? "Unnamed validation",
             root.GetProperty("description").GetString() ?? string.Empty,
             root.GetProperty("createdAtUtc").GetString() ?? string.Empty,
+            root.TryGetProperty("stopTimeSeconds", out JsonElement stopTime)
+                ? stopTime.GetDouble()
+                : double.NaN,
             root.GetProperty("samplePeriodUs").GetUInt64(),
             root.GetProperty("targetRpm").GetUInt16(),
-            new ValidationReferenceConfig(
-                config.GetProperty("kp").GetDouble(),
-                config.GetProperty("ki").GetDouble(),
-                config.GetProperty("kd").GetDouble(),
-                config.GetProperty("pwmFrequency").GetInt32(),
-                config.GetProperty("polePairs").GetInt32(),
-                config.GetProperty("pwmArr").GetInt32(),
-                config.GetProperty("dt").GetDouble()));
+            referenceConfig);
+    }
+
+    private static int GetOptionalInt32(JsonElement element, string name, int defaultValue) =>
+        element.TryGetProperty(name, out JsonElement value) ? value.GetInt32() : defaultValue;
+
+    private static uint GetOptionalUInt32(JsonElement element, string name, uint defaultValue) =>
+        element.TryGetProperty(name, out JsonElement value) ? value.GetUInt32() : defaultValue;
+
+    private static void ValidateReferenceConfig(ValidationReferenceConfig config)
+    {
+        ValidateGain(config.Kp, "kp");
+        ValidateGain(config.Ki, "ki");
+        ValidateGain(config.Kd, "kd");
+        if (config.AlgorithmVersion is not (1 or 2))
+        {
+            throw new InvalidDataException($"Unsupported controller algorithm version {config.AlgorithmVersion}.");
+        }
+        if (config.AlgorithmVersion == 2 && config.Kd != 0)
+        {
+            throw new InvalidDataException("manifest referenceConfig.kd must be zero for RPM PI algorithm version 2.");
+        }
+    }
+
+    private static void ValidateGain(double value, string name)
+    {
+        if (!double.IsFinite(value) || value is < 0 or > 10 || Math.Abs(value * 100 - Math.Round(value * 100)) > 1e-9)
+        {
+            throw new InvalidDataException($"manifest referenceConfig.{name} must be in [0, 10] with 0.01 resolution.");
+        }
     }
 
     private static IArray Field(IStructureArray payload, string name, int[] index)

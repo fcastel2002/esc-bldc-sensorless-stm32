@@ -67,11 +67,46 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public void DecodeValidationReferenceReadsStructuralControllerValues()
+    {
+        byte[] payload = new byte[20];
+        payload[0] = 1;
+        payload[1] = 2;
+        BitConverter.GetBytes((ushort)18_000).CopyTo(payload, 2);
+        BitConverter.GetBytes((ushort)2_000).CopyTo(payload, 4);
+        BitConverter.GetBytes(180_000u).CopyTo(payload, 6);
+        BitConverter.GetBytes((ushort)14_000).CopyTo(payload, 10);
+        BitConverter.GetBytes((ushort)200).CopyTo(payload, 12);
+        BitConverter.GetBytes(2_000u).CopyTo(payload, 14);
+        BitConverter.GetBytes((ushort)100).CopyTo(payload, 18);
+
+        byte[] raw = EscProtocol.BuildFrame(
+            4, CommOpcode.GetValidationReference, 0, payload, CommFrameType.Response, CommStatus.Ok);
+        ValidationReference reference = EscProtocol.DecodeValidationReference(EscProtocol.Parse(raw));
+
+        Assert.Equal((ushort)18_000, reference.PwmFrequencyHz);
+        Assert.Equal((ushort)2_000, reference.PwmArrCounts);
+        Assert.Equal(180_000u, reference.SpeedTimerHz);
+        Assert.Equal(0.002, reference.ControllerDtSeconds);
+        Assert.Equal((ushort)100, reference.MinimumPwmCounts);
+    }
+
+    [Fact]
     public void HilInputsPayloadUsesExpectedWireShape()
     {
         byte[] payload = EscProtocol.HilInputsPayload(new HilInputs(1500, -4, 0xA5, true));
 
         Assert.Equal([0xDC, 0x05, 0x00, 0x00, 0xFC, 0xFF, 0xA5, 0x01], payload);
+    }
+
+    [Fact]
+    public void RpmPiGainUsesNewParameterAndHundredthsPayload()
+    {
+        byte[] payload = EscProtocol.ConfigPayload(ConfigParam.KpRpm, 0.28);
+
+        Assert.Equal((byte)0x0A, (byte)ConfigParam.KpRpm);
+        Assert.Equal([0x1C, 0x00], payload);
+        Assert.Throws<ArgumentOutOfRangeException>(() => EscProtocol.ConfigPayload(ConfigParam.Kp, 0.28));
     }
 
     [Fact]

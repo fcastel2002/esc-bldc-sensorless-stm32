@@ -7,6 +7,8 @@
 
 #include "hard_config.h"
 
+#include <math.h>
+
 static volatile uint16_t pwm_freq_arr      = 0;
 static volatile uint16_t current_limit_adc = 0;
 static volatile uint16_t max_speed_arr     = 0;
@@ -26,13 +28,13 @@ ESCparams        current_esc_params    = {0};
 
 void             set_default_esc_params()
 {
-  current_esc_params.signature     = 0x50415055;
+  current_esc_params.signature     = ESC_PARAMS_SIGNATURE_V2;
   current_esc_params.pwm_freq_hz   = 18000;
   current_esc_params.current_limit = 10;
   current_esc_params.temp_limit    = 70;
-  current_esc_params.speed_kp      = 0.75f;
-  current_esc_params.speed_ki      = 1.35f;
-  current_esc_params.speed_kd      = 0.0f;
+  current_esc_params.speed_kp      = ESC_DEFAULT_KP_RPM;
+  current_esc_params.speed_ki      = ESC_DEFAULT_KI_RPM;
+  current_esc_params.speed_kd      = ESC_DEFAULT_KD_RPM;
   current_esc_params.speed_max_rpm = 5400;
   current_esc_params.speed_min_rpm = 200; // Default minimum speed
   current_esc_params.pole_pairs    = 2; // Default pole pairs
@@ -117,6 +119,8 @@ uint8_t get_pole_pairs()
 
 ConfigStatus set_KP(float new_kp)
 {
+  if (!isfinite(new_kp))
+    return CONFIG_ERROR_NaN;
   if (new_kp < 0.0f)
     return CONFIG_ERROR_UNDERLIMIT; // Arbitrary limits
   if (new_kp > 10.0f)
@@ -132,6 +136,8 @@ float get_KP()
 }
 ConfigStatus set_KI(float new_ki)
 {
+  if (!isfinite(new_ki))
+    return CONFIG_ERROR_NaN;
   if (new_ki < 0.0f)
     return CONFIG_ERROR_UNDERLIMIT; // Arbitrary limits
   if (new_ki > 10.0f)
@@ -148,6 +154,10 @@ float get_KI()
 
 ConfigStatus set_KD(float new_kd)
 {
+  if (!isfinite(new_kd))
+    return CONFIG_ERROR_NaN;
+  if (new_kd != 0.0f)
+    return CONFIG_ERROR_OVERLIMIT;
   if (new_kd < 0.0f)
     return CONFIG_ERROR_UNDERLIMIT;
   if (new_kd > 10.0f)

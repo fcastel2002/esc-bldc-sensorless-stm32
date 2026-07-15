@@ -36,6 +36,7 @@ public enum CommOpcode : byte
     SetConfig = 0x21,
     ResetConfig = 0x22,
     SaveConfig = 0x23,
+    GetValidationReference = 0x24,
     LogStart = 0x30,
     LogStop = 0x31,
     LogRate = 0x32,
@@ -80,6 +81,9 @@ public enum ConfigParam : byte
     MinSpeed = 0x07,
     CurrentLimit = 0x08,
     TempLimit = 0x09,
+    KpRpm = 0x0A,
+    KiRpm = 0x0B,
+    KdRpm = 0x0C,
     All = 0xFF,
 }
 

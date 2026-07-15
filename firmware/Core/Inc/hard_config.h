@@ -9,6 +9,12 @@
 #define INC_HARD_CONFIG_H_
 #include "flash_config.h"
 #include "main.h"
+
+#define ESC_PARAMS_SIGNATURE_V1 0x50415055U
+#define ESC_PARAMS_SIGNATURE_V2 0x32504345U
+#define ESC_DEFAULT_KP_RPM 0.28f
+#define ESC_DEFAULT_KI_RPM 1.00f
+#define ESC_DEFAULT_KD_RPM 0.00f
 /*
  * @brief
  * Esta configuración será guardada en flash, de tal forma que el usuario pueda

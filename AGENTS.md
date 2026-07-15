@@ -19,6 +19,7 @@
 - Run GUI tests: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj`.
 - Run a focused GUI test by filter: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj --filter "FullyQualifiedName~ProtocolTests"` or replace `ProtocolTests` with the target class/method substring.
 - Publish Windows GUI exe from repo root: `powershell -ExecutionPolicy Bypass -File .\gui\EscGui\publish-gui-win-x64.ps1`; output is `gui\EscGui\publish\win-x64\Esc.Web.exe` plus required web assets in the same folder.
+- After every completed feature, run the Windows GUI publish command as final verification; a successful build alone is not sufficient.
 
 ## Git Workflow
 
@@ -35,9 +36,9 @@
 - Main protocol effects live in `firmware/Core/Src/comm_protocol.c`; transport selection is in `comm_transport.c`; periodic communication/telemetry facade is in `comm.c`.
 - `foc_startup()` is historical naming: it is open-loop sinusoidal/SPWM startup, not field-oriented control and not a current loop.
 - `SET_CONFIG` and `RESET_CONFIG` update active RAM only; flash persistence requires explicit `SAVE_CONFIG`.
-- PI gains are floats internally but protocol payloads use `int16` hundredths, e.g. `135` means `1.35`.
+- RPM PI v2 stores gains as floats but executes Q16.16; `KP_RPM/KI_RPM` payloads use `int16` hundredths. KD is fixed at zero.
 - In `CLOSEDLOOP`, `PWM_FREQ`, `KP`, `KI`, and `KD` apply hot; other config changes use the deferred `CONFIG` path.
-- `KD` acts on measured-speed derivative, not error derivative, to avoid setpoint derivative kick.
+- RPM PI v2 controls direct RPM error with canonical ARR=2000 output and trapezoidal integration; KD is not implemented.
 - `CURRENT_LIMIT` and `TEMP_LIMIT` are protocol placeholders and return/use `NOT_IMPLEMENTED`; current and temperature telemetry are placeholders too.
 - CubeMX-generated files may contain `USER CODE BEGIN/END` regions; avoid editing generated sections outside those regions unless the task explicitly requires it.
 - C formatting/lint config exists at repo root as `.clang-format` and `.clang-tidy`.

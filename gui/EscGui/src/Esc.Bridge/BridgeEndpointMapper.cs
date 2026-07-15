@@ -50,6 +50,8 @@ public static class BridgeEndpointMapper
 
         group.MapGet("/config/{parameter}", async (string parameter, EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.GetConfigAsync(ParseConfigParam(parameter), cancellationToken));
+        group.MapGet("/validation-reference", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.RefreshValidationReferenceAsync(cancellationToken));
         group.MapPost("/config/{parameter}", async (string parameter, SetConfigRequest request, EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.SetConfigAsync(ParseConfigParam(parameter), request.Value, cancellationToken));
         group.MapPost("/config/{parameter}/reset", async (string parameter, EscBridgeService bridge, CancellationToken cancellationToken) =>
@@ -93,6 +95,17 @@ public static class BridgeEndpointMapper
         });
         validation.MapPost("/runs/{id:guid}/execute", async (Guid id, ValidationRunService runs, CancellationToken cancellationToken) =>
             await runs.ExecuteAsync(id, cancellationToken));
+        validation.MapDelete("/runs/{id:guid}", async (Guid id, ValidationRunService runs, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return await runs.DeleteAsync(id, cancellationToken) ? Results.NoContent() : Results.NotFound();
+            }
+            catch (InvalidOperationException exception)
+            {
+                return Results.Conflict(new { error = exception.Message });
+            }
+        });
 
         endpoints.Map("/ws/bridge", HandleWebSocketAsync);
         return endpoints;
@@ -127,9 +140,9 @@ public static class BridgeEndpointMapper
         {
             "PWM_FREQ" => ConfigParam.PwmFreq,
             "POLE_PAIRS" => ConfigParam.PolePairs,
-            "KP" => ConfigParam.Kp,
-            "KI" => ConfigParam.Ki,
-            "KD" => ConfigParam.Kd,
+            "KP" or "KP_RPM" => ConfigParam.KpRpm,
+            "KI" or "KI_RPM" => ConfigParam.KiRpm,
+            "KD" or "KD_RPM" => ConfigParam.KdRpm,
             "MAX_SPEED" => ConfigParam.MaxSpeed,
             "MIN_SPEED" => ConfigParam.MinSpeed,
             "ALL" => ConfigParam.All,

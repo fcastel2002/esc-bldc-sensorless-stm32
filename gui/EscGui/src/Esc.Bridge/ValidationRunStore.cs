@@ -138,6 +138,17 @@ public sealed class ValidationRunStore
                 ReadNullableInt32(sampleReader, "absolute_error")));
         }
 
+        if (!double.IsFinite(manifest.StopTimeSeconds) || manifest.StopTimeSeconds <= 0)
+        {
+            double sampleSpan = samples.Count > 0
+                ? samples[^1].SimulationTimeSeconds - samples[0].SimulationTimeSeconds
+                : 0;
+            manifest = manifest with
+            {
+                StopTimeSeconds = Math.Max(sampleSpan, manifest.SamplePeriodUs / 1_000_000d)
+            };
+        }
+
         return new ValidationRunDetail(summary, manifest, samples);
     }
 
@@ -146,6 +157,43 @@ public sealed class ValidationRunStore
 
     public async Task CompleteAsync(Guid id, ValidationRunStatus status, string? failureReason, CancellationToken cancellationToken = default) =>
         await UpdateRunAsync(id, status, failureReason, cancellationToken).ConfigureAwait(false);
+
+    public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+        await using SqliteConnection connection = OpenConnection();
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+
+        await using var selectCommand = connection.CreateCommand();
+        selectCommand.Transaction = transaction;
+        selectCommand.CommandText = "SELECT status, artifact_path FROM validation_runs WHERE id = $id";
+        selectCommand.Parameters.AddWithValue("$id", id.ToString("N"));
+        await using SqliteDataReader reader = await selectCommand.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+        if (!await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            return false;
+        }
+
+        ValidationRunStatus status = (ValidationRunStatus)reader.GetInt32(0);
+        string artifactPath = reader.GetString(1);
+        await reader.DisposeAsync().ConfigureAwait(false);
+        if (status == ValidationRunStatus.Running)
+        {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException("A running validation cannot be deleted.");
+        }
+
+        await ExecuteAsync(connection, transaction, "DELETE FROM validation_samples WHERE run_id = $id", cancellationToken,
+            ("$id", id.ToString("N"))).ConfigureAwait(false);
+        await ExecuteAsync(connection, transaction, "DELETE FROM validation_runs WHERE id = $id", cancellationToken,
+            ("$id", id.ToString("N"))).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+
+        DeleteArtifactDirectory(artifactPath);
+        return true;
+    }
 
     public async Task UpdateSampleAsync(Guid runId, ValidationSampleResult result, CancellationToken cancellationToken = default)
     {
@@ -255,6 +303,21 @@ public sealed class ValidationRunStore
     }
 
     private SqliteConnection OpenConnection() => new($"Data Source={_databasePath}");
+
+    private void DeleteArtifactDirectory(string artifactPath)
+    {
+        string artifactsRoot = Path.GetFullPath(Path.Combine(_rootDirectory, "artifacts"));
+        string artifactDirectory = Path.GetFullPath(Path.GetDirectoryName(artifactPath) ?? string.Empty);
+        if (!artifactDirectory.StartsWith(artifactsRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidDataException("Stored validation artifact path is outside the artifact directory.");
+        }
+
+        if (Directory.Exists(artifactDirectory))
+        {
+            Directory.Delete(artifactDirectory, recursive: true);
+        }
+    }
 
     private static async Task ExecuteAsync(SqliteConnection connection, SqliteTransaction? transaction, string sql, CancellationToken cancellationToken, params (string Name, object? Value)[] parameters)
     {

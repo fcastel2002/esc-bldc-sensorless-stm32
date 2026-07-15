@@ -154,6 +154,25 @@ config = struct("targetRpm", 1000, "runId", uint32(1));
 
 El MAT generado se importa desde `/runs`. La GUI gestiona la configuracion temporal del MCU, el replay, la correlacion por `run_id` y `source_sequence`, las tolerancias y la persistencia de resultados.
 
+Para `sim_motor`, la exportacion completa se ejecuta con:
+
+```matlab
+export_sim_motor_validation(stopTime=3, targetRpm=1000)
+```
+
+El exportador lee `KP`, `KI` y `KD` directamente del bloque `PID Controller`.
+Tambien se pueden sobrescribir solo para esa simulacion, sin guardar cambios en
+el modelo:
+
+```matlab
+export_sim_motor_validation( ...
+    stopTime=3, targetRpm=1000, kp=0.02, ki=0.03, kd=0.01)
+```
+
+Las ganancias deben ser representables con la resolucion `0.01` del protocolo.
+La GUI aplica esos valores solo durante la corrida y restaura luego la
+configuracion activa; nunca envia `SAVE_CONFIG`.
+
 ### Contrato de importacion GUI
 
 `export_hil_validation_vector` conserva `validationVector` y `manifest` para
@@ -163,7 +182,7 @@ importar exclusivamente esta estructura plana MAT v7:
 | Campo | Tipo | Significado |
 | --- | --- | --- |
 | `schema_version` | `uint32` | Version del contrato, actualmente `1`. |
-| `manifest_json` | `char` | Metadatos JSON: nombre, descripcion, periodo y configuracion PI. |
+| `manifest_json` | `char` | Metadatos JSON: nombre, descripcion, `stopTimeSeconds`, periodo y configuracion PI. |
 | `simulation_time_s` | `double[]` | Tiempo de simulacion de cada muestra. |
 | `run_id` | `uint32[]` | Identificador de corrida, no nulo y uniforme. |
 | `source_sequence` | `uint32[]` | Secuencia estrictamente ascendente. |
@@ -175,6 +194,25 @@ importar exclusivamente esta estructura plana MAT v7:
 `expected_pwm` se compara directamente contra `pwm_command` devuelto por el
 MCU. Ambos estan en cuentas PWM, no en porcentaje. Los artefactos de
 validacion deben conservar el MAT original junto con los resultados.
+La GUI solo reproduce muestras dentro de `stopTimeSeconds`; para artefactos
+anteriores que no tengan ese campo deriva el horizonte desde los timestamps.
+
+Para `sim_motor`, `export_sim_motor_validation` obtiene KP, KI, KD, pares de
+polos y setpoint desde sus opciones. El PI del modelo y el MCU usan el mismo
+error RPM, integracion trapezoidal y salida en cuentas canonicas ARR=2000; una
+ganancia `1/2000` convierte la salida del modelo a duty. Antes de simular consulta
+`http://localhost:5187/api/bridge/validation-reference` para capturar frecuencia
+PWM, ARR real, reloj y limites del timer de velocidad, `dt`, PWM minimo y
+version del algoritmo. Si el bridge o el MCU no estan disponibles, no genera el
+MAT. Durante el replay la GUI no modifica esos parametros estructurales: los
+verifica y aborta ante una diferencia. El PWM esperado final se recalcula con
+las generaciones reales informadas por el MCU.
+
+El timer de control del firmware usa `PSC=2`, `ARR=47999` y compare `47999` con
+reloj de 72 MHz, produciendo un periodo repetitivo real de 2 ms coherente con
+el `dt` publicado. No debe restaurarse la configuracion anterior
+`ARR=65535/compare=48000`, que solo producia el primer evento a 2 ms y luego
+ejecutaba el PI cada 2.7307 ms.
 
 ### Exportacion general desde `logsout`
 
@@ -199,7 +237,7 @@ config = struct( ...
     "description", "PI discreto", ...
     "controllerPeriodSeconds", 0.002, ...
     "targetRpm", 1000, ...
-    "kp", 0.75, "ki", 1.35, "kd", 0, ...
+    "kp", 0.28, "ki", 1.00, "kd", 0, ...
     "pwmFrequency", 18000, "pwmArr", 2000, "polePairs", 2);
 
 [artifact, report, matPath] = export_simulink_validation_run( ...

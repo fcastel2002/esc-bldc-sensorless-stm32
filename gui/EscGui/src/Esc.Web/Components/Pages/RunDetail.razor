@@ -1,6 +1,7 @@
 @page "/runs/{Id:guid}"
 @inject ValidationRunService ValidationRuns
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>Detalle de validacion</PageTitle>
@@ -23,7 +24,11 @@
     else
     {
         <section class="topbar">
-            <div><p class="eyebrow">VALIDACION OFFLINE / DETALLE DE RUN</p><h1>@_run.Summary.ExperimentName</h1></div>
+            <div><p class="eyebrow">VALIDACION OFFLINE / DETALLE DE RUN</p><h1>@(_run!.Summary.ExperimentName)</h1></div>
+            <button class="danger" @onclick="DeleteAsync"
+                    disabled="@(_run.Summary.Status == ValidationRunStatus.Running || _deleting)">
+                @(_deleting ? "Eliminando..." : "Eliminar validacion")
+            </button>
         </section>
         <section class="grid">
             <article class="panel status-panel">
@@ -45,9 +50,12 @@
                 <div class="status-grid">
                     <span>Referencia</span><strong>@_run.Manifest.TargetRpm rpm</strong>
                     <span>Periodo</span><strong>@_run.Manifest.SamplePeriodUs us</strong>
+                    <span>Tiempo de simulacion</span><strong>@_run.Manifest.StopTimeSeconds.ToString("0.######") s</strong>
                     <span>KP / KI / KD</span><strong>@_run.Manifest.ReferenceConfig.Kp / @_run.Manifest.ReferenceConfig.Ki / @_run.Manifest.ReferenceConfig.Kd</strong>
+                    <span>Algoritmo</span><strong>PI RPM v@_run.Manifest.ReferenceConfig.AlgorithmVersion</strong>
                     <span>PWM ARR</span><strong>@_run.Manifest.ReferenceConfig.PwmArr</strong>
                 </div>
+                <p>Esta configuracion se aplica solo durante la validacion. Al finalizar se restaura la configuracion activa del MCU sin escribir en flash.</p>
             </article>
         </section>
         <section class="panel">
@@ -71,6 +79,8 @@
     private ValidationRunDetail? _run;
     private string? _message;
     private bool _loaded;
+    private bool _deleting;
+    private bool _disposed;
 
     protected override async Task OnInitializedAsync()
     {
@@ -80,8 +90,12 @@
 
     private async Task LoadAsync()
     {
-        _run = await ValidationRuns.GetAsync(Id);
-        _loaded = true;
+        ValidationRunDetail? run = await ValidationRuns.GetAsync(Id);
+        if (!_disposed)
+        {
+            _run = run;
+            _loaded = true;
+        }
     }
 
     private async Task ExecuteAsync()
@@ -99,9 +113,52 @@
         await LoadAsync();
     }
 
+    private async Task DeleteAsync()
+    {
+        if (_run is null)
+        {
+            return;
+        }
+
+        bool confirmed = await JS.InvokeAsync<bool>("confirm",
+            $"Eliminar la validacion '{_run.Summary.ExperimentName}' y su archivo MAT? Esta accion no se puede deshacer.");
+        if (!confirmed)
+        {
+            return;
+        }
+
+        _deleting = true;
+        try
+        {
+            await ValidationRuns.DeleteAsync(Id);
+            Navigation.NavigateTo("/runs");
+        }
+        catch (Exception exception)
+        {
+            _message = $"No se pudo eliminar: {exception.Message}";
+            _deleting = false;
+        }
+    }
+
     private void HandleProgressChanged(object? sender, ValidationRunProgress progress)
     {
-        if (progress.RunId == Id) _ = InvokeAsync(LoadAsync);
+        if (progress.RunId != Id)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            if (!_disposed)
+            {
+                await LoadAsync();
+            }
+        });
     }
-    public void Dispose() => ValidationRuns.ProgressChanged -= HandleProgressChanged;
+
+    public void Dispose()
+    {
+        _disposed = true;
+        ValidationRuns.ProgressChanged -= HandleProgressChanged;
+    }
 }

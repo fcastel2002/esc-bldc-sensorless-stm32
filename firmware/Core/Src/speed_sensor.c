@@ -262,13 +262,7 @@ uint16_t period_to_rpm(uint16_t period)
 
   uint32_t rpm = (timer_hz * 30u) / ((uint32_t)period * pole_pairs);
 
-  // Aplicar límites del motor
-  if (rpm < get_min_speed())
-    return get_min_speed();
-  if (rpm > get_max_speed())
-    return get_max_speed();
-
-  return (uint16_t)rpm;
+  return rpm > UINT16_MAX ? UINT16_MAX : (uint16_t)rpm;
 }
 
 
@@ -384,5 +378,20 @@ uint16_t speed_sensor_get_speed_range()
 {
 
   return (SPEED_MIN - SPEED_MAX);
+}
+
+uint16_t speed_sensor_get_speed_rpm(void)
+{
+  return period_to_rpm((uint16_t)filtered_speed);
+}
+
+uint16_t speed_sensor_get_speed_period(void)
+{
+  return (uint16_t)filtered_speed;
+}
+
+bool speed_sensor_is_ready(void)
+{
+  return speed_measurement_ready != 0U;
 }
 

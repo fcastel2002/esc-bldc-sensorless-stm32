@@ -121,6 +121,7 @@ __attribute__((optimize("Os"))) App_States_t handleState(void)
     HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
     current_time = HAL_GetTick();
     if (!hil_is_active() && motor_stalled) {
+      HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
       PWM_STOP();
       bldc_set_pwm(0);
       restart_brake_start_time = current_time;
@@ -132,9 +133,11 @@ __attribute__((optimize("Os"))) App_States_t handleState(void)
       app_state = RUNNING;
     break;
   case READY:
-    TIM4->PSC = 2;
-    TIM4->ARR = 0xFFFF;                                  //
-    __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, 48000); // output compare 1kHz
+    TIM4->PSC = MOTOR_CONTROL_TIMER_PSC;
+    TIM4->ARR = MOTOR_CONTROL_TIMER_ARR;
+    __HAL_TIM_SET_COUNTER(&htim4, 0U);
+    __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, MOTOR_CONTROL_TIMER_COMPARE);
+    motor_control_prepare_closed_loop();
     app_state = CLOSEDLOOP;
 
     break;

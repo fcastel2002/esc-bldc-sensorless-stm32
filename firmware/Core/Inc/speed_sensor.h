@@ -28,7 +28,6 @@ typedef struct {
 } PhaseMeasurementThreePhase;
 
 
-extern uint16_t period_to_pwm(uint16_t period);
 extern uint16_t period_to_rpm(uint16_t period);
 extern uint16_t rpm_to_period(uint16_t rpm);
 extern uint16_t get_actual_speed(void);

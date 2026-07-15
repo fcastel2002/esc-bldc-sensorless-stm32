@@ -13,8 +13,8 @@
 
 #define DEFAULT_PWM_FREQ_HZ 18000U
 #define DEFAULT_POLE_PAIRS 2U
-#define DEFAULT_KP_CENTI 75
-#define DEFAULT_KI_CENTI 135
+#define DEFAULT_KP_CENTI 28
+#define DEFAULT_KI_CENTI 100
 #define DEFAULT_KD_CENTI 0
 #define DEFAULT_MAX_SPEED_RPM 5400U
 #define DEFAULT_MIN_SPEED_RPM 200U
@@ -164,7 +164,7 @@ static uint8_t status_from_flash(FlashResultCode status)
   }
 }
 
-static bool control_state_allows_command(void)
+static bool stop_state_allows_command(void)
 {
   return app_state == IDLE || app_state == RUNNING || app_state == CLOSEDLOOP;
 }
@@ -172,7 +172,8 @@ static bool control_state_allows_command(void)
 __attribute__((optimize("Os"))) static void apply_config_change(uint8_t param)
 {
   if (app_state == CLOSEDLOOP) {
-    if (param == COMM_PARAM_KP || param == COMM_PARAM_KI || param == COMM_PARAM_KD) {
+    if (param == COMM_PARAM_KP_RPM || param == COMM_PARAM_KI_RPM || param == COMM_PARAM_KD_RPM) {
+      updateAllMotorControl();
       return;
     }
 
@@ -217,15 +218,15 @@ static uint8_t get_config(uint8_t param, uint8_t* payload, uint16_t* payload_len
     payload[0] = get_pole_pairs();
     *payload_len = 1;
     return COMM_STATUS_OK;
-  case COMM_PARAM_KP:
+  case COMM_PARAM_KP_RPM:
     write_i16_le(payload, float_to_centi(get_KP()));
     *payload_len = 2;
     return COMM_STATUS_OK;
-  case COMM_PARAM_KI:
+  case COMM_PARAM_KI_RPM:
     write_i16_le(payload, float_to_centi(get_KI()));
     *payload_len = 2;
     return COMM_STATUS_OK;
-  case COMM_PARAM_KD:
+  case COMM_PARAM_KD_RPM:
     write_i16_le(payload, float_to_centi(get_KD()));
     *payload_len = 2;
     return COMM_STATUS_OK;
@@ -239,6 +240,9 @@ static uint8_t get_config(uint8_t param, uint8_t* payload, uint16_t* payload_len
     return COMM_STATUS_OK;
   case COMM_PARAM_CURRENT_LIMIT:
   case COMM_PARAM_TEMP_LIMIT:
+  case COMM_PARAM_KP:
+  case COMM_PARAM_KI:
+  case COMM_PARAM_KD:
     return COMM_STATUS_NOT_IMPLEMENTED;
   default:
     return COMM_STATUS_UNKNOWN_PARAM;
@@ -258,15 +262,15 @@ static uint8_t set_config(uint8_t param, const uint8_t* payload, uint16_t payloa
     if (payload_len != 1U) return COMM_STATUS_BAD_LENGTH;
     result = set_pole_pairs(payload[0]);
     break;
-  case COMM_PARAM_KP:
+  case COMM_PARAM_KP_RPM:
     if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
     result = set_KP(centi_to_float(read_i16_le(payload)));
     break;
-  case COMM_PARAM_KI:
+  case COMM_PARAM_KI_RPM:
     if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
     result = set_KI(centi_to_float(read_i16_le(payload)));
     break;
-  case COMM_PARAM_KD:
+  case COMM_PARAM_KD_RPM:
     if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
     result = set_KD(centi_to_float(read_i16_le(payload)));
     break;
@@ -280,6 +284,9 @@ static uint8_t set_config(uint8_t param, const uint8_t* payload, uint16_t payloa
     break;
   case COMM_PARAM_CURRENT_LIMIT:
   case COMM_PARAM_TEMP_LIMIT:
+  case COMM_PARAM_KP:
+  case COMM_PARAM_KI:
+  case COMM_PARAM_KD:
     return COMM_STATUS_NOT_IMPLEMENTED;
   default:
     return COMM_STATUS_UNKNOWN_PARAM;
@@ -298,9 +305,9 @@ static uint8_t save_config(uint8_t param)
   switch (param) {
   case COMM_PARAM_PWM_FREQ:
   case COMM_PARAM_POLE_PAIRS:
-  case COMM_PARAM_KP:
-  case COMM_PARAM_KI:
-  case COMM_PARAM_KD:
+  case COMM_PARAM_KP_RPM:
+  case COMM_PARAM_KI_RPM:
+  case COMM_PARAM_KD_RPM:
   case COMM_PARAM_MAX_SPEED:
   case COMM_PARAM_MIN_SPEED:
   case COMM_PARAM_ALL:
@@ -328,15 +335,15 @@ static uint8_t reset_config(uint8_t param)
     current_esc_params.pole_pairs = DEFAULT_POLE_PAIRS;
     flash_config_parameter_changed();
     break;
-  case COMM_PARAM_KP:
+  case COMM_PARAM_KP_RPM:
     current_esc_params.speed_kp = centi_to_float(DEFAULT_KP_CENTI);
     flash_config_parameter_changed();
     break;
-  case COMM_PARAM_KI:
+  case COMM_PARAM_KI_RPM:
     current_esc_params.speed_ki = centi_to_float(DEFAULT_KI_CENTI);
     flash_config_parameter_changed();
     break;
-  case COMM_PARAM_KD:
+  case COMM_PARAM_KD_RPM:
     current_esc_params.speed_kd = centi_to_float(DEFAULT_KD_CENTI);
     flash_config_parameter_changed();
     break;
@@ -350,6 +357,9 @@ static uint8_t reset_config(uint8_t param)
     break;
   case COMM_PARAM_CURRENT_LIMIT:
   case COMM_PARAM_TEMP_LIMIT:
+  case COMM_PARAM_KP:
+  case COMM_PARAM_KI:
+  case COMM_PARAM_KD:
     return COMM_STATUS_NOT_IMPLEMENTED;
   default:
     return COMM_STATUS_UNKNOWN_PARAM;
@@ -410,13 +420,13 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
 
   case COMM_OPCODE_RUN:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
-    if (!control_state_allows_command()) return COMM_STATUS_INVALID_STATE;
+    if (app_state != IDLE) return COMM_STATUS_INVALID_STATE;
     foc_startup();
     return COMM_STATUS_OK;
 
   case COMM_OPCODE_STOP:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
-    if (!control_state_allows_command()) return COMM_STATUS_INVALID_STATE;
+    if (!stop_state_allows_command()) return COMM_STATUS_INVALID_STATE;
     stop_motor(0);
     app_state = IDLE;
     return COMM_STATUS_OK;
@@ -443,6 +453,23 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
   case COMM_OPCODE_GET_CONFIG:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     return get_config(param, payload_out, payload_out_len);
+
+  case COMM_OPCODE_GET_VALIDATION_REFERENCE: {
+    if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
+    uint16_t pwm_arr = (uint16_t)TIM1->ARR;
+    uint32_t speed_timer_hz = HAL_RCC_GetHCLKFreq() / (TIM2->PSC + 1U);
+    payload_out[0] = COMM_VALIDATION_REFERENCE_VERSION;
+    payload_out[1] = MOTOR_CONTROL_ALGORITHM_VERSION;
+    write_u16_le(&payload_out[2], get_pwm_freq());
+    write_u16_le(&payload_out[4], pwm_arr);
+    write_u32_le(&payload_out[6], speed_timer_hz);
+    write_u16_le(&payload_out[10], SPEED_MIN);
+    write_u16_le(&payload_out[12], SPEED_MAX);
+    write_u32_le(&payload_out[14], MOTOR_CONTROL_DT_US);
+    write_u16_le(&payload_out[18], pwm_arr / MOTOR_CONTROL_MIN_PWM_DIVISOR);
+    *payload_out_len = 20U;
+    return COMM_STATUS_OK;
+  }
 
   case COMM_OPCODE_SET_CONFIG:
     return set_config(param, payload, payload_len);

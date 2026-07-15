@@ -124,7 +124,7 @@ public static class EscProtocol
         {
             ConfigParam.PwmFreq or ConfigParam.MaxSpeed or ConfigParam.MinSpeed => UInt16Payload((int)value),
             ConfigParam.PolePairs => new[] { checked((byte)value) },
-            ConfigParam.Kp or ConfigParam.Ki or ConfigParam.Kd => Int16CentiPayload(value),
+            ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm => Int16CentiPayload(value),
             _ => throw new ArgumentOutOfRangeException(nameof(parameter), parameter, "Unsupported config parameter.")
         };
     }
@@ -197,7 +197,7 @@ public static class EscProtocol
             ConfigParam.PolePairs when payload.Length >= 1 => payload[0],
             ConfigParam.PwmFreq or ConfigParam.MaxSpeed or ConfigParam.MinSpeed when payload.Length >= 2
                 => BinaryPrimitives.ReadUInt16LittleEndian(payload[..2]),
-            ConfigParam.Kp or ConfigParam.Ki or ConfigParam.Kd when payload.Length >= 2
+            ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm when payload.Length >= 2
                 => BinaryPrimitives.ReadInt16LittleEndian(payload[..2]) / 100.0,
             _ => payload.ToArray()
         };
@@ -220,6 +220,26 @@ public static class EscProtocol
             BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(4, 2)),
             BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(6, 2)),
             BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(8, 2)));
+    }
+
+    public static ValidationReference DecodeValidationReference(EscFrame frame)
+    {
+        EnsureOkResponse(frame, CommOpcode.GetValidationReference);
+        if (frame.Payload.Length < 20)
+        {
+            throw new EscProtocolException("GET_VALIDATION_REFERENCE response payload is shorter than 20 bytes.");
+        }
+
+        return new ValidationReference(
+            frame.Payload[0],
+            frame.Payload[1],
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(2, 2)),
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(4, 2)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(6, 4)),
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(10, 2)),
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(12, 2)),
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(14, 4)),
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(18, 2)));
     }
 
     public static TelemetrySample DecodeTelemetry(EscFrame frame, DateTimeOffset hostTimestamp)

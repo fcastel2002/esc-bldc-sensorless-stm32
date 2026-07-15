@@ -201,6 +201,7 @@
     private ushort _logRateMs = 500;
     private string _lastCommandResult = "Listo.";
     private bool _isBusy;
+    private bool _disposed;
 
     private bool IsConnected => Snapshot.State == DeviceConnectionState.Connected;
     private bool CanSendControl => IsConnected && Snapshot.Mode == ControlMode.GuiControl;
@@ -231,15 +232,32 @@
 
         _logRateMs = Snapshot.LogRateMs;
         PickDefaultDevice();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
         Bridge.SnapshotChanged += HandleSnapshotChanged;
     }
 
     private void HandleSnapshotChanged(object? sender, EventArgs args)
     {
-        Snapshot = Bridge.Snapshot;
-        _speedSamples = Bridge.SpeedSamples;
-        PickDefaultDevice();
-        _ = InvokeAsync(StateHasChanged);
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            Snapshot = Bridge.Snapshot;
+            _speedSamples = Bridge.SpeedSamples;
+            PickDefaultDevice();
+            StateHasChanged();
+        });
     }
 
     private async Task RefreshDevicesAsync() => await BusyExecAsync(async () =>
@@ -449,6 +467,7 @@
 
     public void Dispose()
     {
+        _disposed = true;
         Bridge.SnapshotChanged -= HandleSnapshotChanged;
     }
 }

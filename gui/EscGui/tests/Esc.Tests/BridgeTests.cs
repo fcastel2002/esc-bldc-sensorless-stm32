@@ -38,6 +38,21 @@ public sealed class BridgeTests
     }
 
     [Fact]
+    public async Task RunReportsInvalidEscState()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        transport.ResponseStatuses[CommOpcode.Run] = CommStatus.InvalidState;
+
+        CommandResult result = await bridge.RunAsync();
+
+        Assert.False(result.Success);
+        Assert.Equal(CommStatus.InvalidState, result.DeviceStatus);
+        Assert.Equal("RUN no permitido en el estado actual del ESC.", result.Message);
+    }
+
+    [Fact]
     public async Task SimulinkModeAllowsExternalSetpointWhileBlockingGuiSetpoint()
     {
         FakeEscTransport transport = new();
@@ -75,8 +90,8 @@ public sealed class BridgeTests
         var bridge = CreateBridge(transport);
         await bridge.ConnectAsync();
 
-        CommandResult apply = await bridge.SetConfigAsync(ConfigParam.Kp, 1.25);
-        CommandResult save = await bridge.SaveConfigAsync(ConfigParam.Kp);
+        CommandResult apply = await bridge.SetConfigAsync(ConfigParam.KpRpm, 1.25);
+        CommandResult save = await bridge.SaveConfigAsync(ConfigParam.KpRpm);
 
         Assert.True(apply.Success);
         Assert.True(save.Success);
@@ -132,6 +147,53 @@ public sealed class BridgeTests
         byte[] payload = Assert.Single(transport.RequestPayloads, payload => payload.Length == 16);
         Assert.Equal(44u, BitConverter.ToUInt32(payload, 8));
         Assert.Equal(55u, BitConverter.ToUInt32(payload, 12));
+    }
+
+    [Fact]
+    public async Task ValidationUsesMatHorizonAndRestoresActiveConfiguration()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"esc-validation-service-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string artifact = Path.Combine(root, "input.mat");
+        await File.WriteAllTextAsync(artifact, "validation artifact");
+        try
+        {
+            FakeEscTransport transport = new();
+            EscBridgeService bridge = CreateBridge(transport);
+            await bridge.ConnectAsync();
+            var manifest = new ValidationManifest(1, "Temporary gains", "restore test", "2026-01-01T00:00:00Z",
+                0.02, 20_000, 1000, new ValidationReferenceConfig(0.01, 0.01, 0, 18_000, 2, 2_000, 0.002));
+            var vector = new ImportedValidationVector(44, manifest,
+            [
+                new ValidationInputSample(1, 0, 900, false, 1000, 0),
+                new ValidationInputSample(2, 0.04, 950, false, 1000, 0)
+            ], artifact);
+            var store = new ValidationRunStore(root);
+            ValidationRunSummary run = await store.CreateAsync(vector, new ValidationRunOptions());
+            var service = new ValidationRunService(new MatValidationImporter(), store, bridge);
+
+            await service.ExecuteAsync(run.Id);
+
+            ValidationRunDetail detail = (await store.GetAsync(run.Id))!;
+            Assert.Equal(ValidationRunStatus.Completed, detail.Summary.Status);
+            Assert.Equal(ValidationSampleStatus.Passed, detail.Samples[0].Status);
+            Assert.Equal(ValidationSampleStatus.Skipped, detail.Samples[1].Status);
+            Assert.Equal(0.28, transport.ConfigValues[ConfigParam.KpRpm]);
+            Assert.Equal(1.00, transport.ConfigValues[ConfigParam.KiRpm]);
+            Assert.Equal(0, transport.ConfigValues[ConfigParam.KdRpm]);
+            Assert.DoesNotContain(CommOpcode.SaveConfig, transport.RequestedOpcodes);
+            Assert.DoesNotContain(
+                transport.Requests,
+                request => request.Opcode == CommOpcode.SetConfig && request.Parameter == (byte)ConfigParam.PwmFreq);
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, recursive: true);
+            }
+        }
     }
 
     [Fact]
@@ -252,6 +314,16 @@ public sealed class BridgeTests
         public HidDeviceDescriptor? CurrentDevice { get; private set; }
         public List<CommOpcode> RequestedOpcodes { get; } = [];
         public List<byte[]> RequestPayloads { get; } = [];
+        public List<(CommOpcode Opcode, byte Parameter)> Requests { get; } = [];
+        public Dictionary<CommOpcode, CommStatus> ResponseStatuses { get; } = [];
+        public Dictionary<ConfigParam, double> ConfigValues { get; } = new()
+        {
+            [ConfigParam.KpRpm] = 0.28,
+            [ConfigParam.KiRpm] = 1.00,
+            [ConfigParam.KdRpm] = 0,
+            [ConfigParam.PolePairs] = 2,
+            [ConfigParam.PwmFreq] = 18_000
+        };
 
         public Task OpenAsync(HidDeviceDescriptor descriptor, CancellationToken cancellationToken = default)
         {
@@ -272,11 +344,20 @@ public sealed class BridgeTests
             EscFrame request = EscProtocol.Parse(frame);
             RequestedOpcodes.Add(request.Opcode);
             RequestPayloads.Add(request.Payload);
+            Requests.Add((request.Opcode, request.Parameter));
+
+            if (request.Opcode == CommOpcode.SetConfig)
+            {
+                ConfigParam parameter = (ConfigParam)request.Parameter;
+                ConfigValues[parameter] = DecodeConfigPayload(parameter, request.Payload);
+            }
 
             byte[] payload = request.Opcode switch
             {
                 CommOpcode.Ping => request.Payload,
                 CommOpcode.GetStatus => StatusPayload(),
+                CommOpcode.GetConfig => ConfigPayload((ConfigParam)request.Parameter),
+                CommOpcode.GetValidationReference => ValidationReferencePayload(),
                 CommOpcode.HilGetOutputs => HilOutputsPayload(),
                 _ => []
             };
@@ -287,7 +368,7 @@ public sealed class BridgeTests
                 request.Parameter,
                 payload,
                 CommFrameType.Response,
-                CommStatus.Ok);
+                ResponseStatuses.GetValueOrDefault(request.Opcode, CommStatus.Ok));
 
             _readQueue.Enqueue(EscProtocol.Parse(response));
             return Task.CompletedTask;
@@ -320,7 +401,22 @@ public sealed class BridgeTests
             payload[1] = 1;
             BitConverter.GetBytes((ushort)1000).CopyTo(payload, 4);
             BitConverter.GetBytes((ushort)980).CopyTo(payload, 6);
-            BitConverter.GetBytes((ushort)999).CopyTo(payload, 8);
+            BitConverter.GetBytes((ushort)2000).CopyTo(payload, 8);
+            return payload;
+        }
+
+        private static byte[] ValidationReferencePayload()
+        {
+            byte[] payload = new byte[20];
+            payload[0] = 1;
+            payload[1] = 2;
+            BitConverter.GetBytes((ushort)18_000).CopyTo(payload, 2);
+            BitConverter.GetBytes((ushort)2_000).CopyTo(payload, 4);
+            BitConverter.GetBytes(180_000u).CopyTo(payload, 6);
+            BitConverter.GetBytes((ushort)14_000).CopyTo(payload, 10);
+            BitConverter.GetBytes((ushort)200).CopyTo(payload, 12);
+            BitConverter.GetBytes(2_000u).CopyTo(payload, 14);
+            BitConverter.GetBytes((ushort)100).CopyTo(payload, 18);
             return payload;
         }
 
@@ -335,6 +431,27 @@ public sealed class BridgeTests
             BitConverter.GetBytes((ushort)700).CopyTo(payload, 10);
             payload[12] = 1;
             return payload;
+        }
+
+        private byte[] ConfigPayload(ConfigParam parameter)
+        {
+            double value = ConfigValues[parameter];
+            return parameter switch
+            {
+                ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm => BitConverter.GetBytes((short)Math.Round(value * 100)),
+                ConfigParam.PolePairs => [(byte)value],
+                _ => BitConverter.GetBytes((ushort)value)
+            };
+        }
+
+        private static double DecodeConfigPayload(ConfigParam parameter, byte[] payload)
+        {
+            return parameter switch
+            {
+                ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm => BitConverter.ToInt16(payload) / 100d,
+                ConfigParam.PolePairs => payload[0],
+                _ => BitConverter.ToUInt16(payload)
+            };
         }
     }
 

@@ -14,7 +14,17 @@ public sealed record BridgeSnapshot(
     bool SpeedLoggingEnabled,
     ushort LogRateMs,
     TelemetryStats SpeedTelemetry,
-    HilBridgeStats Hil);
+    HilBridgeStats Hil,
+    ValidationReference? ValidationReference,
+    ActiveControllerConfig? ActiveControllerConfig,
+    DateTimeOffset? ValidationReferenceCapturedAt,
+    string? ValidationReferenceError);
+
+public sealed record ActiveControllerConfig(
+    double Kp,
+    double Ki,
+    double Kd,
+    byte PolePairs);
 
 public sealed record TelemetryStats(
     int SampleCount,

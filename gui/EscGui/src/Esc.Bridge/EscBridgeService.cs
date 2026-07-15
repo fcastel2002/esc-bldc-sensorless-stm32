@@ -26,6 +26,10 @@ public sealed class EscBridgeService
     private ushort _logRateMs = 500;
     private byte _sequence;
     private HilBridgeStats _hilStats = new(false, 0, 0, 0, 0, 0, null, null);
+    private ValidationReference? _validationReference;
+    private ActiveControllerConfig? _activeControllerConfig;
+    private DateTimeOffset? _validationReferenceCapturedAt;
+    private string? _validationReferenceError;
 
     public EscBridgeService(
         IEscDeviceEnumerator deviceEnumerator,
@@ -70,6 +74,7 @@ public sealed class EscBridgeService
                 _lastError = "Dispositivo HID desconectado.";
                 _status = null;
                 _currentDevice = null;
+                ClearValidationReference();
             }
             else if (!_transport.IsOpen && devices.Count > 0 && _state is DeviceConnectionState.NotDetected or DeviceConnectionState.Disconnected)
             {
@@ -82,6 +87,7 @@ public sealed class EscBridgeService
                 _lastError = null;
                 _currentDevice = null;
                 _status = null;
+                ClearValidationReference();
             }
         }
 
@@ -119,6 +125,8 @@ public sealed class EscBridgeService
 
             EscFrame statusFrame = await SendRequestCoreAsync(CommOpcode.GetStatus, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
             EscStatus status = EscProtocol.DecodeStatus(statusFrame);
+            (ValidationReference validationReference, ActiveControllerConfig activeControllerConfig) =
+                await ReadValidationReferenceCoreAsync(cancellationToken).ConfigureAwait(false);
 
             lock (_stateGate)
             {
@@ -126,6 +134,10 @@ public sealed class EscBridgeService
                 _currentDevice = descriptor;
                 _status = status;
                 _lastError = null;
+                _validationReference = validationReference;
+                _activeControllerConfig = activeControllerConfig;
+                _validationReferenceCapturedAt = DateTimeOffset.UtcNow;
+                _validationReferenceError = null;
             }
 
             Notify();
@@ -150,6 +162,7 @@ public sealed class EscBridgeService
             _currentDevice = null;
             _status = null;
             _lastError = null;
+            ClearValidationReference();
         }
 
         Notify();
@@ -244,6 +257,40 @@ public sealed class EscBridgeService
         return EscProtocol.DecodeConfigValue(parameter, response.Payload);
     }
 
+    public async Task<ValidationReference> RefreshValidationReferenceAsync(CancellationToken cancellationToken = default)
+    {
+        await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            (ValidationReference validationReference, ActiveControllerConfig activeControllerConfig) =
+                await ReadValidationReferenceCoreAsync(cancellationToken).ConfigureAwait(false);
+            lock (_stateGate)
+            {
+                _validationReference = validationReference;
+                _activeControllerConfig = activeControllerConfig;
+                _validationReferenceCapturedAt = DateTimeOffset.UtcNow;
+                _validationReferenceError = null;
+            }
+
+            Notify();
+            return validationReference;
+        }
+        catch (Exception exception)
+        {
+            lock (_stateGate)
+            {
+                _validationReferenceError = exception.Message;
+            }
+
+            Notify();
+            throw;
+        }
+        finally
+        {
+            _ioLock.Release();
+        }
+    }
+
     public async Task<CommandResult> SetConfigAsync(ConfigParam parameter, double value, CancellationToken cancellationToken = default)
     {
         if (!AllowsGuiControl())
@@ -261,17 +308,30 @@ public sealed class EscBridgeService
             return CommandResult.Failed($"Valor fuera de rango para {parameter}: {value}.");
         }
 
-        return await SendCommandAsync(CommOpcode.SetConfig, (byte)parameter, payload, cancellationToken);
+        CommandResult result = await SendCommandAsync(CommOpcode.SetConfig, (byte)parameter, payload, cancellationToken);
+        if (result.Success && parameter is ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm or ConfigParam.PolePairs or ConfigParam.PwmFreq)
+        {
+            await RefreshValidationReferenceAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return result;
     }
 
-    public Task<CommandResult> ResetConfigAsync(ConfigParam parameter, CancellationToken cancellationToken = default)
+    public async Task<CommandResult> ResetConfigAsync(ConfigParam parameter, CancellationToken cancellationToken = default)
     {
         if (!AllowsGuiControl())
         {
-            return Task.FromResult(CommandResult.Failed("Control bloqueado por el modo actual."));
+            return CommandResult.Failed("Control bloqueado por el modo actual.");
         }
 
-        return SendCommandAsync(CommOpcode.ResetConfig, (byte)parameter, Array.Empty<byte>(), cancellationToken);
+        CommandResult result = await SendCommandAsync(
+            CommOpcode.ResetConfig, (byte)parameter, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+        if (result.Success)
+        {
+            await RefreshValidationReferenceAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        return result;
     }
 
     public Task<CommandResult> SaveConfigAsync(ConfigParam parameter = ConfigParam.All, CancellationToken cancellationToken = default)
@@ -531,7 +591,9 @@ public sealed class EscBridgeService
         try
         {
             EscFrame response = await SendRequestAsync(opcode, parameter, payload, cancellationToken).ConfigureAwait(false);
-            CommandResult result = CommandResult.FromStatus(response.Status);
+            CommandResult result = opcode == CommOpcode.Run && response.Status == CommStatus.InvalidState
+                ? new CommandResult(false, response.Status, "RUN no permitido en el estado actual del ESC.")
+                : CommandResult.FromStatus(response.Status);
             if (refreshStatus)
             {
                 await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
@@ -620,6 +682,38 @@ public sealed class EscBridgeService
         }
 
         throw new TimeoutException($"Timed out waiting for {opcode} response.");
+    }
+
+    private async Task<(ValidationReference Reference, ActiveControllerConfig Config)> ReadValidationReferenceCoreAsync(
+        CancellationToken cancellationToken)
+    {
+        if (!_transport.IsOpen)
+        {
+            throw new InvalidOperationException("ESC is not connected.");
+        }
+
+        EscFrame referenceFrame = await SendRequestCoreAsync(
+            CommOpcode.GetValidationReference, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+        ValidationReference reference = EscProtocol.DecodeValidationReference(referenceFrame);
+        if (reference.AlgorithmVersion != ValidationReference.SupportedAlgorithmVersion)
+        {
+            throw new InvalidOperationException(
+                $"Unsupported controller algorithm {reference.AlgorithmVersion}; expected {ValidationReference.SupportedAlgorithmVersion}.");
+        }
+        double kp = await ReadConfigCoreAsync(ConfigParam.KpRpm, cancellationToken).ConfigureAwait(false);
+        double ki = await ReadConfigCoreAsync(ConfigParam.KiRpm, cancellationToken).ConfigureAwait(false);
+        double kd = await ReadConfigCoreAsync(ConfigParam.KdRpm, cancellationToken).ConfigureAwait(false);
+        double polePairs = await ReadConfigCoreAsync(ConfigParam.PolePairs, cancellationToken).ConfigureAwait(false);
+        return (reference, new ActiveControllerConfig(kp, ki, kd, checked((byte)polePairs)));
+    }
+
+    private async Task<double> ReadConfigCoreAsync(ConfigParam parameter, CancellationToken cancellationToken)
+    {
+        EscFrame frame = await SendRequestCoreAsync(
+            CommOpcode.GetConfig, (byte)parameter, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+        EscProtocol.EnsureOkResponse(frame, CommOpcode.GetConfig);
+        object value = EscProtocol.DecodeConfigValue(parameter, frame.Payload);
+        return Convert.ToDouble(value, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private bool HandleFrame(EscFrame frame)
@@ -719,7 +813,19 @@ public sealed class EscBridgeService
             _speedLoggingEnabled,
             _logRateMs,
             _telemetryStore.GetStats("speed", "rpm"),
-            hilStats);
+            hilStats,
+            _validationReference,
+            _activeControllerConfig,
+            _validationReferenceCapturedAt,
+            _validationReferenceError);
+    }
+
+    private void ClearValidationReference()
+    {
+        _validationReference = null;
+        _activeControllerConfig = null;
+        _validationReferenceCapturedAt = null;
+        _validationReferenceError = null;
     }
 
     private void Notify()

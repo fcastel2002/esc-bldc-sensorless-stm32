@@ -118,6 +118,22 @@ button.estop:hover:not(:disabled) {
     background: #ba303a;
 }
 
+button.danger {
+    border-color: #9f3d46;
+    color: #ffb6ba;
+}
+
+button.danger:hover:not(:disabled) {
+    border-color: #e45b64;
+    background: #481b20;
+    color: #fff0f1;
+}
+
+.compact-actions {
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
 select,
 input[type="number"] {
     min-height: 38px;
@@ -250,11 +266,62 @@ input[type="range"] {
     color: var(--cyan);
 }
 
+.rail-lower {
+    display: grid;
+    gap: 8px;
+    margin-top: auto;
+}
+
+.rail-config {
+    border: 1px solid var(--line-dim);
+    background: rgba(12, 24, 33, 0.74);
+    padding: 10px;
+}
+
+.rail-config-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--cyan);
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.11em;
+}
+
+.rail-config-title button {
+    min-height: 24px;
+    padding: 0 6px;
+    font-size: 0.58rem;
+}
+
+.rail-config-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 8px;
+    margin-top: 9px;
+    font-size: 0.65rem;
+}
+
+.rail-config-grid span,
+.rail-config p {
+    color: var(--text-muted);
+}
+
+.rail-config-grid strong {
+    color: var(--text-bright);
+    text-align: right;
+    font-weight: 600;
+}
+
+.rail-config p {
+    margin: 9px 0 0;
+    font-size: 0.65rem;
+}
+
 .rail-footer {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: auto;
     padding: 10px 8px;
 }
 
@@ -601,13 +668,26 @@ h2 {
 
 .inline-input {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-columns: minmax(100px, 1fr) auto auto;
+}
+
+.inline-input > input {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    width: 100%;
 }
 
 .inline-input > span {
+    grid-column: 1 / -1;
+    grid-row: 2;
     color: var(--text-muted);
     font-size: 0.72rem;
     white-space: nowrap;
+}
+
+.inline-input > button {
+    grid-row: 1;
 }
 
 .icon-button {
@@ -931,6 +1011,7 @@ h2 {
         border-right: 0;
         border-bottom: 1px solid var(--line-dim);
         padding: 12px 18px;
+        flex-wrap: wrap;
     }
 
     .primary-nav {
@@ -952,8 +1033,18 @@ h2 {
         background: linear-gradient(180deg, rgba(73, 198, 237, 0.12), transparent);
     }
 
+    .rail-lower {
+        order: 3;
+        width: 100%;
+        margin-top: 8px;
+    }
+
+    .rail-config-grid {
+        grid-template-columns: repeat(4, auto minmax(50px, 1fr));
+    }
+
     .rail-footer {
-        display: none;
+        padding: 3px 0;
     }
 
     .workspace-header {
@@ -976,6 +1067,10 @@ h2 {
         display: grid;
         gap: 10px;
         padding: 11px 14px;
+    }
+
+    .rail-config-grid {
+        grid-template-columns: repeat(2, auto 1fr);
     }
 
     .brand {
@@ -1057,6 +1152,13 @@ h2 {
 
     .inline-input {
         grid-template-columns: 1fr;
+    }
+
+    .inline-input > input,
+    .inline-input > span,
+    .inline-input > button {
+        grid-column: 1;
+        grid-row: auto;
     }
 
     .inline-input > span {

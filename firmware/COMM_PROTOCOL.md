@@ -63,6 +63,7 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 | `0x21` | `SET_CONFIG` | config param | config value | empty |
 | `0x22` | `RESET_CONFIG` | config param or `0xFF` | empty | empty |
 | `0x23` | `SAVE_CONFIG` | config param or `0xFF` | empty | empty |
+| `0x24` | `GET_VALIDATION_REFERENCE` | ignored | empty | structural validation reference below |
 | `0x30` | `LOG_START` | log param or `0xFF` | empty | empty |
 | `0x31` | `LOG_STOP` | log param or `0xFF` | empty | empty |
 | `0x32` | `LOG_RATE` | ignored | `uint16 ms` | empty |
@@ -71,6 +72,10 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 | `0x41` | `HIL_STOP` | ignored | empty | empty |
 | `0x42` | `HIL_SET_INPUTS` | ignored | HIL input payload below | empty |
 | `0x43` | `HIL_GET_OUTPUTS` | ignored | empty | HIL output payload below |
+
+`RUN` is valid only while `app_state == IDLE`. In every other state it returns
+`INVALID_STATE` without changing the application state, PWM outputs, or timer
+configuration.
 
 ### `GET_STATUS` response payload
 
@@ -84,24 +89,53 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 | 6..7 | `uint16` | measured speed RPM |
 | 8..9 | `uint16` | `max_pwm` |
 
+### `GET_VALIDATION_REFERENCE` response payload
+
+This read-only descriptor exposes the active PWM scale and compiled controller
+constants needed by an external validation model. It does not include gains or
+pole pairs because the validation experiment commands those values explicitly.
+
+| Offset | Type | Meaning |
+| --- | --- | --- |
+| 0 | `uint8` | reference schema version (`1`) |
+| 1 | `uint8` | controller algorithm version (`2`, RPM PI Q16.16) |
+| 2..3 | `uint16` | active PWM frequency in Hz |
+| 4..5 | `uint16` | active `TIM1->ARR` in PWM counts |
+| 6..9 | `uint32` | TIM2 speed timer frequency in Hz |
+| 10..11 | `uint16` | maximum measured period (`SPEED_MIN`) |
+| 12..13 | `uint16` | minimum measured period (`SPEED_MAX`) |
+| 14..17 | `uint32` | controller integration coefficient in microseconds |
+| 18..19 | `uint16` | effective minimum PWM in counts |
+
 ## Config parameters
 
 | Param | Name | Payload type | Implemented |
 | --- | --- | --- | --- |
 | `0x01` | `PWM_FREQ` | `uint16 Hz` | yes |
 | `0x02` | `POLE_PAIRS` | `uint8` | yes |
-| `0x03` | `KP` | `int16` centesimas | yes |
-| `0x04` | `KI` | `int16` centesimas | yes |
-| `0x05` | `KD` | `int16` centesimas | yes |
+| `0x03` | legacy `KP` | reserved | no, returns `NOT_IMPLEMENTED` |
+| `0x04` | legacy `KI` | reserved | no, returns `NOT_IMPLEMENTED` |
+| `0x05` | legacy `KD` | reserved | no, returns `NOT_IMPLEMENTED` |
 | `0x06` | `MAX_SPEED` | `uint16 RPM` | yes |
 | `0x07` | `MIN_SPEED` | `uint16 RPM` | yes |
 | `0x08` | `CURRENT_LIMIT` | reserved | no, returns `NOT_IMPLEMENTED` |
 | `0x09` | `TEMP_LIMIT` | reserved | no, returns `NOT_IMPLEMENTED` |
+| `0x0A` | `KP_RPM` | `int16` hundredths, canonical counts/RPM | yes |
+| `0x0B` | `KI_RPM` | `int16` hundredths, canonical counts/(RPM s) | yes |
+| `0x0C` | `KD_RPM` | `int16` hundredths | only zero; nonzero is not supported in algorithm 2 |
 | `0xFF` | `ALL` | reset/log only | yes for `RESET_CONFIG`, `LOG_START`, `LOG_STOP` |
 
-For gains, value `135` means `1.35`. `SET_CONFIG` and `RESET_CONFIG` update the active RAM configuration and mark pending changes, but do not write flash. `SAVE_CONFIG` writes the current active configuration to flash. `RESET_CONFIG` supports each implemented config param and `0xFF` for all defaults.
+For gains, value `100` means `1.00`. Algorithm 2 computes RPM error and a
+canonical PWM output referenced to ARR=2000 using Q16.16 state and standard
+trapezoidal integration. The canonical output is scaled once to active ARR.
+`SET_CONFIG` and `RESET_CONFIG` update active RAM and mark pending changes but
+do not write flash. A v1 flash configuration preserves non-gain fields and
+resets only gains to v2 defaults (`KP=0.28`, `KI=1.00`, `KD=0`).
 
-When `app_state == CLOSEDLOOP`, changes to `PWM_FREQ`, `KP`, `KI`, and `KD` are applied immediately without leaving closed loop. `KD` acts on the measured speed derivative, so setpoint changes do not create derivative kick. Other config parameters still follow the deferred `CONFIG` path.
+When `app_state == CLOSEDLOOP`, changes to `PWM_FREQ`, `KP_RPM`, `KI_RPM`, and
+zero `KD_RPM` apply immediately. KD remains blocked until a fresh-sample RPM
+derivative and filter are implemented. Other parameters use the deferred
+`CONFIG` path.
 
 ## Logging and telemetry
 
@@ -249,15 +283,15 @@ For latency, this path updates the bridge cached setpoint but does not issue a
 | `:GET:POLEP` | opcode `0x20 GET_CONFIG`, param `0x02` |
 | `:SET:POLEP:<n>` | opcode `0x21 SET_CONFIG`, param `0x02`, payload `uint8` |
 | `:RESET:POLEP` | opcode `0x22 RESET_CONFIG`, param `0x02` |
-| `:GET:KP` | opcode `0x20 GET_CONFIG`, param `0x03` |
-| `:SET:KP:<value>` | opcode `0x21 SET_CONFIG`, param `0x03`, payload `int16 value*100` |
-| `:RESET:KP` | opcode `0x22 RESET_CONFIG`, param `0x03` |
-| `:GET:KI` | opcode `0x20 GET_CONFIG`, param `0x04` |
-| `:SET:KI:<value>` | opcode `0x21 SET_CONFIG`, param `0x04`, payload `int16 value*100` |
-| `:RESET:KI` | opcode `0x22 RESET_CONFIG`, param `0x04` |
-| `:GET:KD` | opcode `0x20 GET_CONFIG`, param `0x05` |
-| `:SET:KD:<value>` | opcode `0x21 SET_CONFIG`, param `0x05`, payload `int16 value*100` |
-| `:RESET:KD` | opcode `0x22 RESET_CONFIG`, param `0x05` |
+| `:GET:KP` | opcode `0x20 GET_CONFIG`, param `0x0A KP_RPM` |
+| `:SET:KP:<value>` | opcode `0x21 SET_CONFIG`, param `0x0A`, payload `int16 value*100` |
+| `:RESET:KP` | opcode `0x22 RESET_CONFIG`, param `0x0A` |
+| `:GET:KI` | opcode `0x20 GET_CONFIG`, param `0x0B KI_RPM` |
+| `:SET:KI:<value>` | opcode `0x21 SET_CONFIG`, param `0x0B`, payload `int16 value*100` |
+| `:RESET:KI` | opcode `0x22 RESET_CONFIG`, param `0x0B` |
+| `:GET:KD` | opcode `0x20 GET_CONFIG`, param `0x0C KD_RPM` (zero only) |
+| `:SET:KD:<value>` | opcode `0x21 SET_CONFIG`, param `0x0C`; nonzero is rejected |
+| `:RESET:KD` | opcode `0x22 RESET_CONFIG`, param `0x0C` |
 | `:GET:MAXSPEED` | opcode `0x20 GET_CONFIG`, param `0x06` |
 | `:SET:MAXSPEED:<rpm>` | opcode `0x21 SET_CONFIG`, param `0x06`, payload `uint16 RPM` |
 | `:RESET:MAXSPEED` | opcode `0x22 RESET_CONFIG`, param `0x06` |

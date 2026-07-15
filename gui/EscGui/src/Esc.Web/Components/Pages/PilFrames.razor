@@ -64,6 +64,7 @@
 
 @code {
     private BridgeSnapshot Snapshot { get; set; } = default!;
+    private bool _disposed;
 
     private IEnumerable<HilFrameTraceEntry> SimulinkFrames =>
         Snapshot.Hil.RecentFrames.Where(frame => frame.Direction.Contains("Simulink", StringComparison.OrdinalIgnoreCase));
@@ -77,13 +78,30 @@
     protected override void OnInitialized()
     {
         Snapshot = Bridge.Snapshot;
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
         Bridge.SnapshotChanged += HandleSnapshotChanged;
     }
 
     private void HandleSnapshotChanged(object? sender, EventArgs args)
     {
-        Snapshot = Bridge.Snapshot;
-        _ = InvokeAsync(StateHasChanged);
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            Snapshot = Bridge.Snapshot;
+            StateHasChanged();
+        });
     }
 
     private RenderFragment TraceTable(IEnumerable<HilFrameTraceEntry> frames) => builder =>
@@ -114,16 +132,16 @@
         builder.CloseElement();
         builder.OpenElement(27, "tbody");
 
-        var sequence = 28;
         foreach (HilFrameTraceEntry frame in rows)
         {
-            builder.OpenElement(sequence++, "tr");
-            AddCell(builder, sequence++, TimeText(frame.Timestamp), "time-cell");
-            AddCell(builder, sequence++, frame.Direction, "direction-cell");
-            AddCell(builder, sequence++, frame.Sequence?.ToString() ?? "-", "seq-cell");
-            AddCell(builder, sequence++, frame.RepeatCount > 1 ? $"x{frame.RepeatCount}" : "-", "repeat-cell");
-            AddCell(builder, sequence++, frame.Summary, "summary-cell");
-            AddCell(builder, sequence++, frame.Payload, "payload-cell");
+            builder.OpenElement(28, "tr");
+            builder.SetKey(frame);
+            AddCell(builder, 29, TimeText(frame.Timestamp), "time-cell");
+            AddCell(builder, 32, frame.Direction, "direction-cell");
+            AddCell(builder, 35, frame.Sequence?.ToString() ?? "-", "seq-cell");
+            AddCell(builder, 38, frame.RepeatCount > 1 ? $"x{frame.RepeatCount}" : "-", "repeat-cell");
+            AddCell(builder, 41, frame.Summary, "summary-cell");
+            AddCell(builder, 44, frame.Payload, "payload-cell");
             builder.CloseElement();
         }
 
@@ -164,6 +182,7 @@
 
     public void Dispose()
     {
+        _disposed = true;
         Bridge.SnapshotChanged -= HandleSnapshotChanged;
     }
 }

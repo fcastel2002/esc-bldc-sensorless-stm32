@@ -6,7 +6,7 @@ namespace Esc.Tests;
 public sealed class ValidationRunStoreTests
 {
     [Fact]
-    public async Task PersistsImportedRunAndPerSampleResult()
+    public async Task PersistsRunAndDeletesDatabaseRowsAndArtifact()
     {
         string root = Path.Combine(Path.GetTempPath(), $"esc-runs-{Guid.NewGuid():N}");
         Directory.CreateDirectory(root);
@@ -14,7 +14,7 @@ public sealed class ValidationRunStoreTests
         await File.WriteAllTextAsync(artifact, "validation artifact");
         try
         {
-            var manifest = new ValidationManifest(1, "Store test", "persistent", "2026-01-01T00:00:00Z", 20_000, 1000,
+            var manifest = new ValidationManifest(1, "Store test", "persistent", "2026-01-01T00:00:00Z", 0.02, 20_000, 1000,
                 new ValidationReferenceConfig(0.75, 1.35, 0, 18000, 2, 2000, 0.002));
             var vector = new ImportedValidationVector(44, manifest,
                 [new ValidationInputSample(1, 0, 900, true, 1000, 300)], artifact);
@@ -29,10 +29,18 @@ public sealed class ValidationRunStoreTests
             ValidationRunDetail detail = (await store.GetAsync(created.Id))!;
 
             Assert.Equal(ValidationRunStatus.Completed, detail.Summary.Status);
+            Assert.Equal(0.02, detail.Manifest.StopTimeSeconds);
             Assert.Equal(1, detail.Summary.PassedCount);
             Assert.Equal((ushort)500, detail.Summary.HilInputTimeoutMs);
             Assert.Equal<ushort?>((ushort)301, detail.Samples[0].ActualPwm);
             Assert.Equal(ValidationSampleStatus.Passed, detail.Samples[0].Status);
+
+            string artifactDirectory = Path.Combine(root, "artifacts", created.Id.ToString("N"));
+            Assert.True(Directory.Exists(artifactDirectory));
+            Assert.True(await store.DeleteAsync(created.Id));
+            Assert.Null(await store.GetAsync(created.Id));
+            Assert.False(Directory.Exists(artifactDirectory));
+            Assert.False(await store.DeleteAsync(created.Id));
         }
         finally
         {

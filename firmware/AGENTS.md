@@ -24,7 +24,7 @@
 - Protocol frames are fixed at 64 bytes.
 - Frames use little-endian fields, magic `0xEC 0xB1`, version `0x01`, and CRC16-CCITT-FALSE over bytes `0..61`.
 - `SET_CONFIG` and `RESET_CONFIG` update active RAM only. Flash persistence requires explicit `SAVE_CONFIG`.
-- PI gains are floats internally, while protocol payloads use `int16` hundredths. Example: `135` means `1.35`.
+- RPM PI v2 stores gains as floats but executes Q16.16; `KP_RPM/KI_RPM` payloads use `int16` hundredths. KD is fixed at zero.
 - In `CLOSEDLOOP`, `PWM_FREQ`, `KP`, `KI`, and `KD` apply hot. Other config changes use the deferred `CONFIG` path.
 - `KD` acts on measured-speed derivative, not error derivative.
 - `CURRENT_LIMIT` and `TEMP_LIMIT` are protocol placeholders and return or use `NOT_IMPLEMENTED`; current and temperature telemetry are placeholders too.

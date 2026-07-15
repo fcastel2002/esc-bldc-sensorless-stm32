@@ -142,6 +142,11 @@
 
     private string YTickLabel(int index)
     {
+        if (Samples.Count == 0)
+        {
+            return string.Empty;
+        }
+
         (double yMin, double yMax) = YRange;
         double value = yMax - index * ((yMax - yMin) / 5.0);
         return $"{value:0} rpm";

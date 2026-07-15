@@ -166,8 +166,17 @@ FlashResultCode flash_config_init(void)
   if (result == FLASH_RESULT_OK) {
 
     memcpy(&current_esc_params, &flash_cached_config, sizeof(ESCparams));
+    if (current_esc_params.signature == ESC_PARAMS_SIGNATURE_V1) {
+      current_esc_params.signature = ESC_PARAMS_SIGNATURE_V2;
+      current_esc_params.speed_kp = ESC_DEFAULT_KP_RPM;
+      current_esc_params.speed_ki = ESC_DEFAULT_KI_RPM;
+      current_esc_params.speed_kd = ESC_DEFAULT_KD_RPM;
+      pending_changes = 1;
+    } else if (current_esc_params.signature != ESC_PARAMS_SIGNATURE_V2) {
+      set_default_esc_params();
+      pending_changes = 1;
+    }
     flash_initialized = 1;
-    pending_changes   = 0;
     return FLASH_RESULT_OK;
   } else if (result == FLASH_RESULT_EMPTY) {
     set_default_esc_params();

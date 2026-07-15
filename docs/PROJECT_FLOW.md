@@ -87,7 +87,7 @@ Los parametros vivos del ESC estan en [`current_esc_params`](../firmware/Core/Sr
 Defaults principales en [`set_default_esc_params()`](../firmware/Core/Src/hard_config.c#L27):
 
 - PWM: 18 kHz.
-- `KP = 0.75`, `KI = 1.35`, `KD = 0.0`.
+- PI RPM v2: `KP = 0.28`, `KI = 1.00`, `KD = 0.0`.
 - velocidad maxima: 5400 RPM.
 - velocidad minima: 200 RPM.
 - pares de polos: 2.
@@ -149,7 +149,6 @@ Conversiones importantes:
 
 - [`rpm_to_period()`](../firmware/Core/Src/speed_sensor.c#L229)
 - [`period_to_rpm()`](../firmware/Core/Src/speed_sensor.c#L251)
-- [`period_to_pwm()`](../firmware/Core/Src/motor_control.c#L230)
 
 ## 8. Control de velocidad
 
@@ -159,12 +158,16 @@ En `CLOSEDLOOP`, TIM4 CH1 dispara [`HAL_TIM_OC_DelayElapsedCallback()`](../firmw
 
 [`pi_control()`](../firmware/Core/Src/motor_control.c#L274):
 
-1. convierte la velocidad medida a unidad PWM;
-2. convierte `speed_setpoint_rpm` a periodo y luego a PWM objetivo;
-3. calcula error, termino proporcional e integral;
-4. aplica anti-windup con saturacion entre `min_limit_pwm` y `max_limit_pwm`;
-5. aplica `KD` sobre la velocidad medida, no sobre el error, para amortiguar perturbaciones sin reaccionar a cambios de referencia;
-6. escribe el duty final con [`bldc_set_pwm()`](../firmware/Core/Src/bldc_driver.c#L157).
+1. obtiene RPM mecanicas sin limitarlas por el rango del setpoint;
+2. calcula `error_rpm = setpoint_rpm - measured_rpm`;
+3. ejecuta el PI trapezoidal con estado Q16.16 y ganancias en cuentas canonicas referidas a ARR=2000;
+4. aplica anti-windup entre 100 y 2000 cuentas canonicas;
+5. escala una sola vez al ARR activo y escribe el duty con [`bldc_set_pwm()`](../firmware/Core/Src/bldc_driver.c#L157).
+
+`KD` permanece bloqueado en cero en algoritmo v2. Al entrar en `CLOSEDLOOP`,
+el integrador se precarga para conservar el PWM de handoff. Si la medicion
+fisica aun no es valida, el PI mantiene esa salida; en HIL espera la primera
+entrada habilitada.
 
 El motor se monitorea con [`check_motor_status()`](../firmware/Core/Src/motor_control.c#L217). Si en `RUNNING` o `CLOSEDLOOP` no llegan cruces por cero por mas de `TIMEOUT_MOTOR_STALL_MS`, se marca `motor_stalled`; la maquina de estados responde reintentando [`foc_startup()`](../firmware/Core/Src/startup.c#L94).
 
@@ -181,7 +184,8 @@ El motor se monitorea con [`check_motor_status()`](../firmware/Core/Src/motor_co
 | [`firmware/Core/Src/flash_config.c`](../firmware/Core/Src/flash_config.c) | Persistencia en Flash con paginas rotativas y CRC. |
 | [`firmware/Core/Src/startup.c`](../firmware/Core/Src/startup.c) | Arranque senoidal open-loop y transicion a six-step. |
 | [`firmware/Core/Src/bldc_driver.c`](../firmware/Core/Src/bldc_driver.c) | Conmutacion de seis pasos y duty PWM aplicado. |
-| [`firmware/Core/Src/motor_control.c`](../firmware/Core/Src/motor_control.c) | Control PI, manejo de stall, zero-crossing handler y conversiones. |
+| [`firmware/Core/Src/motor_control.c`](../firmware/Core/Src/motor_control.c) | Integracion del PI RPM, manejo de stall y zero-crossing handler. |
+| [`firmware/Core/Src/rpm_pi_controller.c`](../firmware/Core/Src/rpm_pi_controller.c) | Nucleo PI RPM Q16.16, anti-windup y escalado de ARR. |
 | [`firmware/Core/Src/speed_sensor.c`](../firmware/Core/Src/speed_sensor.c) | Medicion de velocidad por cruces por cero y consenso trifasico. |
 | [`firmware/Core/Src/isr_callbacks.c`](../firmware/Core/Src/isr_callbacks.c) | Callbacks HAL para captura, output compare y update de timers. |
 | [`firmware/Core/Src/stm32f1xx_it.c`](../firmware/Core/Src/stm32f1xx_it.c) | Handlers de interrupcion generados y ruteo hacia HAL. |

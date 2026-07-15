@@ -1,5 +1,6 @@
 @page "/runs"
 @inject ValidationRunService ValidationRuns
+@inject IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>Runs de validacion</PageTitle>
@@ -47,7 +48,15 @@
                         <td>@run.SampleCount</td>
                         <td>@run.PassedCount OK, @run.OutOfToleranceCount tolerancia, @run.TimeoutCount timeout</td>
                         <td>@run.CreatedAt.LocalDateTime.ToString("g")</td>
-                        <td><a href="@($"/runs/{run.Id}")">Ver</a></td>
+                        <td>
+                            <div class="button-row compact-actions">
+                                <a href="@($"/runs/{run.Id}")">Ver</a>
+                                <button class="danger" @onclick="() => DeleteAsync(run)"
+                                        disabled="@(run.Status == ValidationRunStatus.Running || _deletingRunId == run.Id)">
+                                    @(_deletingRunId == run.Id ? "Eliminando..." : "Eliminar")
+                                </button>
+                            </div>
+                        </td>
                     </tr>
                 }
                 </tbody>
@@ -64,6 +73,8 @@
     private int _maximumTimeouts = int.MaxValue;
     private ushort _hilInputTimeoutMs = 500;
     private string? _message;
+    private Guid? _deletingRunId;
+    private bool _disposed;
 
     protected override async Task OnInitializedAsync()
     {
@@ -100,10 +111,57 @@
         }
     }
 
-    private async Task LoadAsync() => _runs = await ValidationRuns.ListAsync();
+    private async Task LoadAsync()
+    {
+        IReadOnlyList<ValidationRunSummary> runs = await ValidationRuns.ListAsync();
+        if (!_disposed)
+        {
+            _runs = runs;
+        }
+    }
 
-    private void HandleProgressChanged(object? sender, ValidationRunProgress progress) =>
-        _ = InvokeAsync(LoadAsync);
+    private async Task DeleteAsync(ValidationRunSummary run)
+    {
+        bool confirmed = await JS.InvokeAsync<bool>("confirm",
+            $"Eliminar la validacion '{run.ExperimentName}' y su archivo MAT? Esta accion no se puede deshacer.");
+        if (!confirmed)
+        {
+            return;
+        }
 
-    public void Dispose() => ValidationRuns.ProgressChanged -= HandleProgressChanged;
+        _deletingRunId = run.Id;
+        try
+        {
+            bool deleted = await ValidationRuns.DeleteAsync(run.Id);
+            _message = deleted
+                ? $"Validacion '{run.ExperimentName}' eliminada."
+                : "La validacion ya no existe.";
+            await LoadAsync();
+        }
+        catch (Exception exception)
+        {
+            _message = $"No se pudo eliminar: {exception.Message}";
+        }
+        finally
+        {
+            _deletingRunId = null;
+        }
+    }
+
+    private void HandleProgressChanged(object? sender, ValidationRunProgress progress)
+    {
+        _ = InvokeAsync(async () =>
+        {
+            if (!_disposed)
+            {
+                await LoadAsync();
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        ValidationRuns.ProgressChanged -= HandleProgressChanged;
+    }
 }

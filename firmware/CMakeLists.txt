@@ -57,6 +57,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/flash_config.c
     Core/Src/main.c
     Core/Src/motor_control.c
+    Core/Src/rpm_pi_controller.c
     Core/Src/startup.c
     Core/Src/state_machine.c
     Core/Src/vel_routines.c

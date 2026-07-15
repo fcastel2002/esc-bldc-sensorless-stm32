@@ -18,6 +18,7 @@ public enum ValidationSampleStatus
     Timeout,
     MismatchedOutput,
     TransportError,
+    Skipped,
 }
 
 public sealed record ValidationReferenceConfig(
@@ -27,13 +28,19 @@ public sealed record ValidationReferenceConfig(
     int PwmFrequency,
     int PolePairs,
     int PwmArr,
-    double Dt);
+    double Dt,
+    uint SpeedTimerHz = 180000,
+    int SpeedMinPeriod = 14000,
+    int SpeedMaxPeriod = 200,
+    int MinimumPwm = 100,
+    int AlgorithmVersion = 2);
 
 public sealed record ValidationManifest(
     uint SchemaVersion,
     string ExperimentName,
     string Description,
     string CreatedAtUtc,
+    double StopTimeSeconds,
     ulong SamplePeriodUs,
     ushort TargetRpm,
     ValidationReferenceConfig ReferenceConfig);
