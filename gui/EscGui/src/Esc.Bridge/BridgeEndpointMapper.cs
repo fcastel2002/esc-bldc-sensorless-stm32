@@ -95,6 +95,19 @@ public static class BridgeEndpointMapper
         });
         validation.MapPost("/runs/{id:guid}/execute", async (Guid id, ValidationRunService runs, CancellationToken cancellationToken) =>
             await runs.ExecuteAsync(id, cancellationToken));
+        validation.MapPatch("/runs/{id:guid}/metadata", async (Guid id, ValidationRunMetadataRequest request, ValidationRunService runs, CancellationToken cancellationToken) =>
+        {
+            try
+            {
+                return await runs.UpdateMetadataAsync(id, request.ExperimentName, request.Description, cancellationToken)
+                    ? Results.NoContent()
+                    : Results.NotFound();
+            }
+            catch (ArgumentException exception)
+            {
+                return Results.BadRequest(new { error = exception.Message });
+            }
+        });
         validation.MapDelete("/runs/{id:guid}", async (Guid id, ValidationRunService runs, CancellationToken cancellationToken) =>
         {
             try
@@ -162,4 +175,5 @@ public static class BridgeEndpointMapper
         byte Flags,
         bool Enable);
     public sealed record ValidationImportRequest(string Path, ValidationRunOptions? Options);
+    public sealed record ValidationRunMetadataRequest(string ExperimentName, string? Description);
 }

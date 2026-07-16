@@ -152,8 +152,43 @@ public sealed class ValidationRunStore
         return new ValidationRunDetail(summary, manifest, samples);
     }
 
-    public async Task MarkRunningAsync(Guid id, CancellationToken cancellationToken = default) =>
-        await UpdateRunAsync(id, ValidationRunStatus.Running, null, cancellationToken).ConfigureAwait(false);
+    public async Task<bool> UpdateMetadataAsync(Guid id, string experimentName, string description, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+        await using SqliteConnection connection = OpenConnection();
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using SqliteCommand command = connection.CreateCommand();
+        command.CommandText = "UPDATE validation_runs SET experiment_name = $experimentName, description = $description WHERE id = $id";
+        command.Parameters.AddWithValue("$experimentName", experimentName);
+        command.Parameters.AddWithValue("$description", description);
+        command.Parameters.AddWithValue("$id", id.ToString("N"));
+        return await command.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false) == 1;
+    }
+
+    public async Task MarkRunningAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+        await using SqliteConnection connection = OpenConnection();
+        await connection.OpenAsync(cancellationToken).ConfigureAwait(false);
+        await using SqliteTransaction transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+        await ExecuteAsync(connection, transaction, """
+            UPDATE validation_runs SET status = $status, started_at = $startedAt,
+                completed_at = NULL, failure_reason = NULL WHERE id = $id
+            """, cancellationToken,
+            ("$status", (int)ValidationRunStatus.Running),
+            ("$startedAt", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)),
+            ("$id", id.ToString("N"))).ConfigureAwait(false);
+        await ExecuteAsync(connection, transaction, """
+            UPDATE validation_samples SET actual_pwm = NULL, status = $status,
+                round_trip_ms = NULL, mcu_tick_ms = NULL, output_generation = NULL,
+                applied_run_id = NULL, applied_source_sequence = NULL, absolute_error = NULL
+            WHERE run_id = $id
+            """, cancellationToken,
+            ("$status", (int)ValidationSampleStatus.Pending),
+            ("$id", id.ToString("N"))).ConfigureAwait(false);
+        await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+    }
 
     public async Task CompleteAsync(Guid id, ValidationRunStatus status, string? failureReason, CancellationToken cancellationToken = default) =>
         await UpdateRunAsync(id, status, failureReason, cancellationToken).ConfigureAwait(false);

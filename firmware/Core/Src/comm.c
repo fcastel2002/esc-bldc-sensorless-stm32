@@ -87,7 +87,9 @@ static int32_t logging_value(LoggeableVariable variable)
 {
   switch (variable) {
   case VAR_SPEED:
-    return hil_is_active() ? (int32_t)hil_get_speed_rpm() : (int32_t)period_to_rpm(get_actual_speed());
+    return hil_session_state != 0U
+        ? (int32_t)hil_speed_rpm
+        : (int32_t)period_to_rpm(get_actual_speed());
   case VAR_TEMP:
     return 3640; /* centi-degrees C, placeholder until a real sensor exists. */
   case VAR_CURRENT:

@@ -8,12 +8,14 @@
 #include "state_machine.h"
 #include "usart.h"
 
+#pragma GCC optimize("Os")
+
 #define RUNNING_RESTART_TIMEOUT_MS 1500U
 #define RUNNING_RESTART_BRAKE_MS 500U
 
 volatile App_States_t app_state = IDLE;
 
-__attribute__((optimize("Os"))) App_States_t handleState(void)
+__attribute__((optimize("Oz"))) App_States_t handleState(void)
 {
 
   static uint8_t  comm_initialized  = 0;
@@ -118,9 +120,11 @@ __attribute__((optimize("Os"))) App_States_t handleState(void)
       app_state = IDLE;
     break;
   case CLOSEDLOOP:
-    HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
+    if (hil_session_state != (uint8_t)HIL_EXECUTION_STEPPED + 1U) {
+      HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
+    }
     current_time = HAL_GetTick();
-    if (!hil_is_active() && motor_stalled) {
+    if (hil_session_state == 0U && motor_stalled) {
       HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
       PWM_STOP();
       bldc_set_pwm(0);
@@ -129,7 +133,7 @@ __attribute__((optimize("Os"))) App_States_t handleState(void)
       motor_stalled = false;
       break;
     }
-    if (!hil_is_active() && 0 == consistent_zero_crossing)
+    if (hil_session_state == 0U && 0 == consistent_zero_crossing)
       app_state = RUNNING;
     break;
   case READY:

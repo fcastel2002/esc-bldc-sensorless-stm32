@@ -21,6 +21,8 @@ public sealed class ValidationRunStoreTests
             var store = new ValidationRunStore(root);
 
             ValidationRunSummary created = await store.CreateAsync(vector, new ValidationRunOptions(2, 100, 0, 3, 500));
+            Assert.True(await store.UpdateMetadataAsync(created.Id, "Renamed run", "Edited locally"));
+            Assert.False(await store.UpdateMetadataAsync(Guid.NewGuid(), "Missing", ""));
             await store.MarkRunningAsync(created.Id);
             await store.UpdateSampleAsync(created.Id, new ValidationSampleResult(1, 0, 900, true, 1000, 300, 301,
                 ValidationSampleStatus.Passed, 4.5, 42, 7, 44, 1, 1));
@@ -29,10 +31,16 @@ public sealed class ValidationRunStoreTests
             ValidationRunDetail detail = (await store.GetAsync(created.Id))!;
 
             Assert.Equal(ValidationRunStatus.Completed, detail.Summary.Status);
+            Assert.Equal("Renamed run", detail.Summary.ExperimentName);
+            Assert.Equal("Edited locally", detail.Summary.Description);
+            Assert.Equal("Store test", detail.Manifest.ExperimentName);
+            Assert.Equal("persistent", detail.Manifest.Description);
             Assert.Equal(0.02, detail.Manifest.StopTimeSeconds);
             Assert.Equal(1, detail.Summary.PassedCount);
             Assert.Equal((ushort)500, detail.Summary.HilInputTimeoutMs);
             Assert.Equal<ushort?>((ushort)301, detail.Samples[0].ActualPwm);
+            Assert.Equal((ushort)300, detail.Samples[0].ExpectedPwm);
+            Assert.Equal(1, detail.Samples[0].AbsoluteError);
             Assert.Equal(ValidationSampleStatus.Passed, detail.Samples[0].Status);
 
             string artifactDirectory = Path.Combine(root, "artifacts", created.Id.ToString("N"));

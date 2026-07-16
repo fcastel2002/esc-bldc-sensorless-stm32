@@ -25,7 +25,9 @@ cmake --preset Release
 cmake --build --preset Release
 ```
 
-The firmware build expects Ninja, CMake, and `arm-none-eabi-gcc`.
+The firmware build expects Ninja, CMake, and `arm-none-eabi-gcc`. Debug uses
+`-Og -g3`; the linker exposes 62 KiB because the final two 1 KiB Flash pages
+are reserved for rotating configuration records.
 
 ## GUI
 

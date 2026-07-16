@@ -45,6 +45,7 @@ public enum CommOpcode : byte
     HilStop = 0x41,
     HilSetInputs = 0x42,
     HilGetOutputs = 0x43,
+    HilStep = 0x44,
 }
 
 public enum CommStatus : byte
@@ -68,6 +69,12 @@ public enum ControlRuntimeMode : byte
     Normal = 0,
     MonitorOnly = 1,
     HilSim = 2,
+}
+
+public enum HilExecutionMode : byte
+{
+    Periodic = 0,
+    Stepped = 1,
 }
 
 public enum ConfigParam : byte

@@ -8,6 +8,8 @@
 #include "tim.h"
 #include "motor_control.h"
 
+#pragma GCC optimize("Os")
+
 
 void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim)
 {
@@ -38,13 +40,16 @@ void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef* htim)
     // event_delay();
   }
   if (htim->Instance == TIM4 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1 &&
-      CLOSEDLOOP == app_state) {
+      CLOSEDLOOP == app_state &&
+      hil_session_state != (uint8_t)HIL_EXECUTION_STEPPED + 1U) {
     pi_control();
   }
 }
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 {
   if (htim->Instance == TIM4) {
-    update_pwm_startup_foc();
+    if (hil_session_state != (uint8_t)HIL_EXECUTION_STEPPED + 1U) {
+      update_pwm_startup_foc();
+    }
   }
 }

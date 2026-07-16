@@ -5,6 +5,9 @@ namespace Esc.Bridge;
 
 public sealed class ValidationRunService
 {
+    public const int MaximumExperimentNameLength = 200;
+    public const int MaximumDescriptionLength = 2000;
+
     private readonly MatValidationImporter _importer;
     private readonly ValidationRunStore _store;
     private readonly EscBridgeService _bridge;
@@ -32,6 +35,26 @@ public sealed class ValidationRunService
     public Task<ValidationRunDetail?> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
         _store.GetAsync(id, cancellationToken);
 
+    public Task<bool> UpdateMetadataAsync(Guid id, string experimentName, string? description, CancellationToken cancellationToken = default)
+    {
+        string normalizedName = experimentName?.Trim() ?? string.Empty;
+        string normalizedDescription = description?.Trim() ?? string.Empty;
+        if (normalizedName.Length == 0)
+        {
+            throw new ArgumentException("Experiment name cannot be empty.", nameof(experimentName));
+        }
+        if (normalizedName.Length > MaximumExperimentNameLength)
+        {
+            throw new ArgumentException($"Experiment name cannot exceed {MaximumExperimentNameLength} characters.", nameof(experimentName));
+        }
+        if (normalizedDescription.Length > MaximumDescriptionLength)
+        {
+            throw new ArgumentException($"Description cannot exceed {MaximumDescriptionLength} characters.", nameof(description));
+        }
+
+        return _store.UpdateMetadataAsync(id, normalizedName, normalizedDescription, cancellationToken);
+    }
+
     public async Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         await _executionLock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -57,10 +80,19 @@ public sealed class ValidationRunService
                 throw new InvalidOperationException($"Validation run '{id}' is already {detail.Summary.Status}.");
             }
 
-            double firstSimulationTime = detail.Samples[0].SimulationTimeSeconds;
-            IReadOnlyList<ValidationSampleResult> executableSamples = detail.Samples
-                .Where(sample => sample.SimulationTimeSeconds - firstSimulationTime <= detail.Manifest.StopTimeSeconds + 1e-9)
-                .ToArray();
+            ValidateOptions(new ValidationRunOptions(
+                detail.Summary.AbsoluteToleranceCounts,
+                detail.Summary.ResponseDeadlineMs,
+                detail.Summary.WarmupSamples,
+                detail.Summary.MaximumTimeouts,
+                detail.Summary.HilInputTimeoutMs));
+            if (detail.Manifest.SchemaVersion != 2)
+            {
+                throw new InvalidDataException(
+                    $"Deterministic replay requires esc_validation_v2; this run uses schema v{detail.Manifest.SchemaVersion}.");
+            }
+            ValidateReplaySamples(detail);
+            IReadOnlyList<ValidationSampleResult> executableSamples = detail.Samples;
             if (executableSamples.Count == 0)
             {
                 throw new InvalidDataException("The MAT simulation horizon does not contain any executable samples.");
@@ -73,38 +105,31 @@ public sealed class ValidationRunService
             }
             Publish(id, 0, executableSamples.Count, ValidationRunStatus.Running, null);
             ControllerSnapshot? controllerSnapshot = null;
+            bool hilStartAttempted = false;
             try
             {
+                ushort controllerSteps = await PreflightDeterministicReplayAsync(detail.Manifest, cancellationToken).ConfigureAwait(false);
                 controllerSnapshot = await CaptureControllerAsync(cancellationToken).ConfigureAwait(false);
                 await ConfigureControllerAsync(detail.Manifest, cancellationToken).ConfigureAwait(false);
-                CommandResult start = await _bridge.HilStartAsync(detail.Summary.HilInputTimeoutMs, cancellationToken).ConfigureAwait(false);
+                hilStartAttempted = true;
+                CommandResult start = await _bridge.HilStartAsync(
+                    detail.Summary.HilInputTimeoutMs,
+                    HilExecutionMode.Stepped,
+                    cancellationToken).ConfigureAwait(false);
                 EnsureSuccess(start, "HIL_START");
 
-                uint previousGeneration = 0;
-                var referenceState = new ReferenceControllerState();
-                int timeoutCount = 0;
                 bool hasWarnings = false;
+                string? replayFailure = null;
                 for (int index = 0; index < executableSamples.Count; index++)
                 {
-                    ValidationSampleResult result = await ExecuteSampleAsync(
+                    (ValidationSampleResult result, string? sampleFailure) = await ExecuteSampleAsync(
                         detail.Summary.SourceRunId,
                         executableSamples[index],
-                        previousGeneration,
+                        controllerSteps,
                         detail.Summary,
-                        detail.Manifest.ReferenceConfig,
-                        referenceState,
                         cancellationToken).ConfigureAwait(false);
-                    if (result.OutputGeneration is uint generation)
-                    {
-                        previousGeneration = Math.Max(previousGeneration, generation);
-                    }
 
                     bool isMeasuredSample = index >= detail.Summary.WarmupSamples;
-                    if (isMeasuredSample && result.Status == ValidationSampleStatus.Timeout)
-                    {
-                        timeoutCount++;
-                    }
-
                     if (isMeasuredSample && result.Status is not ValidationSampleStatus.Passed)
                     {
                         hasWarnings = true;
@@ -112,16 +137,24 @@ public sealed class ValidationRunService
 
                     await _store.UpdateSampleAsync(id, result, cancellationToken).ConfigureAwait(false);
                     Publish(id, index + 1, executableSamples.Count, ValidationRunStatus.Running, null);
+                    if (result.Status is ValidationSampleStatus.Timeout or ValidationSampleStatus.TransportError or ValidationSampleStatus.MismatchedOutput)
+                    {
+                        replayFailure = sampleFailure ?? $"Deterministic replay failed at source sequence {result.SourceSequence}: {result.Status}.";
+                        foreach (ValidationSampleResult remaining in executableSamples.Skip(index + 1))
+                        {
+                            await _store.UpdateSampleAsync(
+                                id, remaining with { Status = ValidationSampleStatus.Skipped }, cancellationToken).ConfigureAwait(false);
+                        }
+                        break;
+                    }
                 }
 
-                ValidationRunStatus finalStatus = timeoutCount > detail.Summary.MaximumTimeouts
+                ValidationRunStatus finalStatus = replayFailure is not null
                     ? ValidationRunStatus.Failed
                     : hasWarnings ? ValidationRunStatus.CompletedWithWarnings : ValidationRunStatus.Completed;
-                string? failureReason = finalStatus == ValidationRunStatus.Failed
-                    ? $"Timeout limit exceeded: {timeoutCount} of {detail.Summary.MaximumTimeouts}."
-                    : null;
+                string? failureReason = replayFailure;
                 await _store.CompleteAsync(id, finalStatus, failureReason, cancellationToken).ConfigureAwait(false);
-                Publish(id, executableSamples.Count, executableSamples.Count, finalStatus, null);
+                Publish(id, executableSamples.Count, executableSamples.Count, finalStatus, failureReason);
             }
             catch (OperationCanceledException)
             {
@@ -137,7 +170,7 @@ public sealed class ValidationRunService
             }
             finally
             {
-                string? cleanupFailure = await RestoreControllerAsync(controllerSnapshot).ConfigureAwait(false);
+                string? cleanupFailure = await RestoreControllerAsync(controllerSnapshot, hilStartAttempted).ConfigureAwait(false);
                 if (cleanupFailure is not null)
                 {
                     await RecordCleanupFailureAsync(id, cleanupFailure).ConfigureAwait(false);
@@ -155,7 +188,6 @@ public sealed class ValidationRunService
     private async Task ConfigureControllerAsync(ValidationManifest manifest, CancellationToken cancellationToken)
     {
         await _bridge.SetModeAsync(ControlMode.GuiControl).ConfigureAwait(false);
-        await EnsureStructuralReferenceAsync(manifest.ReferenceConfig, cancellationToken).ConfigureAwait(false);
         EnsureSuccess(await _bridge.SetConfigAsync(ConfigParam.KpRpm, manifest.ReferenceConfig.Kp, cancellationToken).ConfigureAwait(false), "SET_CONFIG KP_RPM");
         EnsureSuccess(await _bridge.SetConfigAsync(ConfigParam.KiRpm, manifest.ReferenceConfig.Ki, cancellationToken).ConfigureAwait(false), "SET_CONFIG KI_RPM");
         EnsureSuccess(await _bridge.SetConfigAsync(ConfigParam.KdRpm, manifest.ReferenceConfig.Kd, cancellationToken).ConfigureAwait(false), "SET_CONFIG KD_RPM");
@@ -165,9 +197,32 @@ public sealed class ValidationRunService
         await _bridge.SetModeAsync(ControlMode.SimulinkControl).ConfigureAwait(false);
     }
 
-    private async Task EnsureStructuralReferenceAsync(ValidationReferenceConfig expected, CancellationToken cancellationToken)
+    private async Task<ushort> PreflightDeterministicReplayAsync(ValidationManifest manifest, CancellationToken cancellationToken)
     {
         ValidationReference actual = await _bridge.RefreshValidationReferenceAsync(cancellationToken).ConfigureAwait(false);
+        if (!actual.SupportsDeterministicHil)
+        {
+            throw new InvalidOperationException("El firmware conectado no anuncia la capability HIL determinista.");
+        }
+        if (actual.HilStepOperationVersion != 1)
+        {
+            throw new InvalidOperationException(
+                $"Version HIL_STEP no soportada: active {actual.HilStepOperationVersion}, expected 1.");
+        }
+        if (actual.ControllerDtUs == 0 || manifest.SamplePeriodUs % actual.ControllerDtUs != 0)
+        {
+            throw new InvalidOperationException(
+                $"El sample period {manifest.SamplePeriodUs} us no es divisible exactamente por controller dt {actual.ControllerDtUs} us.");
+        }
+
+        ulong stepCount = manifest.SamplePeriodUs / actual.ControllerDtUs;
+        if (stepCount == 0 || stepCount > actual.MaximumHilSteps)
+        {
+            throw new InvalidOperationException(
+                $"El replay requiere {stepCount} HIL steps por sample; el firmware admite {actual.MaximumHilSteps}.");
+        }
+
+        ValidationReferenceConfig expected = manifest.ReferenceConfig;
         var mismatches = new List<string>();
         Compare("PWM frequency", expected.PwmFrequency, actual.PwmFrequencyHz, mismatches);
         Compare("PWM ARR", expected.PwmArr, actual.PwmArrCounts, mismatches);
@@ -185,6 +240,44 @@ public sealed class ValidationRunService
         {
             throw new InvalidOperationException(
                 $"La base estructural del ESC no coincide con el MAT: {string.Join("; ", mismatches)}. No se modifico el ESC.");
+        }
+
+        return checked((ushort)stepCount);
+    }
+
+    private static void ValidateReplaySamples(ValidationRunDetail detail)
+    {
+        ValidationSampleResult? disabled = detail.Samples.FirstOrDefault(sample => !sample.Enable);
+        if (disabled is not null)
+        {
+            throw new InvalidDataException(
+                $"Deterministic replay v2 requires enable=true; source sequence {disabled.SourceSequence} is disabled.");
+        }
+
+        ValidationSampleResult? wrongTarget = detail.Samples.FirstOrDefault(
+            sample => sample.TargetRpm != detail.Manifest.TargetRpm);
+        if (wrongTarget is not null)
+        {
+            throw new InvalidDataException(
+                $"Target RPM at source sequence {wrongTarget.SourceSequence} is {wrongTarget.TargetRpm}; manifest target is {detail.Manifest.TargetRpm}.");
+        }
+
+        double samplePeriodSeconds = detail.Manifest.SamplePeriodUs / 1_000_000d;
+        for (int index = 0; index < detail.Samples.Count; index++)
+        {
+            double expectedTime = index * samplePeriodSeconds;
+            if (Math.Abs(detail.Samples[index].SimulationTimeSeconds - expectedTime) > 1e-9)
+            {
+                throw new InvalidDataException(
+                    $"Stored validation grid is incompatible at source sequence {detail.Samples[index].SourceSequence}.");
+            }
+        }
+
+        double expectedStopTime = detail.Samples.Count * samplePeriodSeconds;
+        if (Math.Abs(detail.Manifest.StopTimeSeconds - expectedStopTime) > 1e-9)
+        {
+            throw new InvalidDataException(
+                "Stored validation horizon does not end after the final complete sample interval.");
         }
     }
 
@@ -212,12 +305,24 @@ public sealed class ValidationRunService
     private async Task<ControllerSnapshot> CaptureControllerAsync(CancellationToken cancellationToken)
     {
         ControlMode mode = _bridge.Snapshot.Mode;
+        HilOutputs hilOutputs = await _bridge.HilGetOutputsAsync(cancellationToken).ConfigureAwait(false);
+        if (hilOutputs.Mode != ControlRuntimeMode.Normal)
+        {
+            throw new InvalidOperationException(
+                $"Deterministic validation requires MCU runtime mode NORMAL; active mode is {hilOutputs.Mode}.");
+        }
+        if (hilOutputs.AppState != 0)
+        {
+            throw new InvalidOperationException(
+                $"Deterministic validation requires MCU app state IDLE; active state is {hilOutputs.AppState}.");
+        }
         await _bridge.RefreshStatusAsync(cancellationToken).ConfigureAwait(false);
         ushort setpointRpm = _bridge.Snapshot.Status?.SpeedSetpointRpm
             ?? throw new InvalidOperationException("Cannot capture the current MCU speed setpoint.");
 
         return new ControllerSnapshot(
             mode,
+            hilOutputs.Mode,
             setpointRpm,
             await ReadConfigAsync(ConfigParam.KpRpm, cancellationToken).ConfigureAwait(false),
             await ReadConfigAsync(ConfigParam.KiRpm, cancellationToken).ConfigureAwait(false),
@@ -225,7 +330,7 @@ public sealed class ValidationRunService
             await ReadConfigAsync(ConfigParam.PolePairs, cancellationToken).ConfigureAwait(false));
     }
 
-    private async Task<string?> RestoreControllerAsync(ControllerSnapshot? snapshot)
+    private async Task<string?> RestoreControllerAsync(ControllerSnapshot? snapshot, bool hilStartAttempted)
     {
         var failures = new List<string>();
 
@@ -241,8 +346,11 @@ public sealed class ValidationRunService
             }
         }
 
-        await TryAsync("HIL_STOP", async () =>
-            EnsureSuccess(await _bridge.HilStopAsync(CancellationToken.None).ConfigureAwait(false), "HIL_STOP")).ConfigureAwait(false);
+        if (hilStartAttempted)
+        {
+            await TryAsync("HIL_STOP", async () =>
+                EnsureSuccess(await _bridge.HilStopAsync(CancellationToken.None).ConfigureAwait(false), "HIL_STOP")).ConfigureAwait(false);
+        }
 
         if (snapshot is null)
         {
@@ -256,6 +364,12 @@ public sealed class ValidationRunService
         await RestoreConfigAsync(ConfigParam.KdRpm, snapshot.Kd, failures).ConfigureAwait(false);
         await TryAsync("restore setpoint", async () =>
             EnsureSuccess(await _bridge.SetSpeedRpmAsync(snapshot.SetpointRpm, CancellationToken.None).ConfigureAwait(false), "restore setpoint")).ConfigureAwait(false);
+        if (hilStartAttempted)
+        {
+            await TryAsync("restore MCU runtime mode", async () =>
+                EnsureSuccess(await _bridge.SetControlRuntimeModeAsync(snapshot.RuntimeMode, CancellationToken.None).ConfigureAwait(false),
+                    "restore MCU runtime mode")).ConfigureAwait(false);
+        }
         await TryAsync("restore mode", () => _bridge.SetModeAsync(snapshot.Mode)).ConfigureAwait(false);
 
         return failures.Count == 0 ? null : string.Join("; ", failures);
@@ -306,144 +420,121 @@ public sealed class ValidationRunService
 
     private sealed record ControllerSnapshot(
         ControlMode Mode,
+        ControlRuntimeMode RuntimeMode,
         ushort SetpointRpm,
         double Kp,
         double Ki,
         double Kd,
         double PolePairs);
 
-    private async Task<ValidationSampleResult> ExecuteSampleAsync(
+    private async Task<(ValidationSampleResult Result, string? FailureReason)> ExecuteSampleAsync(
         uint sourceRunId,
         ValidationSampleResult sample,
-        uint previousGeneration,
+        ushort controllerSteps,
         ValidationRunSummary run,
-        ValidationReferenceConfig referenceConfig,
-        ReferenceControllerState referenceState,
         CancellationToken cancellationToken)
     {
-        if (!sample.Enable)
-        {
-            CommandResult disabled = await _bridge.HilSetInputsAsync(new HilInputs(sample.SpeedRpm, 0, 0, false, sourceRunId, sample.SourceSequence), cancellationToken).ConfigureAwait(false);
-            referenceState.Reset();
-            ValidationSampleStatus disabledStatus = disabled.Success
-                ? ValidationSampleStatus.Passed
-                : ValidationSampleStatus.OutOfTolerance;
-            return sample with { ExpectedPwm = 0, ActualPwm = 0, Status = disabledStatus, AbsoluteError = 0 };
-        }
-
         var stopwatch = Stopwatch.StartNew();
-        CommandResult accepted = await _bridge.HilSetInputsAsync(new HilInputs(sample.SpeedRpm, 0, 0, true, sourceRunId, sample.SourceSequence), cancellationToken).ConfigureAwait(false);
-        if (!accepted.Success)
+        HilStepResult stepResult;
+        try
+        {
+            stepResult = await _bridge.HilStepAsync(
+                new HilStepRequest(sample.SpeedRpm, 0, 0, true, sourceRunId, sample.SourceSequence, controllerSteps),
+                run.ResponseDeadlineMs,
+                cancellationToken).ConfigureAwait(false);
+        }
+        catch (TimeoutException exception)
         {
             stopwatch.Stop();
-            return sample with { Status = ValidationSampleStatus.TransportError, RoundTripMs = stopwatch.Elapsed.TotalMilliseconds };
+            return (
+                sample with { Status = ValidationSampleStatus.Timeout, RoundTripMs = stopwatch.Elapsed.TotalMilliseconds },
+                $"HIL_STEP timed out at source sequence {sample.SourceSequence} after one retry: {exception.Message}");
         }
-
-        HilOutputs? lastOutput = null;
-        while (stopwatch.ElapsedMilliseconds < run.ResponseDeadlineMs)
+        catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            HilOutputs output = await _bridge.HilGetOutputsAsync(cancellationToken).ConfigureAwait(false);
-            lastOutput = output;
-            bool matchesInput = output.AppliedRunId == sourceRunId && output.AppliedSourceSequence == sample.SourceSequence;
-            bool isNewGeneration = output.OutputGeneration > previousGeneration;
-            if (matchesInput && isNewGeneration)
-            {
-                stopwatch.Stop();
-                ushort expectedPwm = referenceState.AdvanceTo(
-                    output, sample.SpeedRpm, sample.TargetRpm, run.SourceRunId, referenceConfig);
-                int error = Math.Abs(output.PwmCommand - expectedPwm);
-                return sample with
-                {
-                    ExpectedPwm = expectedPwm,
-                    ActualPwm = output.PwmCommand,
-                    Status = error <= run.AbsoluteToleranceCounts ? ValidationSampleStatus.Passed : ValidationSampleStatus.OutOfTolerance,
-                    RoundTripMs = stopwatch.Elapsed.TotalMilliseconds,
-                    McuTickMs = output.PwmUpdateTickMs,
-                    OutputGeneration = output.OutputGeneration,
-                    AppliedRunId = output.AppliedRunId,
-                    AppliedSourceSequence = output.AppliedSourceSequence,
-                    AbsoluteError = error
-                };
-            }
-
-            await Task.Delay(1, cancellationToken).ConfigureAwait(false);
+            stopwatch.Stop();
+            return (
+                sample with { Status = ValidationSampleStatus.TransportError, RoundTripMs = stopwatch.Elapsed.TotalMilliseconds },
+                $"HIL_STEP transport/protocol error at source sequence {sample.SourceSequence}: {exception.Message}");
         }
 
         stopwatch.Stop();
-        ushort observedExpectedPwm = sample.ExpectedPwm;
-        if (lastOutput is { HasValidationProvenance: true } &&
-            lastOutput.AcceptedRunId == sourceRunId &&
-            lastOutput.AcceptedSourceSequence == sample.SourceSequence &&
-            lastOutput.OutputGeneration > referenceState.Generation)
+        HilOutputs output = stepResult.Outputs;
+        int error = Math.Abs(output.PwmCommand - sample.ExpectedPwm);
+        ValidationSampleResult measured = sample with
         {
-            observedExpectedPwm = referenceState.AdvanceTo(
-                lastOutput, sample.SpeedRpm, sample.TargetRpm, run.SourceRunId, referenceConfig);
-        }
-
-        return sample with
-        {
-            ExpectedPwm = observedExpectedPwm,
-            ActualPwm = lastOutput?.PwmCommand,
-            Status = lastOutput is null ? ValidationSampleStatus.Timeout : ValidationSampleStatus.MismatchedOutput,
+            ActualPwm = output.PwmCommand,
             RoundTripMs = stopwatch.Elapsed.TotalMilliseconds,
-            McuTickMs = lastOutput?.PwmUpdateTickMs,
-            OutputGeneration = lastOutput?.OutputGeneration,
-            AppliedRunId = lastOutput?.AppliedRunId,
-            AppliedSourceSequence = lastOutput?.AppliedSourceSequence
+            McuTickMs = output.PwmUpdateTickMs,
+            OutputGeneration = output.OutputGeneration,
+            AppliedRunId = output.AppliedRunId,
+            AppliedSourceSequence = output.AppliedSourceSequence,
+            AbsoluteError = error
         };
-    }
 
-    private sealed class ReferenceControllerState
-    {
-        private readonly RpmPiReferenceModel _controller = new();
-        private ushort _activeSpeedRpm;
-        private uint _generation;
-
-        public uint Generation => _generation;
-
-        public void Reset()
+        var mismatches = new List<string>();
+        if (stepResult.RequestedSteps != controllerSteps)
         {
-            _controller.Reset();
-            _activeSpeedRpm = 0;
-            _generation = 0;
+            mismatches.Add($"requested steps {stepResult.RequestedSteps}, expected {controllerSteps}");
+        }
+        if (stepResult.AppliedSteps != controllerSteps)
+        {
+            mismatches.Add($"applied steps {stepResult.AppliedSteps}, expected {controllerSteps}");
+        }
+        if (!output.HasValidationProvenance)
+        {
+            mismatches.Add("validation provenance is missing");
+        }
+        if (output.AcceptedRunId != sourceRunId || output.AcceptedSourceSequence != sample.SourceSequence)
+        {
+            mismatches.Add($"accepted provenance {output.AcceptedRunId}/{output.AcceptedSourceSequence}");
+        }
+        if (output.AppliedRunId != sourceRunId || output.AppliedSourceSequence != sample.SourceSequence)
+        {
+            mismatches.Add($"applied provenance {output.AppliedRunId}/{output.AppliedSourceSequence}");
+        }
+        if (output.AcceptedGeneration > uint.MaxValue - controllerSteps ||
+            output.OutputGeneration != output.AcceptedGeneration + controllerSteps)
+        {
+            mismatches.Add(
+                $"generation delta from {output.AcceptedGeneration} to {output.OutputGeneration}, expected {controllerSteps} without overflow");
         }
 
-        public ushort AdvanceTo(
-            HilOutputs output,
-            ushort newSpeedRpm,
-            ushort targetRpm,
-            uint runId,
-            ValidationReferenceConfig config)
+        if (mismatches.Count > 0)
         {
-            if (output.AcceptedRunId != runId || output.OutputGeneration < _generation)
-            {
-                throw new InvalidOperationException("Invalid HIL generation provenance for reference replay.");
-            }
-
-            ushort pwm = 0;
-            for (uint generation = _generation + 1; generation <= output.OutputGeneration; generation++)
-            {
-                ushort speed = generation <= output.AcceptedGeneration ? _activeSpeedRpm : newSpeedRpm;
-                pwm = _controller.Step(speed, targetRpm, config);
-            }
-
-            _generation = output.OutputGeneration;
-            _activeSpeedRpm = newSpeedRpm;
-            return pwm;
+            return (
+                measured with { Status = ValidationSampleStatus.MismatchedOutput },
+                $"HIL_STEP mismatch at source sequence {sample.SourceSequence}: {string.Join("; ", mismatches)}.");
         }
 
+        return (
+            measured with
+            {
+                Status = error <= run.AbsoluteToleranceCounts
+                    ? ValidationSampleStatus.Passed
+                    : ValidationSampleStatus.OutOfTolerance
+            },
+            null);
     }
 
     private static void ValidateOptions(ValidationRunOptions options)
     {
-        if (options.ResponseDeadlineMs < 1)
+        if (options.ResponseDeadlineMs is < 1 or > 2474)
         {
-            throw new ArgumentOutOfRangeException(nameof(options), "Response deadline must be at least 1 ms.");
+            throw new ArgumentOutOfRangeException(nameof(options), "Response deadline must be between 1 and 2474 ms.");
         }
 
-        if (options.WarmupSamples < 0 || options.MaximumTimeouts < 0 || options.HilInputTimeoutMs is < 10 or > 5000)
+        if (options.WarmupSamples < 0 || options.MaximumTimeouts != 0 || options.HilInputTimeoutMs is < 10 or > 5000)
         {
-            throw new ArgumentOutOfRangeException(nameof(options), "Warm-up, timeout limits, and HIL timeout are invalid.");
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "Warm-up and HIL timeout must be valid, and deterministic replay requires MaximumTimeouts=0.");
+        }
+        if (options.HilInputTimeoutMs <= options.ResponseDeadlineMs * 2 + 50)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(options),
+                "HIL input timeout must exceed two response deadlines plus a 50 ms processing margin.");
         }
     }
 

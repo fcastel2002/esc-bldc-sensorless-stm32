@@ -1443,16 +1443,17 @@ Eso manda al MCU:
 HIL_SET_INPUTS
 ```
 
-### Poll HIL y validacion offline
+### HIL live periodico y validacion stepped
 
-Igual que con setpoint, si cada entrada HIL hiciera:
+HIL live/UDP conserva el flujo:
 
 ```text
 HIL_SET_INPUTS
 HIL_GET_OUTPUTS
 ```
 
-la tasa efectiva se reduce.
+La entrada se aplica inmediatamente y la salida se consulta periodicamente para
+monitoreo, sin convertir cada paquete UDP en una barrera de ejecucion.
 
 Por eso:
 
@@ -1461,11 +1462,22 @@ private const double HilOutputPollPeriodMs = 20;
 ```
 
 El Bridge aplica entradas rapido y pide salidas HIL cada 20 ms para monitoreo.
+El response UDP normal puede usar la ultima salida cacheada.
 
-El response UDP normal puede usar la ultima salida cacheada. El formato
-`PILV,run_id,seq,speed_rpm,enable` se reserva para replay de validacion:
-no se coalesce, fuerza una lectura `HIL_GET_OUTPUTS` fresca y registra la
-proveniencia `run_id`/`source_seq`/`output_generation` para comparar offline.
+La validacion persistente de `/runs` usa otro contrato. Primero comprueba los
+bytes `20..23` de `GET_VALIDATION_REFERENCE` (capability determinista, version
+de `HIL_STEP` y maximo de ticks), y luego inicia `HIL_START` con 3 bytes:
+`uint16 timeout_ms` y `uint8 mode=1`. En esa sesion TIM4 queda detenido. Cada
+muestra se envia como un `HIL_STEP=0x44` de 18 bytes con un `N` exacto y recibe
+48 bytes con la salida y los conteos. El Bridge exige que los ticks solicitados
+y aplicados sean `N` y que el delta de generacion sea exactamente `N`; compara
+el PWM con `expected_pwm` importado, sin polling ni recalculo.
+
+Si se pierde la respuesta, el Bridge reintenta una vez el mismo payload. El MCU
+reconoce el ultimo comando identico, devuelve el mismo resultado marcado como
+replay y no ejecuta `N` otra vez. Durante la sesion stepped se bloquean
+`HIL_SET_INPUTS`, otro `HIL_START`, cambios de setpoint/modo y cambios de
+configuracion; `HIL_STOP` termina la sesion.
 
 ## 26. Recorrido completo: Simulink cambia setpoint real
 
@@ -1752,7 +1764,7 @@ En `CommConstants.cs`:
 public enum CommOpcode : byte
 {
     ...
-    SetCurrentLimit = 0x44,
+    SetCurrentLimit = 0x45,
 }
 ```
 
@@ -1923,6 +1935,19 @@ Bridge:
 MCU:
     usa la velocidad simulada como feedback
     devuelve PWM logico para que Simulink simule ESC/planta
+```
+
+Para validacion offline determinista:
+
+```text
+GUI /runs:
+    inicia HIL_START stepped
+    manda HIL_STEP con entrada y N ticks exactos
+
+MCU:
+    mantiene TIM4 detenido
+    ejecuta N ticks sincronamente
+    devuelve salida y delta de generacion N
 ```
 
 ## 39. Por qué el diseño sirve para el futuro

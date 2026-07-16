@@ -29,13 +29,16 @@ Campos:
 | `speed_rpm` | Velocidad simulada que usa el controlador del MCU como medicion. |
 | `enable` | `0` detiene HIL, distinto de cero inicia/actualiza HIL. |
 
-Para una validacion trazable, el replay usa:
+Para diagnostico live con proveniencia, tambien se acepta:
 
 ```text
 PILV,run_id,seq,speed_rpm,enable
 ```
 
-`run_id` identifica una corrida y `seq` es un `uint32` monotono. El bridge fuerza una lectura fresca de salida para cada `PILV`, registra un JSONL append-only en `%LOCALAPPDATA%\EscGui\hil-validation`, y el MCU devuelve la secuencia que produjo el PWM.
+`run_id` identifica una corrida y `seq` es un `uint32` monotono. Este formato
+pertenece al diagnostico HIL live/UDP: conserva `HIL_SET_INPUTS` y lecturas
+periodicas de `HIL_GET_OUTPUTS`. El replay persistente de `/runs` no usa polling;
+usa `HIL_STEP` para avanzar el controlador de forma determinista.
 
 Ejemplo:
 
@@ -55,12 +58,16 @@ El campo `reserved` reemplaza al antiguo `zero_crossing_period`: se parsea por c
 
 ## Firmware
 
-En `HIL_SIM`, las capturas fisicas de TIM2 no gobiernan nada. El firmware:
+En `HIL_SIM`, las capturas fisicas de TIM2 no gobiernan nada. Hay dos modos de
+ejecucion:
 
-1. actualiza `hil_speed_rpm` con la velocidad simulada;
-2. ejecuta el PI usando esa velocidad como feedback;
-3. expone el PWM logico por `HIL_GET_OUTPUTS`;
-4. detiene HIL si no llegan entradas por mas de 50 ms.
+1. `periodic=0`: HIL live/UDP actualiza `hil_speed_rpm` con `HIL_SET_INPUTS`, TIM4 ejecuta el PI y el bridge consulta `HIL_GET_OUTPUTS` periodicamente;
+2. `stepped=1`: el replay inicia `HIL_START` con el payload de 3 bytes `uint16 timeout_ms` + `uint8 mode`, TIM4 queda detenido y cada `HIL_STEP` ejecuta exactamente `N` ticks PI antes de responder.
+
+El firmware anuncia soporte stepped en los bytes `20..23` de
+`GET_VALIDATION_REFERENCE`: flags de capability, version de operacion
+`HIL_STEP` y maximo `N` por comando. Una referencia legacy de 20 bytes no es
+suficiente para replay determinista.
 
 La simulacion de ESC/conmutacion queda completa del lado de Simulink.
 
@@ -71,7 +78,7 @@ El dashboard principal mantiene el panel `HIL Simulink`. La pagina `/pil` agrega
 | Columna | Contenido |
 | --- | --- |
 | `Simulink` | Paquetes UDP ASCII recibidos y respuestas enviadas al modelo. |
-| `MCU PIL` | Frames HID binarios `HIL_START`, `HIL_STOP`, `HIL_SET_INPUTS` y `HIL_GET_OUTPUTS`. |
+| `MCU PIL` | Frames HID binarios `HIL_START`, `HIL_STOP`, `HIL_SET_INPUTS`, `HIL_GET_OUTPUTS` y `HIL_STEP`. |
 
 Esto permite comparar la velocidad enviada por Simulink con el PWM logico que devuelve el MCU durante una corrida PIL.
 
@@ -145,7 +152,14 @@ Importante: en esta arquitectura HIL el MCU solo devuelve el PWM logico del PI. 
 
 ## Validacion offline
 
-No se sincroniza el step del solver con HID. Simscape conserva su solver variable y el vector HIL se toma cada 20 ms. Primero se ejecuta la planta localmente y se exporta un vector. Luego la GUI importa el MAT, reproduce sus muestras contra el MCU y compara el PWM por identidad logica, no por hora de llegada.
+No se sincroniza el solver de Simscape con HID durante la simulacion. Simscape
+conserva su solver y primero se exporta el vector discreto. Durante el replay,
+la GUI calcula `N = samplePeriodUs / controllerDtUs`, inicia una sesion stepped
+y envia una solicitud `HIL_STEP` exacta de 18 bytes por muestra. La respuesta
+exacta de 48 bytes contiene el snapshot de salida, `requested_steps`,
+`applied_steps` y el flag de replay idempotente. Se exige que ambos conteos sean
+`N` y que `output_generation - accepted_generation == N`; no se espera ni se
+sondea una generacion futura.
 
 ```matlab
 config = struct("targetRpm", 1000, "runId", uint32(1));
@@ -166,7 +180,7 @@ el modelo:
 
 ```matlab
 export_sim_motor_validation( ...
-    stopTime=3, targetRpm=1000, kp=0.02, ki=0.03, kd=0.01)
+    stopTime=3, targetRpm=1000, kp=0.02, ki=0.03, kd=0)
 ```
 
 Las ganancias deben ser representables con la resolucion `0.01` del protocolo.
@@ -176,12 +190,12 @@ configuracion activa; nunca envia `SAVE_CONFIG`.
 ### Contrato de importacion GUI
 
 `export_hil_validation_vector` conserva `validationVector` y `manifest` para
-los scripts MATLAB, y exporta adicionalmente `esc_validation_v1`. La GUI debe
+los scripts MATLAB, y exporta adicionalmente `esc_validation_v2`. La GUI debe
 importar exclusivamente esta estructura plana MAT v7:
 
 | Campo | Tipo | Significado |
 | --- | --- | --- |
-| `schema_version` | `uint32` | Version del contrato, actualmente `1`. |
+| `schema_version` | `uint32` | Version del contrato, actualmente `2`. |
 | `manifest_json` | `char` | Metadatos JSON: nombre, descripcion, `stopTimeSeconds`, periodo y configuracion PI. |
 | `simulation_time_s` | `double[]` | Tiempo de simulacion de cada muestra. |
 | `run_id` | `uint32[]` | Identificador de corrida, no nulo y uniforme. |
@@ -194,8 +208,16 @@ importar exclusivamente esta estructura plana MAT v7:
 `expected_pwm` se compara directamente contra `pwm_command` devuelto por el
 MCU. Ambos estan en cuentas PWM, no en porcentaje. Los artefactos de
 validacion deben conservar el MAT original junto con los resultados.
-La GUI solo reproduce muestras dentro de `stopTimeSeconds`; para artefactos
-anteriores que no tengan ese campo deriva el horizonte desde los timestamps.
+Para MAT v2 determinista, cada fila debe tener `enable=1`, `target_rpm` debe ser
+constante e igual al target del manifest, y `samplePeriodUs` debe ser divisible
+exactamente por `referenceConfig.dt` expresado en microsegundos. Cada
+`simulation_time_s` identifica el inicio del intervalo; `expected_pwm` es la
+salida despues de ejecutar los `N` ticks de ese intervalo. La grilla incluye
+`0, samplePeriod, ..., stopTime-samplePeriod`: no debe existir una fila en
+`stopTimeSeconds`.
+La GUI conserva la importacion de `esc_validation_v1` para consultar artefactos
+historicos, pero no permite ejecutarlos con el replay determinista porque su
+grilla y su salida esperada siguen la semantica anterior.
 
 Para `sim_motor`, `export_sim_motor_validation` obtiene KP, KI, KD, pares de
 polos y setpoint desde sus opciones. El PI del modelo y el MCU usan el mismo
@@ -203,10 +225,11 @@ error RPM, integracion trapezoidal y salida en cuentas canonicas ARR=2000; una
 ganancia `1/2000` convierte la salida del modelo a duty. Antes de simular consulta
 `http://localhost:5187/api/bridge/validation-reference` para capturar frecuencia
 PWM, ARR real, reloj y limites del timer de velocidad, `dt`, PWM minimo y
-version del algoritmo. Si el bridge o el MCU no estan disponibles, no genera el
-MAT. Durante el replay la GUI no modifica esos parametros estructurales: los
-verifica y aborta ante una diferencia. El PWM esperado final se recalcula con
-las generaciones reales informadas por el MCU.
+version del algoritmo, ademas de la capability stepped, su version y el maximo
+de ticks. Si el bridge o el MCU no estan disponibles, no genera el MAT. Durante
+el replay la GUI no modifica esos parametros estructurales: los verifica y
+aborta ante una diferencia. El PWM esperado es el `expected_pwm` importado y no
+se recalcula con generaciones observadas del MCU.
 
 El timer de control del firmware usa `PSC=2`, `ARR=47999` y compare `47999` con
 reloj de 72 MHz, produciendo un periodo repetitivo real de 2 ms coherente con
@@ -251,8 +274,11 @@ ser escalares y loguearse como `timeseries`. `expectedPwm` define la grilla de
 tiempo discreta; debe tener periodo exacto `controllerPeriodSeconds`.
 
 `speedRpm`, `enable` y `targetRpm` se alinean sobre esa grilla mediante
-zero-order hold. No se usa interpolacion lineal. `targetRpm` debe permanecer
-constante porque el protocolo MCU actual configura un unico setpoint por run.
+zero-order hold. No se usa interpolacion lineal. Para MAT v2, `enable` debe ser
+siempre verdadero, `targetRpm` debe permanecer constante y la ultima muestra
+debe representar el inicio del ultimo intervalo completo, nunca el instante
+`stopTime`. Cada `expectedPwm` debe ser el resultado posterior a los `N` ticks
+de su fila.
 Las extras declaradas se guardan como `experimentSignals` con su propio eje de
 tiempo y unidad; la GUI actual conserva el artefacto aunque todavia no las
 grafica.

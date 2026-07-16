@@ -383,14 +383,26 @@ public sealed class EscBridgeService
         return await SendCommandAsync(CommOpcode.SetControlMode, 0, EscProtocol.ControlModePayload(mode), cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<CommandResult> HilStartAsync(ushort? inputTimeoutMs = null, CancellationToken cancellationToken = default)
+    public async Task<CommandResult> HilStartAsync(
+        ushort? inputTimeoutMs = null,
+        CancellationToken cancellationToken = default,
+        HilExecutionMode? executionMode = null)
     {
         if (!AllowsHilControl())
         {
             return CommandResult.Failed("Control bloqueado por el modo actual.");
         }
 
-        byte[] payload = inputTimeoutMs.HasValue ? EscProtocol.HilStartPayload(inputTimeoutMs.Value) : Array.Empty<byte>();
+        if (executionMode.HasValue && !inputTimeoutMs.HasValue)
+        {
+            return CommandResult.Failed("El modo de ejecucion HIL requiere un timeout de entrada.");
+        }
+
+        byte[] payload = inputTimeoutMs.HasValue
+            ? executionMode.HasValue
+                ? EscProtocol.HilStartPayload(inputTimeoutMs.Value, executionMode.Value)
+                : EscProtocol.HilStartPayload(inputTimeoutMs.Value)
+            : Array.Empty<byte>();
         CommandResult result = await SendCommandAsync(CommOpcode.HilStart, 0, payload, cancellationToken, refreshStatus: false).ConfigureAwait(false);
         if (result.Success)
         {
@@ -431,6 +443,46 @@ public sealed class EscBridgeService
     {
         EscFrame response = await SendRequestAsync(CommOpcode.HilGetOutputs, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
         return EscProtocol.DecodeHilOutputs(response);
+    }
+
+    public async Task<HilStepResult> HilStepAsync(
+        HilStepRequest request,
+        int responseDeadlineMs,
+        CancellationToken cancellationToken = default)
+    {
+        if (!AllowsHilControl())
+        {
+            throw new InvalidOperationException("Control bloqueado por el modo actual.");
+        }
+        if (responseDeadlineMs < 1)
+        {
+            throw new ArgumentOutOfRangeException(nameof(responseDeadlineMs), "Response deadline must be at least 1 ms.");
+        }
+
+        byte[] payload = EscProtocol.HilStepPayload(request);
+        EscFrame response;
+        try
+        {
+            response = await SendRequestAsync(
+                CommOpcode.HilStep, 0, payload, cancellationToken, responseDeadlineMs).ConfigureAwait(false);
+        }
+        catch (TimeoutException)
+        {
+            response = await SendRequestAsync(
+                CommOpcode.HilStep, 0, payload, cancellationToken, responseDeadlineMs).ConfigureAwait(false);
+        }
+
+        HilStepResult result = EscProtocol.DecodeHilStepResult(response);
+        SetHilEnabled(request.Enable);
+        return result;
+    }
+
+    public Task<CommandResult> HilStartAsync(
+        ushort? inputTimeoutMs,
+        HilExecutionMode executionMode,
+        CancellationToken cancellationToken = default)
+    {
+        return HilStartAsync(inputTimeoutMs, cancellationToken, executionMode);
     }
 
     public void UpdateHilStats(HilBridgeStats stats)
@@ -655,7 +707,12 @@ public sealed class EscBridgeService
         Notify();
     }
 
-    private async Task<EscFrame> SendRequestAsync(CommOpcode opcode, byte parameter, byte[] payload, CancellationToken cancellationToken)
+    private async Task<EscFrame> SendRequestAsync(
+        CommOpcode opcode,
+        byte parameter,
+        byte[] payload,
+        CancellationToken cancellationToken,
+        int responseDeadlineMs = 1_000)
     {
         if (!_transport.IsOpen)
         {
@@ -665,7 +722,7 @@ public sealed class EscBridgeService
         await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            return await SendRequestCoreAsync(opcode, parameter, payload, cancellationToken).ConfigureAwait(false);
+            return await SendRequestCoreAsync(opcode, parameter, payload, cancellationToken, responseDeadlineMs).ConfigureAwait(false);
         }
         finally
         {
@@ -673,7 +730,12 @@ public sealed class EscBridgeService
         }
     }
 
-    private async Task<EscFrame> SendRequestCoreAsync(CommOpcode opcode, byte parameter, byte[] payload, CancellationToken cancellationToken)
+    private async Task<EscFrame> SendRequestCoreAsync(
+        CommOpcode opcode,
+        byte parameter,
+        byte[] payload,
+        CancellationToken cancellationToken,
+        int responseDeadlineMs = 1_000)
     {
         byte sequence = unchecked(++_sequence);
         byte[] request = EscProtocol.BuildRequest(sequence, opcode, parameter, payload);
@@ -684,7 +746,7 @@ public sealed class EscBridgeService
 
         await _transport.WriteFrameAsync(request, cancellationToken).ConfigureAwait(false);
 
-        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMilliseconds(1_000);
+        DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMilliseconds(responseDeadlineMs);
         while (DateTimeOffset.UtcNow < deadline)
         {
             TimeSpan remaining = deadline - DateTimeOffset.UtcNow;
@@ -893,7 +955,7 @@ public sealed class EscBridgeService
 
     private static bool IsPilOpcode(CommOpcode opcode)
     {
-        return opcode is CommOpcode.HilStart or CommOpcode.HilStop or CommOpcode.HilSetInputs or CommOpcode.HilGetOutputs;
+        return opcode is CommOpcode.HilStart or CommOpcode.HilStop or CommOpcode.HilSetInputs or CommOpcode.HilGetOutputs or CommOpcode.HilStep;
     }
 
     private void RecordHilBinaryFrame(string direction, byte[] rawFrame)
