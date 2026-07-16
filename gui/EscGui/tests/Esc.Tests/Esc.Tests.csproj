@@ -28,4 +28,10 @@
     <ProjectReference Include="..\..\src\Esc.Bridge\Esc.Bridge.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="..\..\src\Esc.Web\Components\App.razor"
+          Link="TestAssets\App.razor"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

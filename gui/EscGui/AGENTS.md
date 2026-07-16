@@ -15,6 +15,7 @@
 - Run tests from repo root: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj`
 - Focus protocol tests: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj --filter "FullyQualifiedName~ProtocolTests"`
 - Focus bridge tests: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj --filter "FullyQualifiedName~BridgeTests"`
+- Focus app shell tests: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj --filter "FullyQualifiedName~AppShellTests"`
 - Publish Windows GUI exe from repo root: `powershell -ExecutionPolicy Bypass -File .\gui\EscGui\publish-gui-win-x64.ps1`
 
 ## Stack
@@ -44,6 +45,7 @@
 - `wwwroot/controls.json` is loaded once and cached by `ModularControlProvider`; restart the GUI after editing it.
 - Modular controls currently recognize `set_speed_rpm`, `set_config`, `reset_config`, `log_speed_start`, and `log_speed_stop`.
 - Config changes from controls still need explicit `SaveConfigAsync` to persist.
+- Keep the interactive `HeadOutlet` in `Components/App.razor` before `ResourcePreloader`, stylesheet links, and `ImportMap`; it must never be the last child of `<head>`. Browser extensions and translation tools can otherwise detach Blazor component 1 during startup. Preserve `AppShellTests` as the enforcement guard.
 
 ## Control Modes
 

@@ -5,11 +5,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
+    @* Keep stable head nodes after HeadOutlet to protect Blazor's renderer from external DOM mutations. *@
+    <HeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
     <ResourcePreloader />
     <link rel="stylesheet" href="@Assets["industrial.css"]" />
     <link rel="stylesheet" href="@Assets["Esc.Web.styles.css"]" />
     <ImportMap />
-    <HeadOutlet @rendermode="new InteractiveServerRenderMode(prerender: false)" />
 </head>
 
 <body>
