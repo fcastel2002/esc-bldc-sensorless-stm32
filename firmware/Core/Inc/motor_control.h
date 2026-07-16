@@ -59,6 +59,7 @@ extern volatile ControlRuntimeMode control_runtime_mode;
 
 // RUNTIME FUNCTIONS
 extern void updateAllMotorControl(void);
+extern void motor_control_reset_runtime(void);
 extern void motor_control_prepare_closed_loop(void);
 void        pi_control(void);
 extern void detect_motor(void);

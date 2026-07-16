@@ -1,159 +1,637 @@
+@using Esc.Bridge
 @using Esc.Protocol
+@using Microsoft.JSInterop
 @using System.Globalization
+@using System.Text
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 
-<div class="chart-shell">
-    <svg class="speed-chart" viewBox="0 0 720 300" preserveAspectRatio="none" role="img" aria-label="Grafico de velocidad">
-        <rect x="0" y="0" width="720" height="300" class="chart-bg" />
-        @for (var i = 0; i < 6; i++)
-        {
-            var y = PlotTop + i * (PlotHeight / 5.0);
-            <line x1="@PlotLeft" y1="@Invariant(y)" x2="@PlotRight" y2="@Invariant(y)" class="chart-grid" />
-            <svg:text x="54" y="@Invariant(y - 5)" class="chart-label">@YTickLabel(i)</svg:text>
-        }
-        @for (var i = 0; i < 5; i++)
-        {
-            var x = PlotLeft + i * (PlotWidth / 4.0);
-            <line x1="@Invariant(x)" y1="@PlotTop" x2="@Invariant(x)" y2="@PlotBottom" class="chart-grid vertical" />
-        }
-        <line x1="@PlotLeft" y1="@PlotTop" x2="@PlotLeft" y2="@PlotBottom" class="chart-axis" />
-        <line x1="@PlotLeft" y1="@PlotBottom" x2="@PlotRight" y2="@PlotBottom" class="chart-axis" />
-        @if (Points.Length > 0)
-        {
-            <polyline points="@Points" class="chart-line" />
-            <circle cx="@LastPointX" cy="@LastPointY" r="4" class="chart-dot" />
-        }
-        else
-        {
-            <svg:text x="360" y="150" text-anchor="middle" class="chart-empty">Sin muestras de velocidad</svg:text>
-        }
-        <svg:text x="360" y="286" text-anchor="middle" class="chart-label">Tiempo (s)</svg:text>
-        <svg:text x="18" y="150" text-anchor="middle" transform="rotate(-90 18 150)" class="chart-label">Velocidad (rpm)</svg:text>
-        <svg:text x="@PlotLeft" y="270" class="chart-label">@StartTimeLabel</svg:text>
-        <svg:text x="@PlotRight" y="270" text-anchor="end" class="chart-label">@EndTimeLabel</svg:text>
-    </svg>
+<div class="scope-shell">
+    <div class="scope-header">
+        <div class="scope-legend" aria-label="Leyenda de la grafica">
+            <span><i class="legend-line speed"></i>Velocidad</span>
+            <span><i class="legend-line reference"></i>Referencia</span>
+            <span><i class="legend-cursor cursor-a"></i>Cursor A</span>
+            <span><i class="legend-cursor cursor-b"></i>Cursor B</span>
+        </div>
+        <div class="scope-actions">
+            <button type="button" class="scope-toggle @(_follow ? "active" : null)" aria-pressed="@_follow" @onclick="ToggleFollow">
+                @(_follow ? "Siguiendo" : "Seguir")
+            </button>
+            <label>
+                Ventana
+                <select @bind="_windowSeconds" @bind:after="WindowChanged">
+                    <option value="10">10 s</option>
+                    <option value="30">30 s</option>
+                    <option value="60">60 s</option>
+                    <option value="0">Todo</option>
+                </select>
+            </label>
+            <label>
+                CSV
+                <select @bind="_exportMode">
+                    <option value="full">Buffer completo</option>
+                    <option value="selection" disabled="@(!HasInterval)">Intervalo A-B</option>
+                </select>
+            </label>
+            <button type="button" @onclick="ExportAsync" disabled="@(!CanExport)">Exportar</button>
+            <button type="button" class="scope-clear" @onclick="ClearAsync" disabled="@(Samples.Count == 0)">Limpiar grafica</button>
+        </div>
+    </div>
+
+    <div class="scope-reference-bar">
+        <div>
+            <span class="scope-kicker">Referencia de transitorio</span>
+            <strong>@ReferenceStatus</strong>
+        </div>
+        <label>
+            Consigna
+            <input type="number" min="0" step="10" @bind="_referenceRpm" @bind:after="ReferenceChanged" />
+            <span>rpm</span>
+        </label>
+        <button type="button" @onclick="UseCurrentSetpoint" disabled="@(!SetpointRpm.HasValue)">Usar consigna actual</button>
+    </div>
+
+    <div class="scope-plot-frame">
+        <div class="scope-y-title">Velocidad [rpm]</div>
+        <div class="scope-y-scale" aria-hidden="true">
+            @foreach (AxisTick tick in _yTicks)
+            {
+                <span style="@PositionTop(tick.PositionPercent)">@tick.Label</span>
+            }
+        </div>
+        <div class="scope-plot"
+             @ref="_plotElement"
+             tabindex="0"
+             role="group"
+             aria-label="Grafica interactiva de velocidad. Use click o arrastre para colocar cursores y flechas para mover el cursor activo."
+             @onkeydown="MoveActiveCursor">
+            <svg viewBox="0 0 1000 360" preserveAspectRatio="none" role="img" aria-label="Traza de velocidad">
+                <defs>
+                    <clipPath id="speed-scope-clip">
+                        <rect x="0" y="0" width="1000" height="360" />
+                    </clipPath>
+                </defs>
+                <rect x="0" y="0" width="1000" height="360" class="scope-background" />
+                @foreach (AxisTick tick in _xTicks)
+                {
+                    double x = tick.PositionPercent / 100 * SvgWidth;
+                    <line x1="@Invariant(x)" y1="0" x2="@Invariant(x)" y2="360" class="scope-grid @MajorGridClass(tick.PositionPercent)" />
+                }
+                @foreach (AxisTick tick in _yTicks)
+                {
+                    double y = tick.PositionPercent / 100 * SvgHeight;
+                    <line x1="0" y1="@Invariant(y)" x2="1000" y2="@Invariant(y)" class="scope-grid @MajorGridClass(tick.PositionPercent)" />
+                }
+                <g clip-path="url(#speed-scope-clip)">
+                    @if (_referenceY.HasValue)
+                    {
+                        <line x1="0" y1="@Invariant(_referenceY.Value)" x2="1000" y2="@Invariant(_referenceY.Value)" class="scope-reference-line" />
+                    }
+                    @if (!string.IsNullOrEmpty(_polyline))
+                    {
+                        <polyline points="@_polyline" class="scope-trace" />
+                    }
+                    @if (_cursorAIndex.HasValue && CursorX(_cursorAIndex.Value) is double cursorAX)
+                    {
+                        <line x1="@Invariant(cursorAX)" y1="0" x2="@Invariant(cursorAX)" y2="360" class="scope-cursor-line cursor-a" data-cursor="A" />
+                    }
+                    @if (_cursorBIndex.HasValue && CursorX(_cursorBIndex.Value) is double cursorBX)
+                    {
+                        <line x1="@Invariant(cursorBX)" y1="0" x2="@Invariant(cursorBX)" y2="360" class="scope-cursor-line cursor-b" data-cursor="B" />
+                    }
+                </g>
+            </svg>
+
+            @if (_points.Count == 0)
+            {
+                <div class="scope-empty">
+                    <strong>Sin muestras de velocidad</strong>
+                    <span>Inicie la adquisicion para construir la traza.</span>
+                </div>
+            }
+            else
+            {
+                <span class="scope-latest" style="@PointStyle(_latestPoint)" aria-hidden="true"></span>
+            }
+
+            @if (_cursorAIndex.HasValue && CursorPercent(_cursorAIndex.Value) is double cursorAPercent)
+            {
+                <button type="button" class="scope-cursor-handle cursor-a" data-cursor="A" style="@PositionLeft(cursorAPercent)" tabindex="-1" aria-label="Cursor A"></button>
+            }
+            @if (_cursorBIndex.HasValue && CursorPercent(_cursorBIndex.Value) is double cursorBPercent)
+            {
+                <button type="button" class="scope-cursor-handle cursor-b" data-cursor="B" style="@PositionLeft(cursorBPercent)" tabindex="-1" aria-label="Cursor B"></button>
+            }
+        </div>
+        <div class="scope-x-scale" aria-hidden="true">
+            @foreach (AxisTick tick in _xTicks)
+            {
+                <span style="@PositionLeft(tick.PositionPercent)">@tick.Label</span>
+            }
+        </div>
+        <div class="scope-x-title">Tiempo desde inicio de buffer</div>
+    </div>
+
+    <div class="scope-measurements" aria-live="polite">
+        <button type="button" class="scope-readout cursor-a @ActiveCursorClass("A")" aria-pressed="@(_activeCursor == "A")" @onclick="ActivateCursorA" @onkeydown="MoveCursorA">
+            <span>Cursor A</span>
+            <strong>@CursorTime(_cursorAIndex)</strong>
+            <small>@CursorRpm(_cursorAIndex)</small>
+        </button>
+        <button type="button" class="scope-readout cursor-b @ActiveCursorClass("B")" aria-pressed="@(_activeCursor == "B")" @onclick="ActivateCursorB" @onkeydown="MoveCursorB">
+            <span>Cursor B</span>
+            <strong>@CursorTime(_cursorBIndex)</strong>
+            <small>@CursorRpm(_cursorBIndex)</small>
+        </button>
+        <div class="scope-readout">
+            <span>dT / dRPM</span>
+            <strong>@DeltaTimeLabel</strong>
+            <small>@DeltaRpmLabel</small>
+        </div>
+        <div class="scope-readout peak">
+            <span>@ExtremeTitle</span>
+            <strong>@ExtremeLabel</strong>
+            <small>@ExtremeTimeLabel</small>
+        </div>
+        <div class="scope-readout overshoot">
+            <span>@OvershootTitle</span>
+            <strong>@OvershootLabel</strong>
+            <small>@OvershootPercentLabel</small>
+        </div>
+    </div>
 </div>
 
 @code {
-    private const double PlotLeft = 72;
-    private const double PlotRight = 700;
-    private const double PlotTop = 24;
-    private const double PlotBottom = 244;
-    private const double PlotWidth = PlotRight - PlotLeft;
-    private const double PlotHeight = PlotBottom - PlotTop;
+    private const double SvgWidth = 1000;
+    private const double SvgHeight = 360;
+    private const int MaxRenderedPoints = 900;
+
+    private ElementReference _plotElement;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<SpeedChart>? _dotNetReference;
+    private IReadOnlyList<SpeedTracePoint> _points = Array.Empty<SpeedTracePoint>();
+    private IReadOnlyList<SpeedTracePoint> _visiblePoints = Array.Empty<SpeedTracePoint>();
+    private IReadOnlyList<AxisTick> _xTicks = Array.Empty<AxisTick>();
+    private IReadOnlyList<AxisTick> _yTicks = Array.Empty<AxisTick>();
+    private string _polyline = string.Empty;
+    private string _activeCursor = "A";
+    private string _exportMode = "full";
+    private int? _cursorAIndex;
+    private int? _cursorBIndex;
+    private DateTimeOffset? _cursorATimestamp;
+    private DateTimeOffset? _cursorBTimestamp;
+    private double? _referenceRpm;
+    private double? _frozenEndSeconds;
+    private double? _referenceY;
+    private SpeedTracePoint? _latestPoint;
+    private SpeedIntervalMeasurement? _measurement;
+    private double _viewStartSeconds;
+    private double _viewEndSeconds = 1;
+    private double _yMin;
+    private double _yMax = 1;
+    private int _windowSeconds = 30;
+    private bool _follow = true;
+    private bool _referenceEdited;
 
     [Parameter]
     public IReadOnlyList<TelemetrySample> Samples { get; set; } = Array.Empty<TelemetrySample>();
 
-    private IReadOnlyList<TelemetrySample> OrderedSamples => Samples
-        .OrderBy(sample => sample.TargetTickMs)
-        .ToArray();
+    [Parameter]
+    public double? SetpointRpm { get; set; }
 
-    private string Points
+    [Parameter]
+    public EventCallback ClearRequested { get; set; }
+
+    private bool HasInterval => _cursorAIndex.HasValue && _cursorBIndex.HasValue;
+    private bool CanExport => _points.Count > 0 && (_exportMode != "selection" || HasInterval);
+    private string ReferenceStatus => _referenceEdited ? "Referencia manual" : SetpointRpm.HasValue ? "Vinculada a la consigna actual" : "Ingrese una referencia";
+    private string DeltaTimeLabel => _measurement is null ? "--" : $"{_measurement.DeltaSeconds:0.###} s";
+    private string DeltaRpmLabel => _measurement is null ? "--" : $"{_measurement.DeltaRpm:+0;-0;0} rpm";
+    private string ExtremeTitle => _measurement?.Direction == SpeedTransientDirection.Falling ? "Valle del intervalo" : "Pico del intervalo";
+    private string ExtremeLabel => _measurement is null ? "--" : $"{_measurement.Extreme.SpeedRpm:0} rpm";
+    private string ExtremeTimeLabel => _measurement is null ? "--" : $"t = {_measurement.Extreme.ElapsedSeconds:0.###} s";
+    private string OvershootTitle => _measurement?.Direction == SpeedTransientDirection.Falling ? "Subimpulso" : "Sobreimpulso";
+    private string OvershootLabel => _measurement is null ? "--" : $"{_measurement.OvershootRpm:0.##} rpm";
+    private string OvershootPercentLabel => _measurement?.OvershootPercent is double percent ? $"{percent:0.##} % del escalon" : "N/D";
+
+    protected override void OnParametersSet()
     {
-        get
+        _points = SpeedTraceAnalyzer.Normalize(Samples);
+        if (!_referenceEdited)
         {
-            if (Samples.Count == 0)
-            {
-                return string.Empty;
-            }
+            _referenceRpm = SetpointRpm;
+        }
 
-            IReadOnlyList<TelemetrySample> samples = OrderedSamples;
-            double minTick = samples.Min(sample => sample.TargetTickMs);
-            double maxTick = samples.Max(sample => sample.TargetTickMs);
-            double tickRange = Math.Max(1, maxTick - minTick);
-            (double yMin, double yMax) = YRange;
+        ReconcileCursors();
+        RebuildChart();
+    }
 
-            return string.Join(
-                " ",
-                samples.Select(sample =>
-                {
-                    double x = PlotLeft + ((sample.TargetTickMs - minTick) / tickRange) * PlotWidth;
-                    double y = PlotBottom - ((sample.DisplayValue - yMin) / (yMax - yMin)) * PlotHeight;
-                    return string.Create(CultureInfo.InvariantCulture, $"{x:0.###},{y:0.###}");
-                }));
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/speed-chart.js");
+        _dotNetReference = DotNetObjectReference.Create(this);
+        await _module.InvokeVoidAsync("attach", _plotElement, _dotNetReference);
+    }
+
+    [JSInvokable]
+    public Task SetCursorFromRatio(double ratio, string? requestedCursor)
+    {
+        if (_visiblePoints.Count == 0 || !double.IsFinite(ratio))
+        {
+            return Task.CompletedTask;
+        }
+
+        double targetSeconds = _viewStartSeconds + Math.Clamp(ratio, 0, 1) * (_viewEndSeconds - _viewStartSeconds);
+        SpeedTracePoint nearest = _visiblePoints.MinBy(point => Math.Abs(point.ElapsedSeconds - targetSeconds))!;
+        string cursor = requestedCursor is "A" or "B"
+            ? requestedCursor
+            : !_cursorAIndex.HasValue ? "A" : !_cursorBIndex.HasValue ? "B" : _activeCursor;
+
+        SetCursor(cursor, nearest.SampleIndex);
+        PauseFollow();
+        RebuildChart();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void SetCursor(string cursor, int index)
+    {
+        if (cursor == "B")
+        {
+            _cursorBIndex = index;
+            _cursorBTimestamp = _points[index].Sample.HostTimestamp;
+            _activeCursor = "B";
+        }
+        else
+        {
+            _cursorAIndex = index;
+            _cursorATimestamp = _points[index].Sample.HostTimestamp;
+            _activeCursor = "A";
+        }
+
+        if (_cursorAIndex.HasValue && _cursorBIndex.HasValue && _cursorAIndex > _cursorBIndex)
+        {
+            (_cursorAIndex, _cursorBIndex) = (_cursorBIndex, _cursorAIndex);
+            (_cursorATimestamp, _cursorBTimestamp) = (_cursorBTimestamp, _cursorATimestamp);
+            _activeCursor = _activeCursor == "A" ? "B" : "A";
+        }
+
+        if (HasInterval)
+        {
+            _exportMode = "selection";
         }
     }
 
-    private (double Min, double Max) YRange
+    private void MoveActiveCursor(KeyboardEventArgs args) => MoveCursor(_activeCursor, args);
+    private void MoveCursorA(KeyboardEventArgs args) => MoveCursor("A", args);
+    private void MoveCursorB(KeyboardEventArgs args) => MoveCursor("B", args);
+
+    private void MoveCursor(string cursor, KeyboardEventArgs args)
     {
-        get
+        int delta = args.Key switch
         {
-            if (Samples.Count == 0)
-            {
-                return (0, 1);
-            }
+            "ArrowLeft" => -1,
+            "ArrowRight" => 1,
+            _ => 0
+        };
+        if (delta == 0 || _points.Count == 0)
+        {
+            return;
+        }
 
-            double minValue = Samples.Min(sample => sample.DisplayValue);
-            double maxValue = Samples.Max(sample => sample.DisplayValue);
-            double valueRange = maxValue - minValue;
-            double margin = valueRange < 1
-                ? Math.Max(50, Math.Abs(maxValue) * 0.02)
-                : Math.Max(10, valueRange * 0.15);
+        _activeCursor = cursor;
+        int firstVisible = _visiblePoints[0].SampleIndex;
+        int lastVisible = _visiblePoints[^1].SampleIndex;
+        int current = cursor == "B"
+            ? _cursorBIndex ?? _visiblePoints[^1].SampleIndex
+            : _cursorAIndex ?? _visiblePoints[0].SampleIndex;
+        current = Math.Clamp(current, firstVisible, lastVisible);
+        SetCursor(cursor, Math.Clamp(current + delta, firstVisible, lastVisible));
+        PauseFollow();
+        RebuildChart();
+    }
 
-            double yMin = Math.Max(0, minValue - margin);
-            double yMax = maxValue + margin;
-            if (yMax <= yMin)
-            {
-                yMax = yMin + 1;
-            }
+    private void ToggleFollow()
+    {
+        if (_follow)
+        {
+            PauseFollow();
+        }
+        else
+        {
+            _follow = true;
+            _frozenEndSeconds = null;
+        }
 
-            return (yMin, yMax);
+        RebuildChart();
+    }
+
+    private void ActivateCursorA() => _activeCursor = "A";
+    private void ActivateCursorB() => _activeCursor = "B";
+
+    private void PauseFollow()
+    {
+        if (_follow)
+        {
+            _frozenEndSeconds = _viewEndSeconds;
+            _follow = false;
         }
     }
 
-    private string LastPointX => LastPoint.x;
-    private string LastPointY => LastPoint.y;
-
-    private (string x, string y) LastPoint
+    private void WindowChanged()
     {
-        get
+        _follow = true;
+        _frozenEndSeconds = null;
+        RebuildChart();
+    }
+
+    private void ReferenceChanged()
+    {
+        _referenceEdited = true;
+        RebuildChart();
+    }
+
+    private void UseCurrentSetpoint()
+    {
+        if (!SetpointRpm.HasValue)
         {
-            if (Samples.Count == 0)
+            return;
+        }
+
+        _referenceEdited = false;
+        _referenceRpm = SetpointRpm.Value;
+        RebuildChart();
+    }
+
+    private async Task ClearAsync()
+    {
+        ResetCursors();
+        _follow = true;
+        _frozenEndSeconds = null;
+        _exportMode = "full";
+        await ClearRequested.InvokeAsync();
+        RebuildChart();
+    }
+
+    private async Task ExportAsync()
+    {
+        if (_module is null || !CanExport)
+        {
+            return;
+        }
+
+        string csv = _exportMode == "selection" && HasInterval
+            ? SpeedTraceAnalyzer.ToCsv(_points, _cursorAIndex, _cursorBIndex)
+            : SpeedTraceAnalyzer.ToCsv(_points);
+        byte[] bytes = new UTF8Encoding(true).GetBytes(csv);
+        await using var stream = new MemoryStream(bytes);
+        using var streamReference = new DotNetStreamReference(stream);
+        string suffix = _exportMode == "selection" && HasInterval ? "intervalo" : "buffer";
+        string fileName = $"velocidad-{suffix}-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+        await _module.InvokeVoidAsync("downloadFileFromStream", fileName, streamReference);
+    }
+
+    private void ReconcileCursors()
+    {
+        _cursorAIndex = FindCursor(_cursorATimestamp);
+        _cursorBIndex = FindCursor(_cursorBTimestamp);
+        if (!_cursorAIndex.HasValue)
+        {
+            _cursorATimestamp = null;
+        }
+        if (!_cursorBIndex.HasValue)
+        {
+            _cursorBTimestamp = null;
+        }
+        if (!HasInterval && _exportMode == "selection")
+        {
+            _exportMode = "full";
+        }
+        if (_points.Count == 0)
+        {
+            ResetCursors();
+        }
+    }
+
+    private int? FindCursor(DateTimeOffset? timestamp)
+    {
+        if (!timestamp.HasValue)
+        {
+            return null;
+        }
+
+        for (var index = 0; index < _points.Count; index++)
+        {
+            if (_points[index].Sample.HostTimestamp == timestamp.Value)
             {
-                return ("0", "0");
+                return index;
+            }
+        }
+
+        return null;
+    }
+
+    private void ResetCursors()
+    {
+        _cursorAIndex = null;
+        _cursorBIndex = null;
+        _cursorATimestamp = null;
+        _cursorBTimestamp = null;
+        _measurement = null;
+        _activeCursor = "A";
+    }
+
+    private void RebuildChart()
+    {
+        if (_points.Count == 0)
+        {
+            _visiblePoints = Array.Empty<SpeedTracePoint>();
+            _polyline = string.Empty;
+            _xTicks = BuildTimeTicks(0, 1);
+            _yTicks = BuildRpmTicks(0, Math.Max(1000, _referenceRpm ?? 0));
+            _viewStartSeconds = 0;
+            _viewEndSeconds = 1;
+            _yMin = 0;
+            _yMax = Math.Max(1000, _referenceRpm ?? 1000);
+            _referenceY = ReferenceY();
+            _latestPoint = null;
+            _measurement = null;
+            return;
+        }
+
+        double latestSeconds = _points[^1].ElapsedSeconds;
+        _viewEndSeconds = _follow
+            ? latestSeconds
+            : Math.Min(_frozenEndSeconds ?? latestSeconds, latestSeconds);
+        _viewStartSeconds = _windowSeconds > 0
+            ? Math.Max(0, _viewEndSeconds - _windowSeconds)
+            : 0;
+        if (_viewEndSeconds <= _viewStartSeconds)
+        {
+            _viewEndSeconds = _viewStartSeconds + 1;
+        }
+
+        _visiblePoints = _points
+            .Where(point => point.ElapsedSeconds >= _viewStartSeconds && point.ElapsedSeconds <= _viewEndSeconds)
+            .ToArray();
+        if (_visiblePoints.Count == 0)
+        {
+            _visiblePoints = [_points[^1]];
+        }
+
+        (double rawMin, double rawMax) = VisibleRpmRange();
+        double step = NiceStep(Math.Max(1, rawMax - rawMin) / 5.0);
+        _yMin = Math.Max(0, Math.Floor(rawMin / step) * step);
+        _yMax = Math.Ceiling(rawMax / step) * step;
+        if (_yMax <= _yMin)
+        {
+            _yMax = _yMin + step;
+        }
+
+        _xTicks = BuildTimeTicks(_viewStartSeconds, _viewEndSeconds);
+        _yTicks = BuildRpmTicks(_yMin, _yMax);
+        _polyline = BuildPolyline(Downsample(_visiblePoints));
+        _latestPoint = _visiblePoints[^1];
+        _referenceY = ReferenceY();
+        _measurement = _referenceRpm.HasValue && HasInterval
+            ? SpeedTraceAnalyzer.Measure(_points, _cursorAIndex!.Value, _cursorBIndex!.Value, _referenceRpm.Value)
+            : null;
+    }
+
+    private (double Min, double Max) VisibleRpmRange()
+    {
+        double min = _visiblePoints.Min(point => point.SpeedRpm);
+        double max = _visiblePoints.Max(point => point.SpeedRpm);
+        if (_referenceRpm.HasValue)
+        {
+            min = Math.Min(min, _referenceRpm.Value);
+            max = Math.Max(max, _referenceRpm.Value);
+        }
+
+        double range = max - min;
+        double margin = range < 1 ? Math.Max(50, Math.Abs(max) * 0.02) : Math.Max(10, range * 0.12);
+        return (Math.Max(0, min - margin), max + margin);
+    }
+
+    private IReadOnlyList<SpeedTracePoint> Downsample(IReadOnlyList<SpeedTracePoint> points)
+    {
+        if (points.Count <= MaxRenderedPoints)
+        {
+            return points;
+        }
+
+        var reduced = new List<SpeedTracePoint>(MaxRenderedPoints) { points[0] };
+        double bucketSize = (points.Count - 2.0) / ((MaxRenderedPoints - 2) / 2.0);
+        for (double offset = 1; offset < points.Count - 1; offset += bucketSize)
+        {
+            int start = (int)Math.Floor(offset);
+            int end = Math.Min(points.Count - 1, (int)Math.Ceiling(offset + bucketSize));
+            IReadOnlyList<SpeedTracePoint> bucket = points.Skip(start).Take(end - start).ToArray();
+            if (bucket.Count == 0)
+            {
+                continue;
             }
 
-            TelemetrySample last = OrderedSamples[^1];
-            double minTick = Samples.Min(sample => sample.TargetTickMs);
-            double maxTick = Samples.Max(sample => sample.TargetTickMs);
-            double tickRange = Math.Max(1, maxTick - minTick);
-            (double yMin, double yMax) = YRange;
-            double x = PlotLeft + ((last.TargetTickMs - minTick) / tickRange) * PlotWidth;
-            double y = PlotBottom - ((last.DisplayValue - yMin) / (yMax - yMin)) * PlotHeight;
-            return (Invariant(x), Invariant(y));
-        }
-    }
-
-    private string StartTimeLabel => "0.0 s";
-
-    private string EndTimeLabel
-    {
-        get
-        {
-            if (Samples.Count < 2)
+            SpeedTracePoint min = bucket.MinBy(point => point.SpeedRpm)!;
+            SpeedTracePoint max = bucket.MaxBy(point => point.SpeedRpm)!;
+            if (min.SampleIndex <= max.SampleIndex)
             {
-                return "0.0 s";
+                reduced.Add(min);
+                if (max.SampleIndex != min.SampleIndex) reduced.Add(max);
             }
-
-            double durationSeconds = (Samples.Max(sample => sample.TargetTickMs) - Samples.Min(sample => sample.TargetTickMs)) / 1000.0;
-            return $"{durationSeconds:0.0} s";
+            else
+            {
+                reduced.Add(max);
+                reduced.Add(min);
+            }
         }
+        reduced.Add(points[^1]);
+        return reduced;
     }
 
-    private string YTickLabel(int index)
+    private string BuildPolyline(IReadOnlyList<SpeedTracePoint> points)
     {
-        if (Samples.Count == 0)
+        var builder = new StringBuilder(points.Count * 16);
+        foreach (SpeedTracePoint point in points)
         {
-            return string.Empty;
+            if (builder.Length > 0) builder.Append(' ');
+            builder.Append(Invariant(MapX(point.ElapsedSeconds))).Append(',').Append(Invariant(MapY(point.SpeedRpm)));
         }
-
-        (double yMin, double yMax) = YRange;
-        double value = yMax - index * ((yMax - yMin) / 5.0);
-        return $"{value:0} rpm";
+        return builder.ToString();
     }
 
-    private static string Invariant(double value)
+    private IReadOnlyList<AxisTick> BuildTimeTicks(double start, double end)
     {
-        return value.ToString("0.###", CultureInfo.InvariantCulture);
+        var ticks = new AxisTick[6];
+        double duration = end - start;
+        for (var index = 0; index <= 5; index++)
+        {
+            double value = start + duration * index / 5.0;
+            string label = duration < 1 ? $"{value * 1000:0} ms" : $"{value:0.#} s";
+            ticks[index] = new AxisTick(value, index * 20, label);
+        }
+        return ticks;
     }
+
+    private IReadOnlyList<AxisTick> BuildRpmTicks(double min, double max)
+    {
+        double range = Math.Max(1, max - min);
+        double step = NiceStep(range / 5.0);
+        int intervalCount = Math.Max(1, (int)Math.Round(range / step));
+        var ticks = new AxisTick[intervalCount + 1];
+        for (var index = 0; index <= intervalCount; index++)
+        {
+            double value = max - step * index;
+            ticks[index] = new AxisTick(value, (max - value) / range * 100, $"{value:0}");
+        }
+        return ticks;
+    }
+
+    private static double NiceStep(double value)
+    {
+        double exponent = Math.Floor(Math.Log10(Math.Max(value, double.Epsilon)));
+        double fraction = value / Math.Pow(10, exponent);
+        double niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+        return niceFraction * Math.Pow(10, exponent);
+    }
+
+    private double MapX(double seconds) => (seconds - _viewStartSeconds) / (_viewEndSeconds - _viewStartSeconds) * SvgWidth;
+    private double MapY(double rpm) => SvgHeight - (rpm - _yMin) / (_yMax - _yMin) * SvgHeight;
+    private double? ReferenceY() => _referenceRpm.HasValue && _referenceRpm >= _yMin && _referenceRpm <= _yMax ? MapY(_referenceRpm.Value) : null;
+    private double? CursorX(int index) => index >= 0 && index < _points.Count && _points[index].ElapsedSeconds >= _viewStartSeconds && _points[index].ElapsedSeconds <= _viewEndSeconds ? MapX(_points[index].ElapsedSeconds) : null;
+    private double? CursorPercent(int index) => CursorX(index) is double x ? x / SvgWidth * 100 : null;
+    private string CursorTime(int? index) => index.HasValue && index < _points.Count ? $"{_points[index.Value].ElapsedSeconds:0.###} s" : "--";
+    private string CursorRpm(int? index) => index.HasValue && index < _points.Count ? $"{_points[index.Value].SpeedRpm:0} rpm" : "Seleccione en la traza";
+    private string ActiveCursorClass(string cursor) => _activeCursor == cursor ? "active" : string.Empty;
+    private static string MajorGridClass(double percent) => percent is <= 0.001 or >= 99.999 ? "major" : string.Empty;
+    private string PointStyle(SpeedTracePoint? point) => point is null
+        ? "display: none"
+        : $"left: {Invariant(MapX(point.ElapsedSeconds) / SvgWidth * 100)}%; top: {Invariant(MapY(point.SpeedRpm) / SvgHeight * 100)}%";
+    private static string PositionTop(double percent) => $"top: {percent.ToString("0.###", CultureInfo.InvariantCulture)}%";
+    private static string PositionLeft(double percent) => $"left: {percent.ToString("0.###", CultureInfo.InvariantCulture)}%";
+    private static string Invariant(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.InvokeVoidAsync("detach", _plotElement);
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+        _dotNetReference?.Dispose();
+    }
+
+    private sealed record AxisTick(double Value, double PositionPercent, string Label);
 }

@@ -1,0 +1,519 @@
+.scope-shell {
+  --scope-bg: #061119;
+  --scope-grid: #183544;
+  --scope-grid-major: #2d5264;
+  --scope-trace: #49c6ed;
+  --scope-reference: #d8e8ef;
+  --scope-cursor-a: #f5b942;
+  --scope-cursor-b: #48d590;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--scope-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+}
+
+.scope-header,
+.scope-reference-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid var(--line-dim);
+  padding: 10px 12px;
+  background: rgba(16, 29, 39, 0.82);
+}
+
+.scope-legend,
+.scope-actions,
+.scope-reference-bar,
+.scope-reference-bar label {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.scope-legend {
+  gap: 14px;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.scope-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-line {
+  width: 22px;
+  border-top: 2px solid;
+}
+
+.legend-line.speed {
+  border-color: var(--scope-trace);
+}
+.legend-line.reference {
+  border-color: var(--scope-reference);
+  border-top-style: dashed;
+}
+
+.legend-cursor {
+  width: 3px;
+  height: 13px;
+  border-radius: 2px;
+}
+
+.legend-cursor.cursor-a {
+  background: var(--scope-cursor-a);
+}
+.legend-cursor.cursor-b {
+  background: var(--scope-cursor-b);
+}
+
+.scope-actions {
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.scope-actions label,
+.scope-reference-bar label {
+  display: inline-grid;
+  grid-template-columns: auto auto;
+  align-items: center;
+  gap: 7px;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.scope-actions select,
+.scope-reference-bar input {
+  min-height: 34px;
+  border-color: var(--line-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.scope-actions button,
+.scope-reference-bar button {
+  min-height: 34px;
+  padding-inline: 10px;
+  font-size: 0.68rem;
+}
+
+.scope-toggle.active {
+  border-color: var(--green);
+  color: var(--green);
+  box-shadow: inset 0 0 0 1px rgba(72, 213, 144, 0.14);
+}
+
+.scope-clear {
+  border-color: rgba(245, 185, 66, 0.62);
+  color: var(--amber);
+}
+
+.scope-reference-bar {
+  justify-content: flex-start;
+  background: rgba(7, 18, 24, 0.72);
+}
+
+.scope-reference-bar > div {
+  display: grid;
+  min-width: 220px;
+  margin-right: auto;
+}
+
+.scope-kicker {
+  color: var(--text-muted);
+  font-family: "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.scope-reference-bar strong {
+  color: var(--text);
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.scope-reference-bar label {
+  grid-template-columns: auto 100px auto;
+}
+
+.scope-reference-bar input {
+  width: 100px;
+}
+
+.scope-plot-frame {
+  display: grid;
+  grid-template-columns: 32px 62px minmax(0, 1fr);
+  grid-template-rows: 360px 28px 24px;
+  padding: 14px 16px 7px 10px;
+}
+
+.scope-y-title,
+.scope-x-title {
+  color: #7893a2;
+  font-family: "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.scope-y-title {
+  grid-column: 1;
+  grid-row: 1;
+  align-self: center;
+  justify-self: center;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+.scope-y-scale {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  color: #9bb2be;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.scope-y-scale span {
+  position: absolute;
+  right: 10px;
+  transform: translateY(-50%);
+}
+
+.scope-plot {
+  position: relative;
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--scope-grid-major);
+  background: var(--scope-bg);
+  cursor: crosshair;
+  touch-action: none;
+}
+
+.scope-plot:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 3px;
+}
+
+.scope-plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.scope-background {
+  fill: var(--scope-bg);
+}
+
+.scope-grid {
+  stroke: var(--scope-grid);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.scope-grid.major {
+  stroke: var(--scope-grid-major);
+}
+
+.scope-trace {
+  fill: none;
+  stroke: var(--scope-trace);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 3px rgba(73, 198, 237, 0.38));
+}
+
+.scope-reference-line {
+  stroke: var(--scope-reference);
+  stroke-width: 1.25;
+  stroke-dasharray: 7 6;
+  opacity: 0.72;
+  vector-effect: non-scaling-stroke;
+}
+
+.scope-cursor-line {
+  stroke-width: 1.5;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.scope-cursor-line.cursor-a {
+  stroke: var(--scope-cursor-a);
+}
+.scope-cursor-line.cursor-b {
+  stroke: var(--scope-cursor-b);
+}
+
+.scope-latest {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border: 2px solid #e8fbff;
+  border-radius: 50%;
+  background: var(--scope-trace);
+  box-shadow: 0 0 8px rgba(73, 198, 237, 0.7);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.scope-cursor-handle {
+  position: absolute;
+  top: 0;
+  width: 18px;
+  min-height: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 0 0 9px 9px;
+  padding: 0;
+  transform: translateX(-50%);
+}
+
+.scope-cursor-handle.cursor-a {
+  background: var(--scope-cursor-a);
+}
+.scope-cursor-handle.cursor-b {
+  background: var(--scope-cursor-b);
+}
+
+.scope-cursor-handle:hover:not(:disabled),
+.scope-cursor-handle:active:not(:disabled) {
+  transform: translateX(-50%);
+  box-shadow: none;
+}
+
+.scope-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 5px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.scope-empty strong {
+  color: var(--text);
+  font-family: "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif;
+  font-size: 0.9rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.scope-empty span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.scope-x-scale {
+  position: relative;
+  grid-column: 3;
+  grid-row: 2;
+  color: #9bb2be;
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.scope-x-scale span {
+  position: absolute;
+  top: 5px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.scope-x-scale span:first-child {
+  transform: none;
+}
+.scope-x-scale span:last-child {
+  transform: translateX(-100%);
+}
+
+.scope-x-title {
+  grid-column: 3;
+  grid-row: 3;
+  align-self: end;
+  justify-self: center;
+}
+
+.scope-measurements {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-top: 1px solid var(--line-dim);
+  background: linear-gradient(
+    180deg,
+    rgba(16, 29, 39, 0.95),
+    rgba(8, 20, 27, 0.95)
+  );
+}
+
+.scope-readout {
+  display: grid;
+  min-width: 0;
+  min-height: 76px;
+  align-content: center;
+  gap: 2px;
+  border: 0;
+  border-right: 1px solid var(--line-dim);
+  border-radius: 0;
+  background: transparent;
+  padding: 10px 13px;
+  letter-spacing: normal;
+  text-align: left;
+  text-transform: none;
+}
+
+button.scope-readout:hover:not(:disabled) {
+  background: rgba(73, 198, 237, 0.045);
+  box-shadow: none;
+  transform: none;
+}
+
+.scope-readout:last-child {
+  border-right: 0;
+}
+
+.scope-readout span {
+  color: var(--text-muted);
+  font-family: "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif;
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.scope-readout strong {
+  overflow: hidden;
+  color: var(--text-bright);
+  font-size: 1rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope-readout small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scope-readout.cursor-a.active {
+  box-shadow: inset 0 3px 0 var(--scope-cursor-a);
+}
+.scope-readout.cursor-b.active {
+  box-shadow: inset 0 3px 0 var(--scope-cursor-b);
+}
+.scope-readout.overshoot strong {
+  color: var(--amber);
+}
+
+@media (max-width: 900px) {
+  .scope-header,
+  .scope-reference-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scope-actions,
+  .scope-reference-bar {
+    justify-content: flex-start;
+  }
+
+  .scope-reference-bar > div {
+    min-width: 0;
+    margin-right: 0;
+  }
+
+  .scope-plot-frame {
+    grid-template-rows: 310px 28px 24px;
+  }
+
+  .scope-measurements {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .scope-readout:nth-child(3) {
+    border-right: 0;
+  }
+  .scope-readout:nth-child(n + 4) {
+    border-top: 1px solid var(--line-dim);
+  }
+}
+
+@media (max-width: 600px) {
+  .scope-header,
+  .scope-reference-bar {
+    padding: 10px;
+  }
+
+  .scope-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scope-actions label,
+  .scope-actions button,
+  .scope-actions select {
+    width: 100%;
+  }
+
+  .scope-reference-bar label {
+    grid-template-columns: 1fr 1fr auto;
+  }
+
+  .scope-plot-frame {
+    grid-template-columns: 22px 48px minmax(0, 1fr);
+    grid-template-rows: 260px 28px 24px;
+    padding: 12px 8px 7px 4px;
+  }
+
+  .scope-y-title,
+  .scope-x-title {
+    font-size: 0.58rem;
+  }
+
+  .scope-y-scale,
+  .scope-x-scale {
+    font-size: 0.62rem;
+  }
+
+  .scope-y-scale span {
+    right: 7px;
+  }
+
+  .scope-measurements {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .scope-readout,
+  .scope-readout:nth-child(3) {
+    border-top: 1px solid var(--line-dim);
+    border-right: 1px solid var(--line-dim);
+  }
+
+  .scope-readout:nth-child(-n + 2) {
+    border-top: 0;
+  }
+  .scope-readout:nth-child(even) {
+    border-right: 0;
+  }
+  .scope-readout:last-child {
+    grid-column: 1 / -1;
+    border-right: 0;
+  }
+}

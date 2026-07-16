@@ -28,6 +28,7 @@ public sealed class EscBridgeService
     private HilBridgeStats _hilStats = new(false, 0, 0, 0, 0, 0, null, null);
     private ValidationReference? _validationReference;
     private ActiveControllerConfig? _activeControllerConfig;
+    private ActiveSpeedLimits? _activeSpeedLimits;
     private DateTimeOffset? _validationReferenceCapturedAt;
     private string? _validationReferenceError;
 
@@ -57,6 +58,12 @@ public sealed class EscBridgeService
     }
 
     public IReadOnlyList<TelemetrySample> SpeedSamples => _telemetryStore.GetSamples("speed");
+
+    public void ClearSpeedTelemetry()
+    {
+        _telemetryStore.Clear("speed");
+        Notify();
+    }
 
     public async Task ScanAsync(CancellationToken cancellationToken = default)
     {
@@ -127,6 +134,7 @@ public sealed class EscBridgeService
             EscStatus status = EscProtocol.DecodeStatus(statusFrame);
             (ValidationReference validationReference, ActiveControllerConfig activeControllerConfig) =
                 await ReadValidationReferenceCoreAsync(cancellationToken).ConfigureAwait(false);
+            ActiveSpeedLimits activeSpeedLimits = await ReadSpeedLimitsCoreAsync(cancellationToken).ConfigureAwait(false);
 
             lock (_stateGate)
             {
@@ -136,6 +144,7 @@ public sealed class EscBridgeService
                 _lastError = null;
                 _validationReference = validationReference;
                 _activeControllerConfig = activeControllerConfig;
+                _activeSpeedLimits = activeSpeedLimits;
                 _validationReferenceCapturedAt = DateTimeOffset.UtcNow;
                 _validationReferenceError = null;
             }
@@ -199,6 +208,18 @@ public sealed class EscBridgeService
         if (!AllowsGuiControl())
         {
             return CommandResult.Failed("Control bloqueado por el modo actual.");
+        }
+
+        ActiveSpeedLimits? limits;
+        lock (_stateGate)
+        {
+            limits = _activeSpeedLimits;
+        }
+
+        if (limits is not null && (limits.MinRpm > limits.MaxRpm || rpm < limits.MinRpm || rpm > limits.MaxRpm))
+        {
+            return CommandResult.Failed(
+                $"Setpoint fuera del rango activo del ESC: {limits.MinRpm}-{limits.MaxRpm} rpm.");
         }
 
         byte[] payload;
@@ -313,6 +334,10 @@ public sealed class EscBridgeService
         {
             await RefreshValidationReferenceAsync(cancellationToken).ConfigureAwait(false);
         }
+        if (result.Success && parameter is ConfigParam.MinSpeed or ConfigParam.MaxSpeed)
+        {
+            await RefreshSpeedLimitsAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         return result;
     }
@@ -329,6 +354,10 @@ public sealed class EscBridgeService
         if (result.Success)
         {
             await RefreshValidationReferenceAsync(cancellationToken).ConfigureAwait(false);
+            if (parameter is ConfigParam.MinSpeed or ConfigParam.MaxSpeed or ConfigParam.All)
+            {
+                await RefreshSpeedLimitsAsync(cancellationToken).ConfigureAwait(false);
+            }
         }
 
         return result;
@@ -707,6 +736,33 @@ public sealed class EscBridgeService
         return (reference, new ActiveControllerConfig(kp, ki, kd, checked((byte)polePairs)));
     }
 
+    private async Task<ActiveSpeedLimits> RefreshSpeedLimitsAsync(CancellationToken cancellationToken)
+    {
+        await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ActiveSpeedLimits limits = await ReadSpeedLimitsCoreAsync(cancellationToken).ConfigureAwait(false);
+            lock (_stateGate)
+            {
+                _activeSpeedLimits = limits;
+            }
+
+            Notify();
+            return limits;
+        }
+        finally
+        {
+            _ioLock.Release();
+        }
+    }
+
+    private async Task<ActiveSpeedLimits> ReadSpeedLimitsCoreAsync(CancellationToken cancellationToken)
+    {
+        double minSpeed = await ReadConfigCoreAsync(ConfigParam.MinSpeed, cancellationToken).ConfigureAwait(false);
+        double maxSpeed = await ReadConfigCoreAsync(ConfigParam.MaxSpeed, cancellationToken).ConfigureAwait(false);
+        return new ActiveSpeedLimits(checked((ushort)minSpeed), checked((ushort)maxSpeed));
+    }
+
     private async Task<double> ReadConfigCoreAsync(ConfigParam parameter, CancellationToken cancellationToken)
     {
         EscFrame frame = await SendRequestCoreAsync(
@@ -816,6 +872,7 @@ public sealed class EscBridgeService
             hilStats,
             _validationReference,
             _activeControllerConfig,
+            _activeSpeedLimits,
             _validationReferenceCapturedAt,
             _validationReferenceError);
     }
@@ -824,6 +881,7 @@ public sealed class EscBridgeService
     {
         _validationReference = null;
         _activeControllerConfig = null;
+        _activeSpeedLimits = null;
         _validationReferenceCapturedAt = null;
         _validationReferenceError = null;
     }
