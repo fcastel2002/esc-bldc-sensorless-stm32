@@ -68,10 +68,11 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 | `0x31` | `LOG_STOP` | log param or `0xFF` | empty | empty |
 | `0x32` | `LOG_RATE` | ignored | `uint16 ms` | empty |
 | `0x33` | `TELEMETRY_EVENT` | log param | event only | event payload below |
-| `0x40` | `HIL_START` | ignored | empty or `uint16 input_timeout_ms` (`10..5000`) | empty |
+| `0x40` | `HIL_START` | ignored | empty, `uint16 input_timeout_ms`, or 3-byte timeout/mode payload below | empty |
 | `0x41` | `HIL_STOP` | ignored | empty | empty |
 | `0x42` | `HIL_SET_INPUTS` | ignored | HIL input payload below | empty |
 | `0x43` | `HIL_GET_OUTPUTS` | ignored | empty | HIL output payload below |
+| `0x44` | `HIL_STEP` | ignored | exact 18-byte deterministic-step payload below | exact 48-byte deterministic-step response below |
 
 `RUN` is valid only while `app_state == IDLE`. In every other state it returns
 `INVALID_STATE` without changing the application state, PWM outputs, or timer
@@ -106,6 +107,13 @@ pole pairs because the validation experiment commands those values explicitly.
 | 12..13 | `uint16` | minimum measured period (`SPEED_MAX`) |
 | 14..17 | `uint32` | controller integration coefficient in microseconds |
 | 18..19 | `uint16` | effective minimum PWM in counts |
+| 20 | `uint8` | capability flags; bit 0 announces deterministic HIL stepping |
+| 21 | `uint8` | HIL step operation version (`1`) |
+| 22..23 | `uint16` | maximum ticks accepted by one `HIL_STEP` (`1000`) |
+
+The current descriptor is 24 bytes. A legacy 20-byte descriptor does not
+announce deterministic stepping; clients must test capability bit 0 rather
+than infer support from payload length alone.
 
 ## Config parameters
 
@@ -170,7 +178,28 @@ Control modes:
 | `1` | `MONITOR_ONLY` |
 | `2` | `HIL_SIM` |
 
-In `HIL_SIM`, the MCU is blind to ESC commutation and real TIM2 input-capture events are ignored. Simulink owns the simulated plant and ESC/conmutation. The MCU keeps the PI control tick, uses the latest simulated speed received by `HIL_SET_INPUTS` as feedback, and exposes the logical PWM command with `HIL_GET_OUTPUTS`. `HIL_START` without payload retains the 50 ms input timeout; a validation run can provide `input_timeout_ms` to allow its sequential replay deadline without stopping the logical HIL run.
+In `HIL_SIM`, the MCU is blind to ESC commutation and real TIM2 input-capture
+events are ignored. Simulink owns the simulated plant and ESC/commutation.
+`HIL_START` selects one of two execution modes. Periodic mode keeps the existing
+live/UDP behavior: `HIL_SET_INPUTS` updates the latest simulated speed, TIM4
+runs the PI tick, and `HIL_GET_OUTPUTS` is read periodically for monitoring.
+Stepped mode is reserved for deterministic offline replay: TIM4 remains
+stopped and each `HIL_STEP` synchronously applies one input, executes exactly
+the requested number of PI ticks, and returns the resulting output.
+
+`HIL_START` accepts these payload shapes:
+
+| Length | Offset | Type | Meaning |
+| --- | --- | --- | --- |
+| 0 | - | - | default 50 ms input timeout, periodic mode |
+| 2 | 0..1 | `uint16` | `input_timeout_ms` (`10..5000`), periodic mode |
+| 3 | 0..1 | `uint16` | `input_timeout_ms` (`10..5000`) |
+| 3 | 2 | `uint8` | execution mode: `0=periodic`, `1=stepped` |
+
+Starting HIL resets the PI dynamic state and validation provenance. A stepped
+session cannot be restarted in place: issue `HIL_STOP` before another
+`HIL_START`. `HIL_STOP` stops the logical controller, clears PWM, and restores
+the runtime control mode to `NORMAL`.
 
 `HIL_SET_INPUTS` payload:
 
@@ -209,6 +238,43 @@ The legacy payload is exactly 8 bytes and remains supported. The validated paylo
 
 `HIL_GET_OUTPUTS` now has a 43-byte payload. Bytes `0..14` retain their legacy layout exactly. The extension is an interrupt-safe snapshot: `accepted_*` identifies the most recently accepted HIL input and the controller output generation already present at acceptance, while `applied_*`, `output_generation`, and `pwm_update_tick` identify the input and control update that produced the current logical PWM. `HIL_START` resets the PI dynamic state and all validation provenance to zero; each HIL PI update increments `output_generation` and records its tick.
 
+`HIL_STEP` request payload (exactly 18 bytes):
+
+| Offset | Type | Meaning |
+| --- | --- | --- |
+| 0..1 | `uint16` | simulated speed RPM |
+| 2..3 | `uint16` | reserved, must be zero |
+| 4..5 | `int16` | load torque, reserved and currently required to be zero |
+| 6 | `uint8` | input flags |
+| 7 | `uint8` | enable, must be exactly `1` |
+| 8..11 | `uint32` | nonzero `run_id` |
+| 12..15 | `uint32` | nonzero, strictly increasing `source_seq` |
+| 16..17 | `uint16` | requested PI ticks `N`, `1..maximum_hil_steps` |
+
+`HIL_STEP` response payload (exactly 48 bytes):
+
+| Offset | Type | Meaning |
+| --- | --- | --- |
+| 0..42 | bytes | complete 43-byte `HIL_GET_OUTPUTS` snapshot |
+| 43..44 | `uint16` | requested ticks `N` |
+| 45..46 | `uint16` | applied ticks; must equal `N` |
+| 47 | `uint8` | result flags; bit 0 means idempotent replay |
+
+For a newly accepted command, `accepted_generation` is captured before the PI
+ticks and `output_generation - accepted_generation` must equal exactly `N`
+without overflow. `accepted_*` and `applied_*` must identify the request. The
+firmware retains the meaningful fields of the last stepped command. Repeating
+the same `run_id`, `source_seq`, speed, flags, and `N` returns the current
+logical result with the replay flag and executes no additional ticks. Reusing
+the provenance with different content, changing `run_id` during a session, or
+sending a non-increasing new `source_seq` is rejected.
+
+`HIL_STEP` is valid only in an active stepped session. While that session is
+active, `HIL_SET_INPUTS`, another `HIL_START`, setpoint/control-mode changes,
+and configuration set/reset/save commands return `INVALID_STATE`; use
+`HIL_STOP` to leave the session. The input timeout still bounds a stalled host,
+but wall-clock timing never advances the controller.
+
 The ESC Bridge exposes a UDP loopback bridge for Simulink on `127.0.0.1:5055`. Send ASCII CSV:
 
 `seq,speed_rpm,enable`
@@ -219,11 +285,16 @@ The bridge also accepts command-prefixed packets:
 
 `PIL,seq,speed_rpm,enable`
 
-For offline controller validation, the bridge accepts:
+For the live UDP diagnostic path, the bridge also accepts provenance-tagged
+inputs:
 
 `PILV,run_id,seq,speed_rpm,enable`
 
-`PILV` carries its `run_id` and `seq` in the validated 16-byte `HIL_SET_INPUTS` payload. Validation inputs are not UDP-coalesced, and the bridge performs a fresh `HIL_GET_OUTPUTS` poll after each accepted input.
+`PILV` carries its `run_id` and `seq` in the validated 16-byte
+`HIL_SET_INPUTS` payload. This remains part of periodic live HIL and does not
+provide deterministic controller stepping. Persistent offline validation uses
+the stepped `HIL_START` mode and one `HIL_STEP` request/response per MAT sample;
+it does not poll `HIL_GET_OUTPUTS` to infer completion.
 
 For compatibility with older HIL blocks, the bridge still accepts:
 
@@ -239,7 +310,11 @@ Responses to `PILV` retain that numeric prefix and append:
 
 `input_run_id,accepted_run_id,accepted_source_seq,accepted_generation,applied_run_id,applied_source_seq,output_generation,pwm_update_tick_ms,fresh_output,cache_age_ms`
 
-The response `seq` remains the source sequence. `applied_*` and `output_generation` are the authoritative fields for offline matching; response arrival time and the echoed input sequence do not prove which input produced the PWM.
+The response `seq` remains the source sequence. In this live diagnostic,
+`applied_*` and `output_generation` describe the cached PWM provenance; response
+arrival time and the echoed input sequence alone do not prove which input
+produced it. This diagnostic metadata is not a substitute for `HIL_STEP` during
+deterministic replay.
 
 The bridge treats high-rate UDP values as latest-value signals, not as a command
 FIFO. If packets accumulate while the HID transaction is in progress, older
@@ -247,7 +322,9 @@ FIFO. If packets accumulate while the HID transaction is in progress, older
 This prevents stale Simulink samples from being replayed late. `ESTOP` keeps
 priority over coalesced packets. HIL outputs are polled for monitoring at a
 lower rate than HIL inputs, so the response may contain the latest cached output
-sample while the newest input sample is still applied immediately.
+sample while the newest input sample is still applied immediately. These
+coalescing and polling rules apply to live periodic HIL/UDP only, never to a
+deterministic stepped validation session.
 
 The same UDP port also accepts real-motor commands that do not enter `HIL_SIM`.
 The GUI must be in `Simulink control` mode for these commands, except `ESTOP`,

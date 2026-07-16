@@ -11,6 +11,8 @@
 
 #include <string.h>
 
+#pragma GCC optimize("Oz")
+
 #define DEFAULT_PWM_FREQ_HZ 18000U
 #define DEFAULT_POLE_PAIRS 2U
 #define DEFAULT_KP_CENTI 28
@@ -18,6 +20,39 @@
 #define DEFAULT_KD_CENTI 0
 #define DEFAULT_MAX_SPEED_RPM 5400U
 #define DEFAULT_MIN_SPEED_RPM 200U
+
+enum {
+  REQUEST_PING = 1,
+  REQUEST_GET_STATUS,
+  REQUEST_RUN,
+  REQUEST_STOP,
+  REQUEST_ESTOP,
+  REQUEST_SET_SPEED_RPM,
+  REQUEST_SET_CONTROL_MODE,
+  REQUEST_GET_CONFIG,
+  REQUEST_SET_CONFIG,
+  REQUEST_RESET_CONFIG,
+  REQUEST_SAVE_CONFIG,
+  REQUEST_GET_VALIDATION_REFERENCE,
+  REQUEST_LOG_START,
+  REQUEST_LOG_STOP,
+  REQUEST_LOG_RATE,
+  REQUEST_HIL_START,
+  REQUEST_HIL_STOP,
+  REQUEST_HIL_SET_INPUTS,
+  REQUEST_HIL_GET_OUTPUTS,
+  REQUEST_HIL_STEP,
+};
+
+static inline __attribute__((always_inline)) uint8_t request_dispatch(uint8_t opcode)
+{
+  static const uint8_t dispatch_base[] = {0U, 3U, 8U, 13U, 16U};
+  static const uint8_t maximum_low_nibble[] = {2U, 4U, 4U, 2U, 4U};
+  uint8_t group = opcode >> 4;
+  uint8_t low_nibble = opcode & 0x0FU;
+  if (group > 4U || low_nibble > maximum_low_nibble[group]) return 0U;
+  return dispatch_base[group] + low_nibble;
+}
 
 static uint16_t read_u16_le(const uint8_t* data)
 {
@@ -169,7 +204,30 @@ static bool stop_state_allows_command(void)
   return app_state == IDLE || app_state == RUNNING || app_state == CLOSEDLOOP;
 }
 
-__attribute__((optimize("Os"))) static void apply_config_change(uint8_t param)
+__attribute__((optimize("Oz"))) static uint16_t
+serialize_hil_outputs(uint8_t* payload_out)
+{
+  HilValidationProvenance provenance;
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  write_u32_le(&payload_out[0], HAL_GetTick());
+  payload_out[4] = (uint8_t)app_state;
+  payload_out[5] = (uint8_t)control_runtime_mode;
+  write_u16_le(&payload_out[6], speed_setpoint_rpm);
+  write_u16_le(&payload_out[8],
+               hil_session_state != 0U ? hil_speed_rpm : period_to_rpm(get_actual_speed()));
+  write_u16_le(&payload_out[10], bldc_get_pwm());
+  payload_out[12] = (uint8_t)bldc_get_commutation_step();
+  payload_out[13] = hil_flags;
+  payload_out[14] = hil_has_timeout();
+  hil_get_validation_provenance(&provenance);
+  _Static_assert(sizeof(provenance) == 28U, "Unexpected HIL provenance layout");
+  memcpy(&payload_out[15], &provenance, sizeof(provenance));
+  if (primask == 0U) __enable_irq();
+  return 43U;
+}
+
+__attribute__((optimize("Oz"))) static void apply_config_change(uint8_t param)
 {
   if (app_state == CLOSEDLOOP) {
     if (param == COMM_PARAM_KP_RPM || param == COMM_PARAM_KI_RPM || param == COMM_PARAM_KD_RPM) {
@@ -386,7 +444,7 @@ static uint8_t logging_variable_from_param(uint8_t param, LoggeableVariable* var
   }
 }
 
-__attribute__((optimize("Os"))) static uint8_t
+static uint8_t
 execute_request(const uint8_t request[COMM_FRAME_SIZE],
                 uint16_t payload_len,
                 uint8_t* payload_out,
@@ -398,13 +456,19 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
 
   *payload_out_len = 0;
 
-  switch (opcode) {
-  case COMM_OPCODE_PING:
+  if (hil_session_state == (uint8_t)HIL_EXECUTION_STEPPED + 1U &&
+      ((opcode >= COMM_OPCODE_SET_SPEED_RPM && opcode <= COMM_OPCODE_SET_CONTROL_MODE) ||
+       (opcode >= COMM_OPCODE_SET_CONFIG && opcode <= COMM_OPCODE_SAVE_CONFIG))) {
+    return COMM_STATUS_INVALID_STATE;
+  }
+
+  switch (request_dispatch(opcode)) {
+  case REQUEST_PING:
     memcpy(payload_out, payload, payload_len);
     *payload_out_len = payload_len;
     return COMM_STATUS_OK;
 
-  case COMM_OPCODE_GET_STATUS: {
+  case REQUEST_GET_STATUS: {
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     uint16_t actual_speed_rpm = period_to_rpm(get_actual_speed());
     payload_out[0] = (uint8_t)app_state;
@@ -418,26 +482,26 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     return COMM_STATUS_OK;
   }
 
-  case COMM_OPCODE_RUN:
+  case REQUEST_RUN:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     if (app_state != IDLE) return COMM_STATUS_INVALID_STATE;
     foc_startup();
     return COMM_STATUS_OK;
 
-  case COMM_OPCODE_STOP:
+  case REQUEST_STOP:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     if (!stop_state_allows_command()) return COMM_STATUS_INVALID_STATE;
     stop_motor(0);
     app_state = IDLE;
     return COMM_STATUS_OK;
 
-  case COMM_OPCODE_ESTOP:
+  case REQUEST_ESTOP:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     stop_motor(1);
     app_state = IDLE;
     return COMM_STATUS_OK;
 
-  case COMM_OPCODE_SET_SPEED_RPM: {
+  case REQUEST_SET_SPEED_RPM: {
     if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
     uint16_t rpm = read_u16_le(payload);
     if (rpm < get_min_speed()) return COMM_STATUS_UNDERLIMIT;
@@ -446,15 +510,15 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     return COMM_STATUS_OK;
   }
 
-  case COMM_OPCODE_SET_CONTROL_MODE:
+  case REQUEST_SET_CONTROL_MODE:
     if (payload_len != 1U) return COMM_STATUS_BAD_LENGTH;
     return control_mode_set(payload[0]) ? COMM_STATUS_OK : COMM_STATUS_UNKNOWN_PARAM;
 
-  case COMM_OPCODE_GET_CONFIG:
+  case REQUEST_GET_CONFIG:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     return get_config(param, payload_out, payload_out_len);
 
-  case COMM_OPCODE_GET_VALIDATION_REFERENCE: {
+  case REQUEST_GET_VALIDATION_REFERENCE: {
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     uint16_t pwm_arr = (uint16_t)TIM1->ARR;
     uint32_t speed_timer_hz = HAL_RCC_GetHCLKFreq() / (TIM2->PSC + 1U);
@@ -467,22 +531,25 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     write_u16_le(&payload_out[12], SPEED_MAX);
     write_u32_le(&payload_out[14], MOTOR_CONTROL_DT_US);
     write_u16_le(&payload_out[18], pwm_arr / MOTOR_CONTROL_MIN_PWM_DIVISOR);
-    *payload_out_len = 20U;
+    payload_out[20] = COMM_VALIDATION_CAP_DETERMINISTIC;
+    payload_out[21] = COMM_HIL_OPERATION_VERSION;
+    write_u16_le(&payload_out[22], HIL_MAX_STEP_COUNT);
+    *payload_out_len = 24U;
     return COMM_STATUS_OK;
   }
 
-  case COMM_OPCODE_SET_CONFIG:
+  case REQUEST_SET_CONFIG:
     return set_config(param, payload, payload_len);
 
-  case COMM_OPCODE_RESET_CONFIG:
+  case REQUEST_RESET_CONFIG:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     return reset_config(param);
 
-  case COMM_OPCODE_SAVE_CONFIG:
+  case REQUEST_SAVE_CONFIG:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     return save_config(param);
 
-  case COMM_OPCODE_LOG_START:
+  case REQUEST_LOG_START:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     if (param == COMM_PARAM_ALL) {
       start_logging_param(VAR_SPEED);
@@ -497,7 +564,7 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
       return COMM_STATUS_OK;
     }
 
-  case COMM_OPCODE_LOG_STOP:
+  case REQUEST_LOG_STOP:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     if (param == COMM_PARAM_ALL) {
       stop_logging_all();
@@ -510,33 +577,47 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
       return COMM_STATUS_OK;
     }
 
-  case COMM_OPCODE_LOG_RATE:
+  case REQUEST_LOG_RATE:
     if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
     return set_logging_rate_ms(read_u16_le(payload));
 
-  case COMM_OPCODE_HIL_START: {
-    if (payload_len != 0U && payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
-    uint16_t hil_timeout_ms = payload_len == 2U ? read_u16_le(payload) : 0U;
-    if (payload_len == 2U && (hil_timeout_ms < 10U || hil_timeout_ms > 5000U)) return COMM_STATUS_OVERLIMIT;
+  case REQUEST_HIL_START: {
+    if (payload_len != 0U && payload_len != 2U && payload_len != 3U) {
+      return COMM_STATUS_BAD_LENGTH;
+    }
+    if (hil_session_state == (uint8_t)HIL_EXECUTION_STEPPED + 1U) {
+      return COMM_STATUS_INVALID_STATE;
+    }
+    uint16_t hil_timeout_ms = payload_len >= 2U ? read_u16_le(payload) : 0U;
+    HilExecutionMode execution_mode = payload_len == 3U
+        ? (HilExecutionMode)payload[2]
+        : HIL_EXECUTION_PERIODIC;
+    if (payload_len >= 2U && (hil_timeout_ms < 10U || hil_timeout_ms > 5000U)) {
+      return COMM_STATUS_OVERLIMIT;
+    }
+    if (execution_mode > HIL_EXECUTION_STEPPED) return COMM_STATUS_UNKNOWN_PARAM;
     (void)control_mode_set(CONTROL_RUNTIME_HIL_SIM);
-    return hil_start(hil_timeout_ms) ? COMM_STATUS_OK : COMM_STATUS_INVALID_STATE;
+    hil_start(hil_timeout_ms, execution_mode);
+    return COMM_STATUS_OK;
   }
 
-  case COMM_OPCODE_HIL_STOP:
+  case REQUEST_HIL_STOP:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     hil_stop();
     return COMM_STATUS_OK;
 
-  case COMM_OPCODE_HIL_SET_INPUTS:
+  case REQUEST_HIL_SET_INPUTS:
     if (payload_len != 8U && payload_len != 16U) return COMM_STATUS_BAD_LENGTH;
-    if (!hil_is_active() && payload[7] != 0U) {
-      (void)control_mode_set(CONTROL_RUNTIME_HIL_SIM);
-      (void)hil_start(0U);
+    if (hil_session_state == (uint8_t)HIL_EXECUTION_STEPPED + 1U) {
+      return COMM_STATUS_INVALID_STATE;
     }
-    if (!hil_is_active()) return COMM_STATUS_INVALID_STATE;
     if (payload[7] == 0U) {
-      hil_stop();
+      if (hil_session_state != 0U) hil_stop();
       return COMM_STATUS_OK;
+    }
+    if (hil_session_state == 0U && payload[7] != 0U) {
+      (void)control_mode_set(CONTROL_RUNTIME_HIL_SIM);
+      hil_start(0U, HIL_EXECUTION_PERIODIC);
     }
     hil_set_inputs(read_u16_le(payload),
                    read_i16_le(&payload[4]),
@@ -545,27 +626,41 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
                    payload_len == 16U ? read_u32_le(&payload[12]) : 0U);
     return COMM_STATUS_OK;
 
-  case COMM_OPCODE_HIL_GET_OUTPUTS: {
+  case REQUEST_HIL_GET_OUTPUTS: {
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
-    HilValidationProvenance provenance;
-    write_u32_le(&payload_out[0], HAL_GetTick());
-    payload_out[4] = (uint8_t)app_state;
-    payload_out[5] = (uint8_t)control_runtime_mode;
-    write_u16_le(&payload_out[6], speed_setpoint_rpm);
-    write_u16_le(&payload_out[8], hil_is_active() ? hil_get_speed_rpm() : period_to_rpm(get_actual_speed()));
-    write_u16_le(&payload_out[10], hil_get_pwm_command());
-    payload_out[12] = (uint8_t)bldc_get_commutation_step();
-    payload_out[13] = hil_get_flags();
-    payload_out[14] = hil_has_timeout();
-    hil_get_validation_provenance(&provenance);
-    write_u32_le(&payload_out[15], provenance.accepted_run_id);
-    write_u32_le(&payload_out[19], provenance.accepted_source_seq);
-    write_u32_le(&payload_out[23], provenance.accepted_generation);
-    write_u32_le(&payload_out[27], provenance.applied_run_id);
-    write_u32_le(&payload_out[31], provenance.applied_source_seq);
-    write_u32_le(&payload_out[35], provenance.output_generation);
-    write_u32_le(&payload_out[39], provenance.pwm_update_tick);
-    *payload_out_len = 43;
+    *payload_out_len = serialize_hil_outputs(payload_out);
+    return COMM_STATUS_OK;
+  }
+
+  case REQUEST_HIL_STEP: {
+    if (payload_len != 18U) return COMM_STATUS_BAD_LENGTH;
+    if (hil_session_state != (uint8_t)HIL_EXECUTION_STEPPED + 1U ||
+        payload[7] != 1U) {
+      return COMM_STATUS_INVALID_STATE;
+    }
+    if (read_u16_le(&payload[2]) != 0U || read_i16_le(&payload[4]) != 0) {
+      return COMM_STATUS_UNKNOWN_PARAM;
+    }
+
+    uint32_t run_id = read_u32_le(&payload[8]);
+    uint32_t source_seq = read_u32_le(&payload[12]);
+    uint16_t requested_steps = read_u16_le(&payload[16]);
+    if (run_id == 0U || source_seq == 0U) return COMM_STATUS_INVALID_STATE;
+    if (requested_steps == 0U) return COMM_STATUS_UNDERLIMIT;
+    if (requested_steps > HIL_MAX_STEP_COUNT) return COMM_STATUS_OVERLIMIT;
+
+    HilStepResult step_result = hil_step(read_u16_le(payload),
+                                         payload[6],
+                                         run_id,
+                                         source_seq,
+                                         requested_steps);
+    if (step_result == HIL_STEP_INVALID) return COMM_STATUS_INVALID_STATE;
+
+    serialize_hil_outputs(payload_out);
+    write_u16_le(&payload_out[43], requested_steps);
+    write_u16_le(&payload_out[45], requested_steps);
+    payload_out[47] = step_result == HIL_STEP_REPLAYED ? 0x01U : 0x00U;
+    *payload_out_len = 48U;
     return COMM_STATUS_OK;
   }
 
@@ -573,7 +668,6 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     return COMM_STATUS_UNKNOWN_OPCODE;
   }
 }
-
 bool comm_protocol_handle_frame(const uint8_t request[COMM_FRAME_SIZE],
                                 uint8_t response[COMM_FRAME_SIZE])
 {

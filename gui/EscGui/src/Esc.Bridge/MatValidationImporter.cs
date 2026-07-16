@@ -14,20 +14,55 @@ public sealed class MatValidationImporter
 
         using FileStream stream = File.OpenRead(sourcePath);
         IMatFile matFile = new MatFileReader(stream).Read();
-        if (matFile["esc_validation_v1"]?.Value is not IStructureArray payload)
+        IStructureArray payload;
+        uint expectedSchemaVersion;
+        if (ReadOptionalStructure(matFile, "esc_validation_v2") is IStructureArray v2Payload)
         {
-            throw new InvalidDataException("MAT file must contain the esc_validation_v1 structure.");
+            payload = v2Payload;
+            expectedSchemaVersion = 2;
+        }
+        else if (ReadOptionalStructure(matFile, "esc_validation_v1") is IStructureArray v1Payload)
+        {
+            payload = v1Payload;
+            expectedSchemaVersion = 1;
+        }
+        else
+        {
+            throw new InvalidDataException("MAT file must contain an esc_validation_v1 or esc_validation_v2 structure.");
         }
 
         int[] index = new int[payload.Dimensions.Length];
         uint schemaVersion = ReadSingleUInt32(payload, "schema_version", index);
-        if (schemaVersion != 1)
+        if (schemaVersion != expectedSchemaVersion)
         {
-            throw new InvalidDataException($"Unsupported validation schema version {schemaVersion}.");
+            throw new InvalidDataException(
+                $"Validation structure v{expectedSchemaVersion} declares schema version {schemaVersion}.");
         }
 
         string manifestJson = ReadString(payload, "manifest_json", index);
         ValidationManifest manifest = ParseManifest(manifestJson, schemaVersion);
+        if (manifest.SamplePeriodUs == 0)
+        {
+            throw new InvalidDataException("manifest samplePeriodUs must be positive.");
+        }
+
+        if (schemaVersion == 2)
+        {
+            double controllerDtUsValue = manifest.ReferenceConfig.Dt * 1_000_000d;
+            double roundedControllerDtUs = Math.Round(controllerDtUsValue);
+            if (!double.IsFinite(controllerDtUsValue) || roundedControllerDtUs < 1 ||
+                roundedControllerDtUs > uint.MaxValue || Math.Abs(controllerDtUsValue - roundedControllerDtUs) > 1e-6)
+            {
+                throw new InvalidDataException("manifest referenceConfig.dt must be a positive whole number of microseconds.");
+            }
+
+            ulong controllerDtUs = (ulong)roundedControllerDtUs;
+            if (manifest.SamplePeriodUs % controllerDtUs != 0)
+            {
+                throw new InvalidDataException("manifest samplePeriodUs must be exactly divisible by referenceConfig.dt in microseconds.");
+            }
+        }
+
         double[] simulationTimes = ReadDoubleVector(payload, "simulation_time_s", index);
         uint[] runIds = ReadUInt32Vector(payload, "run_id", index);
         uint[] sequences = ReadUInt32Vector(payload, "source_sequence", index);
@@ -51,12 +86,38 @@ public sealed class MatValidationImporter
 
         var samples = new List<ValidationInputSample>(count);
         double previousTime = double.NegativeInfinity;
+        ulong previousTimeUs = 0;
         uint previousSequence = 0;
         for (int i = 0; i < count; i++)
         {
-            if (!double.IsFinite(simulationTimes[i]) || simulationTimes[i] < previousTime)
+            bool invalidTime = schemaVersion == 2
+                ? !double.IsFinite(simulationTimes[i]) || simulationTimes[i] < 0 || simulationTimes[i] <= previousTime
+                : !double.IsFinite(simulationTimes[i]) || simulationTimes[i] < previousTime;
+            if (invalidTime)
             {
-                throw new InvalidDataException("simulation_time_s must be finite and monotonic.");
+                throw new InvalidDataException(schemaVersion == 2
+                    ? "simulation_time_s must be finite, nonnegative, and strictly increasing."
+                    : "simulation_time_s must be finite and monotonic.");
+            }
+
+            ulong timeUs = 0;
+            if (schemaVersion == 2)
+            {
+                double timeUsValue = simulationTimes[i] * 1_000_000d;
+                double roundedTimeUs = Math.Round(timeUsValue);
+                if (roundedTimeUs < 0 || roundedTimeUs > ulong.MaxValue ||
+                    Math.Abs(timeUsValue - roundedTimeUs) > 1e-6 ||
+                    (ulong)roundedTimeUs % manifest.SamplePeriodUs != 0)
+                {
+                    throw new InvalidDataException("simulation_time_s values must align exactly to the manifest samplePeriodUs grid.");
+                }
+                timeUs = (ulong)roundedTimeUs;
+                if ((i == 0 && timeUs != 0) ||
+                    (i > 0 && timeUs != checked(previousTimeUs + manifest.SamplePeriodUs)))
+                {
+                    throw new InvalidDataException(
+                        "simulation_time_s must start at zero and advance by exactly one samplePeriodUs per row.");
+                }
             }
 
             if (sequences[i] == 0 || (i > 0 && sequences[i] <= previousSequence))
@@ -64,27 +125,46 @@ public sealed class MatValidationImporter
                 throw new InvalidDataException("source_sequence must be strictly increasing and nonzero.");
             }
 
-            if (enabled[i] > 1)
+            if (schemaVersion == 2 && enabled[i] != 1)
+            {
+                throw new InvalidDataException("enable must be true for every deterministic v2 sample.");
+            }
+            if (schemaVersion == 1 && enabled[i] > 1)
             {
                 throw new InvalidDataException("enable must contain only 0 or 1.");
+            }
+            if (schemaVersion == 2 && targets[i] != manifest.TargetRpm)
+            {
+                throw new InvalidDataException("target_rpm must be constant and equal to manifest targetRpm.");
+            }
+            if (schemaVersion == 2 && expected[i] > manifest.ReferenceConfig.PwmArr)
+            {
+                throw new InvalidDataException("expected_pwm cannot exceed manifest referenceConfig.pwmArr.");
             }
 
             samples.Add(new ValidationInputSample(sequences[i], simulationTimes[i], speeds[i], enabled[i] != 0, targets[i], expected[i]));
             previousTime = simulationTimes[i];
+            previousTimeUs = timeUs;
             previousSequence = sequences[i];
         }
 
-        double sampleSpan = simulationTimes[^1] - simulationTimes[0];
+        double requiredStopTimeSeconds = schemaVersion == 2
+            ? (ulong)count * manifest.SamplePeriodUs / 1_000_000d
+            : Math.Max(simulationTimes[^1] - simulationTimes[0], manifest.SamplePeriodUs / 1_000_000d);
         if (double.IsNaN(manifest.StopTimeSeconds))
         {
             manifest = manifest with
             {
-                StopTimeSeconds = Math.Max(sampleSpan, manifest.SamplePeriodUs / 1_000_000d)
+                StopTimeSeconds = requiredStopTimeSeconds
             };
         }
         else if (!double.IsFinite(manifest.StopTimeSeconds) || manifest.StopTimeSeconds <= 0)
         {
             throw new InvalidDataException("manifest stopTimeSeconds must be finite and positive.");
+        }
+        else if (schemaVersion == 2 && Math.Abs(manifest.StopTimeSeconds - requiredStopTimeSeconds) > 1e-9)
+        {
+            throw new InvalidDataException("manifest stopTimeSeconds must equal the end of the final complete sample interval.");
         }
 
         return new ImportedValidationVector(sourceRunId, manifest, samples, sourcePath);
@@ -121,6 +201,18 @@ public sealed class MatValidationImporter
             root.GetProperty("samplePeriodUs").GetUInt64(),
             root.GetProperty("targetRpm").GetUInt16(),
             referenceConfig);
+    }
+
+    private static IStructureArray? ReadOptionalStructure(IMatFile matFile, string name)
+    {
+        try
+        {
+            return matFile[name]?.Value as IStructureArray;
+        }
+        catch (KeyNotFoundException)
+        {
+            return null;
+        }
     }
 
     private static int GetOptionalInt32(JsonElement element, string name, int defaultValue) =>
@@ -160,7 +252,7 @@ public sealed class MatValidationImporter
         }
         catch (Exception exception) when (exception is KeyNotFoundException or IndexOutOfRangeException)
         {
-            throw new InvalidDataException($"esc_validation_v1 is missing field '{name}'.", exception);
+            throw new InvalidDataException($"Validation structure is missing field '{name}'.", exception);
         }
     }
 

@@ -29,3 +29,21 @@ public sealed record HilOutputs(
     uint OutputGeneration = 0,
     uint PwmUpdateTickMs = 0,
     bool HasValidationProvenance = false);
+
+public sealed record HilStepRequest(
+    ushort SpeedRpm,
+    short LoadTorque,
+    byte Flags,
+    bool Enable,
+    uint RunId,
+    uint SourceSequence,
+    ushort Steps);
+
+public sealed record HilStepResult(
+    HilOutputs Outputs,
+    ushort RequestedSteps,
+    ushort AppliedSteps,
+    byte Flags)
+{
+    public bool Replayed => (Flags & 0x01) != 0;
+}

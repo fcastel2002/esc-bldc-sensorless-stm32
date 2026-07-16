@@ -14,14 +14,13 @@
     </section>
 
     <section class="panel">
-        <div class="panel-title"><h2>Importar experimento</h2><span>CONTRATO esc_validation_v1 / MAT V7</span></div>
+        <div class="panel-title"><h2>Importar experimento</h2><span>CONTRATO esc_validation_v2 / MAT V7</span></div>
         <div class="control-grid">
             <label>Archivo MAT<InputFile OnChange="ImportAsync" accept=".mat" /></label>
             <label>Tolerancia PWM<input type="number" min="0" @bind="_tolerance" /></label>
-            <label>Deadline (ms)<input type="number" min="1" @bind="_deadlineMs" /></label>
+            <label>Deadline (ms)<input type="number" min="1" max="2474" @bind="_deadlineMs" /></label>
             <label>Warm-up<input type="number" min="0" @bind="_warmupSamples" /></label>
-            <label>Max. timeouts<input type="number" min="0" @bind="_maximumTimeouts" /></label>
-            <label>Timeout MCU (ms)<input type="number" min="10" max="5000" @bind="_hilInputTimeoutMs" /></label>
+            <label>Timeout MCU (ms, &gt; 2x deadline + 50)<input type="number" min="53" max="5000" @bind="_hilInputTimeoutMs" /></label>
         </div>
         @if (!string.IsNullOrWhiteSpace(_message))
         {
@@ -43,7 +42,19 @@
                 @foreach (ValidationRunSummary run in _runs)
                 {
                     <tr>
-                        <td><strong>@run.ExperimentName</strong><br /><small>@run.Description</small></td>
+                        <td>
+                            @if (_editingRunId == run.Id)
+                            {
+                                <div class="run-metadata-editor">
+                                    <label>Nombre<input type="text" maxlength="@ValidationRunService.MaximumExperimentNameLength" @bind="_editedExperimentName" /></label>
+                                    <label>Descripcion<textarea maxlength="@ValidationRunService.MaximumDescriptionLength" @bind="_editedDescription"></textarea></label>
+                                </div>
+                            }
+                            else
+                            {
+                                <strong>@run.ExperimentName</strong><br /><small>@run.Description</small>
+                            }
+                        </td>
                         <td>@run.Status</td>
                         <td>@run.SampleCount</td>
                         <td>@run.PassedCount OK, @run.OutOfToleranceCount tolerancia, @run.TimeoutCount timeout</td>
@@ -51,8 +62,19 @@
                         <td>
                             <div class="button-row compact-actions">
                                 <a href="@($"/runs/{run.Id}")">Ver</a>
+                                @if (_editingRunId == run.Id)
+                                {
+                                    <button class="primary" @onclick="() => SaveMetadataAsync(run.Id)" disabled="@_savingMetadata">
+                                        @(_savingMetadata ? "Guardando..." : "Guardar")
+                                    </button>
+                                    <button @onclick="CancelMetadataEdit" disabled="@_savingMetadata">Cancelar</button>
+                                }
+                                else
+                                {
+                                    <button @onclick="() => BeginMetadataEdit(run)" disabled="@(_editingRunId is not null || _deletingRunId is not null)">Editar</button>
+                                }
                                 <button class="danger" @onclick="() => DeleteAsync(run)"
-                                        disabled="@(run.Status == ValidationRunStatus.Running || _deletingRunId == run.Id)">
+                                        disabled="@(run.Status == ValidationRunStatus.Running || _deletingRunId == run.Id || _editingRunId is not null)">
                                     @(_deletingRunId == run.Id ? "Eliminando..." : "Eliminar")
                                 </button>
                             </div>
@@ -70,10 +92,13 @@
     private ushort _tolerance;
     private int _deadlineMs = 100;
     private int _warmupSamples;
-    private int _maximumTimeouts = int.MaxValue;
     private ushort _hilInputTimeoutMs = 500;
     private string? _message;
     private Guid? _deletingRunId;
+    private Guid? _editingRunId;
+    private string _editedExperimentName = string.Empty;
+    private string _editedDescription = string.Empty;
+    private bool _savingMetadata;
     private bool _disposed;
 
     protected override async Task OnInitializedAsync()
@@ -94,7 +119,7 @@
             }
             ValidationRunSummary run = await ValidationRuns.ImportAsync(
                 temporaryPath,
-                new ValidationRunOptions(_tolerance, _deadlineMs, _warmupSamples, _maximumTimeouts, _hilInputTimeoutMs));
+                new ValidationRunOptions(_tolerance, _deadlineMs, _warmupSamples, 0, _hilInputTimeoutMs));
             _message = $"Run {run.ExperimentName} importada con {run.SampleCount} muestras.";
             await LoadAsync();
         }
@@ -145,6 +170,41 @@
         finally
         {
             _deletingRunId = null;
+        }
+    }
+
+    private void BeginMetadataEdit(ValidationRunSummary run)
+    {
+        _editingRunId = run.Id;
+        _editedExperimentName = run.ExperimentName;
+        _editedDescription = run.Description;
+        _message = null;
+    }
+
+    private void CancelMetadataEdit()
+    {
+        _editingRunId = null;
+        _editedExperimentName = string.Empty;
+        _editedDescription = string.Empty;
+    }
+
+    private async Task SaveMetadataAsync(Guid runId)
+    {
+        _savingMetadata = true;
+        try
+        {
+            bool updated = await ValidationRuns.UpdateMetadataAsync(runId, _editedExperimentName, _editedDescription);
+            _message = updated ? "Nombre y descripcion actualizados." : "La validacion ya no existe.";
+            CancelMetadataEdit();
+            await LoadAsync();
+        }
+        catch (Exception exception)
+        {
+            _message = $"No se pudieron actualizar los metadatos: {exception.Message}";
+        }
+        finally
+        {
+            _savingMetadata = false;
         }
     }
 

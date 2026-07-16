@@ -135,7 +135,9 @@ button.danger:hover:not(:disabled) {
 }
 
 select,
-input[type="number"] {
+input[type="number"],
+input[type="text"],
+textarea {
     min-height: 38px;
     border: 1px solid var(--line);
     border-radius: 2px;
@@ -147,8 +149,27 @@ input[type="number"] {
 }
 
 select:hover:not(:disabled),
-input[type="number"]:hover:not(:disabled) {
+input[type="number"]:hover:not(:disabled),
+input[type="text"]:hover:not(:disabled),
+textarea:hover:not(:disabled) {
     border-color: #55748a;
+}
+
+textarea {
+    min-height: 72px;
+    padding: 9px 10px;
+    resize: vertical;
+}
+
+.run-metadata-editor {
+    display: grid;
+    gap: 8px;
+    min-width: 280px;
+}
+
+.run-metadata-editor label {
+    display: grid;
+    gap: 4px;
 }
 
 select:focus-visible,

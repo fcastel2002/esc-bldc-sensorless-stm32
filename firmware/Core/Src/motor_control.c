@@ -11,6 +11,8 @@
 #include <math.h>
 #include "stm32f1xx_hal.h"
 
+#pragma GCC optimize("Oz")
+
 /*
  *@brief: Macros para la medicion y mapeo de velocidad
  * unidades: PERIODO.
@@ -70,43 +72,47 @@ volatile uint8_t direction  = 0;
 volatile uint8_t consistent_zero_crossing = 0; // flag
 //====================================================
 
-static volatile uint16_t hil_speed_rpm = 0;
-static volatile int16_t  hil_load_torque = 0;
-static volatile uint8_t  hil_flags = 0;
+volatile uint16_t hil_speed_rpm = 0;
+volatile uint8_t  hil_flags = 0;
 static volatile uint32_t hil_last_input_tick = 0;
 static volatile uint16_t hil_input_timeout_ms = HIL_DEFAULT_INPUT_TIMEOUT_MS;
 static volatile uint32_t hil_input_run_id = 0;
 static volatile uint32_t hil_input_source_seq = 0;
 static volatile HilValidationProvenance hil_validation_provenance = {0};
 static volatile uint8_t hil_input_received = 0;
+volatile uint8_t hil_session_state = 0;
+static volatile uint16_t hil_last_step_count = 0;
 
-__attribute__((optimize("Os"))) static uint32_t hil_lock(void)
+__attribute__((optimize("Oz"))) static uint32_t hil_lock(void)
 {
   uint32_t primask = __get_PRIMASK();
   __disable_irq();
   return primask;
 }
 
-__attribute__((optimize("Os"))) static void hil_unlock(uint32_t primask)
+__attribute__((optimize("Oz"))) static void hil_unlock(uint32_t primask)
 {
   if (primask == 0U) {
     __enable_irq();
   }
 }
 
-__attribute__((optimize("Os"))) static void hil_reset_dynamic_state(void)
+static void hil_stop_timer(void)
 {
-  rpm_pi_reset(&rpm_controller);
+  HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
+  HAL_TIM_Base_Stop_IT(&htim4);
+  __HAL_TIM_SET_COUNTER(&htim4, 0U);
+  __HAL_TIM_CLEAR_FLAG(&htim4, TIM_FLAG_UPDATE | TIM_FLAG_CC1);
 }
 
-static inline bool hil_mode_active(void)
+static inline bool hil_runtime_mode_selected(void)
 {
   return control_runtime_mode == CONTROL_RUNTIME_HIL_SIM;
 }
 
 static uint16_t measured_speed_rpm(void)
 {
-  if (hil_mode_active()) {
+  if (hil_session_state != 0U) {
     return hil_speed_rpm;
   }
   return speed_sensor_get_speed_rpm();
@@ -126,10 +132,7 @@ void updateAllMotorControl()
 void motor_control_reset_runtime(void)
 {
   uint32_t primask = hil_lock();
-  HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
-  HAL_TIM_Base_Stop_IT(&htim4);
-  __HAL_TIM_SET_COUNTER(&htim4, 0U);
-  __HAL_TIM_CLEAR_FLAG(&htim4, TIM_FLAG_UPDATE | TIM_FLAG_CC1);
+  hil_stop_timer();
 
   motor_stalled = false;
   consistent_zero_crossing = 0;
@@ -151,11 +154,11 @@ void motor_control_prepare_closed_loop(void)
 
 
 static inline bool state_allows_commutation(void){
-  return !hil_mode_active() && control_runtime_mode != CONTROL_RUNTIME_MONITOR_ONLY &&
+  return !hil_runtime_mode_selected() && control_runtime_mode != CONTROL_RUNTIME_MONITOR_ONLY &&
          (app_state == RUNNING || app_state == CLOSEDLOOP);
 }
 static inline bool state_allows_speed_measurement(void){
-  return !hil_mode_active() &&
+  return !hil_runtime_mode_selected() &&
          (app_state == RUNNING || app_state == CLOSEDLOOP || app_state == FOC_STARTUP);
 }
 static inline bool state_allows_speed_update(void){
@@ -170,7 +173,7 @@ static void commutate(bool update_timestamp){
 void zero_crossing_handler(uint8_t fase)
 {
   static uint8_t speed_calc_counter = 0;
-  if (hil_mode_active()) {
+  if (hil_runtime_mode_selected()) {
     return;
   }
 
@@ -242,7 +245,7 @@ void check_motor_status()
   if (current_time - last_check_time >= STALL_CHECK_TIME_MS) {
     last_check_time = current_time;
 
-    if (hil_mode_active()) {
+    if (hil_session_state != 0U) {
       if (hil_has_timeout()) {
         motor_stalled = true;
         hil_stop();
@@ -276,32 +279,40 @@ void check_motor_status()
 }
 
 
-__attribute__((optimize("Os"))) void pi_control()
+__attribute__((optimize("Oz"))) static void apply_pi_tick(void)
 {
-  if (app_state == CLOSEDLOOP) {
-    if ((!hil_mode_active() && !speed_sensor_is_ready()) ||
-        (hil_mode_active() && !hil_input_received)) {
-      return;
-    }
-    uint16_t speed_output = rpm_pi_step(&rpm_controller,
-                                        speed_setpoint_rpm,
-                                        measured_speed_rpm(),
-                                        max_limit_pwm);
-    bldc_set_pwm(speed_output);
-    if (hil_mode_active()) {
-      hil_validation_provenance.applied_run_id = hil_input_run_id;
-      hil_validation_provenance.applied_source_seq = hil_input_source_seq;
-      hil_validation_provenance.output_generation++;
-      hil_validation_provenance.pwm_update_tick = HAL_GetTick();
-    }
+  uint16_t speed_output = rpm_pi_step(&rpm_controller,
+                                      speed_setpoint_rpm,
+                                      measured_speed_rpm(),
+                                      max_limit_pwm);
+  bldc_set_pwm(speed_output);
+
+  if (hil_session_state != 0U) {
+    hil_validation_provenance.applied_run_id = hil_input_run_id;
+    hil_validation_provenance.applied_source_seq = hil_input_source_seq;
+    hil_validation_provenance.output_generation++;
+    hil_validation_provenance.pwm_update_tick = HAL_GetTick();
   }
+}
+
+__attribute__((optimize("Oz"))) void pi_control()
+{
+  if ((hil_session_state == 0U && !speed_sensor_is_ready()) ||
+      (hil_session_state != 0U && !hil_input_received)) {
+    return;
+  }
+  apply_pi_tick();
 }
 
 
 void stop_motor(uint8_t mode)
 {
   //filtered_speed = 0;
-  if (hil_mode_active() || control_runtime_mode == CONTROL_RUNTIME_MONITOR_ONLY) {
+  if (hil_session_state != 0U) {
+    hil_stop();
+    return;
+  }
+  if (hil_runtime_mode_selected() || control_runtime_mode == CONTROL_RUNTIME_MONITOR_ONLY) {
     PWM_STOP();
     bldc_set_pwm(0);
     motor_control_reset_runtime();
@@ -342,6 +353,10 @@ uint8_t control_mode_set(uint8_t mode)
     return 0;
   }
 
+  if (hil_session_state != 0U && mode != CONTROL_RUNTIME_HIL_SIM) {
+    hil_stop();
+  }
+
   if (mode != CONTROL_RUNTIME_NORMAL) {
     PWM_STOP();
     bldc_set_pwm(0);
@@ -353,18 +368,15 @@ uint8_t control_mode_set(uint8_t mode)
   return 1;
 }
 
-__attribute__((optimize("Os"))) uint8_t hil_start(uint16_t input_timeout_ms)
+__attribute__((optimize("Oz"))) void
+hil_start(uint16_t input_timeout_ms, HilExecutionMode execution_mode)
 {
-  if (!hil_mode_active()) {
-    return 0;
-  }
-
-  uint32_t primask = hil_lock();
+  hil_session_state = (uint8_t)HIL_EXECUTION_STEPPED + 1U;
   PWM_STOP();
   bldc_set_pwm(0);
-  hil_reset_dynamic_state();
+  hil_stop_timer();
+  rpm_pi_reset(&rpm_controller);
   hil_speed_rpm = 0;
-  hil_load_torque = 0;
   hil_flags = 0;
   hil_input_run_id = 0;
   hil_input_source_seq = 0;
@@ -372,29 +384,35 @@ __attribute__((optimize("Os"))) uint8_t hil_start(uint16_t input_timeout_ms)
   hil_validation_provenance = (HilValidationProvenance){0};
   hil_input_timeout_ms = input_timeout_ms == 0U ? HIL_DEFAULT_INPUT_TIMEOUT_MS : input_timeout_ms;
   hil_last_input_tick = HAL_GetTick();
+  hil_session_state = (uint8_t)execution_mode + 1U;
   motor_stalled = false;
   consistent_zero_crossing = 1;
   TIM4->PSC = MOTOR_CONTROL_TIMER_PSC;
   TIM4->ARR = MOTOR_CONTROL_TIMER_ARR;
   __HAL_TIM_SET_COUNTER(&htim4, 0U);
   __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, MOTOR_CONTROL_TIMER_COMPARE);
+  TIM4->EGR = TIM_EGR_UG;
+  __HAL_TIM_CLEAR_FLAG(&htim4, TIM_FLAG_UPDATE | TIM_FLAG_CC1);
   app_state = CLOSEDLOOP;
-  HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
-  hil_unlock(primask);
-  return 1;
+  if (execution_mode == HIL_EXECUTION_PERIODIC) {
+    HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
+  }
 }
 
-__attribute__((optimize("Os"))) void hil_stop(void)
+__attribute__((optimize("Oz"))) void hil_stop(void)
 {
-  uint32_t primask = hil_lock();
+  hil_session_state = (uint8_t)HIL_EXECUTION_STEPPED + 1U;
   PWM_STOP();
   bldc_set_pwm(0);
-  HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
+  hil_input_received = 0;
+  hil_stop_timer();
+  hil_session_state = 0;
+  control_runtime_mode = CONTROL_RUNTIME_NORMAL;
+  consistent_zero_crossing = 0;
   app_state = IDLE;
-  hil_unlock(primask);
 }
 
-__attribute__((optimize("Os"))) void hil_set_inputs(uint16_t speed_rpm,
+__attribute__((optimize("Oz"))) void hil_set_inputs(uint16_t speed_rpm,
                                                       int16_t load_torque,
                                                       uint8_t flags,
                                                       uint32_t run_id,
@@ -402,7 +420,7 @@ __attribute__((optimize("Os"))) void hil_set_inputs(uint16_t speed_rpm,
 {
   uint32_t primask = hil_lock();
   hil_speed_rpm = speed_rpm;
-  hil_load_torque = load_torque;
+  (void)load_torque;
   hil_flags = flags;
   hil_input_run_id = run_id;
   hil_input_source_seq = source_seq;
@@ -416,35 +434,15 @@ __attribute__((optimize("Os"))) void hil_set_inputs(uint16_t speed_rpm,
   hil_unlock(primask);
 }
 
-uint8_t hil_is_active(void)
-{
-  return hil_mode_active() ? 1U : 0U;
-}
-
 uint8_t hil_has_timeout(void)
 {
-  if (!hil_mode_active()) {
+  if (hil_session_state == 0U) {
     return 0U;
   }
   return (uint32_t)(HAL_GetTick() - hil_last_input_tick) > hil_input_timeout_ms ? 1U : 0U;
 }
 
-uint16_t hil_get_speed_rpm(void)
-{
-  return hil_speed_rpm;
-}
-
-uint16_t hil_get_pwm_command(void)
-{
-  return bldc_get_pwm();
-}
-
-uint8_t hil_get_flags(void)
-{
-  return hil_flags;
-}
-
-__attribute__((optimize("Os"))) void
+__attribute__((optimize("Oz"))) void
 hil_get_validation_provenance(HilValidationProvenance* provenance)
 {
   if (provenance == NULL) {
@@ -454,5 +452,45 @@ hil_get_validation_provenance(HilValidationProvenance* provenance)
   uint32_t primask = hil_lock();
   *provenance = hil_validation_provenance;
   hil_unlock(primask);
+}
+
+__attribute__((optimize("Oz"))) HilStepResult
+hil_step(uint16_t speed_rpm,
+         uint8_t flags,
+         uint32_t run_id,
+         uint32_t source_seq,
+         uint16_t requested_steps)
+{
+  if (hil_input_run_id != 0U && run_id == hil_input_run_id &&
+      source_seq == hil_input_source_seq && speed_rpm == hil_speed_rpm &&
+      flags == hil_flags && requested_steps == hil_last_step_count) {
+    hil_last_input_tick = HAL_GetTick();
+    return HIL_STEP_REPLAYED;
+  }
+
+  if ((hil_input_run_id != 0U && run_id != hil_input_run_id) ||
+      (hil_input_source_seq != 0U && source_seq <= hil_input_source_seq) ||
+      hil_validation_provenance.output_generation > UINT32_MAX - requested_steps) {
+    return HIL_STEP_INVALID;
+  }
+
+  hil_last_step_count = requested_steps;
+  hil_speed_rpm = speed_rpm;
+  hil_flags = flags;
+  hil_input_run_id = run_id;
+  hil_input_source_seq = source_seq;
+  hil_input_received = 1;
+  hil_validation_provenance.accepted_run_id = run_id;
+  hil_validation_provenance.accepted_source_seq = source_seq;
+  hil_validation_provenance.accepted_generation =
+      hil_validation_provenance.output_generation;
+  hil_last_input_tick = HAL_GetTick();
+  consistent_zero_crossing = 1;
+
+  for (uint16_t step = 0; step < requested_steps; step++) {
+    apply_pi_tick();
+  }
+
+  return HIL_STEP_APPLIED;
 }
 

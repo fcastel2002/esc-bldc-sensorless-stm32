@@ -63,7 +63,7 @@ public sealed record ValidationRunOptions(
     ushort AbsoluteToleranceCounts = 0,
     int ResponseDeadlineMs = 100,
     int WarmupSamples = 0,
-    int MaximumTimeouts = int.MaxValue,
+    int MaximumTimeouts = 0,
     ushort HilInputTimeoutMs = 500);
 
 public sealed record ValidationRunSummary(
