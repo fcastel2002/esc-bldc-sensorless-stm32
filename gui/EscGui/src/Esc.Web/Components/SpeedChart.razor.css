@@ -1,16 +1,16 @@
 .scope-shell {
-  --scope-bg: #061119;
-  --scope-grid: #183544;
-  --scope-grid-major: #2d5264;
-  --scope-trace: #49c6ed;
-  --scope-reference: #d8e8ef;
-  --scope-cursor-a: #f5b942;
-  --scope-cursor-b: #48d590;
+  --scope-bg: #ffffff;
+  --scope-grid: #e5e9ec;
+  --scope-grid-major: #c3ccd2;
+  --scope-trace: #0072bd;
+  --scope-reference: #4d5962;
+  --scope-cursor-a: #b66a00;
+  --scope-cursor-b: #2f7d4f;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 2px;
   background: var(--scope-bg);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025);
+  box-shadow: none;
 }
 
 .scope-header,
@@ -21,7 +21,7 @@
   gap: 14px;
   border-bottom: 1px solid var(--line-dim);
   padding: 10px 12px;
-  background: rgba(16, 29, 39, 0.82);
+  background: #f1f3f4;
 }
 
 .scope-legend,
@@ -117,7 +117,7 @@
 
 .scope-reference-bar {
   justify-content: flex-start;
-  background: rgba(7, 18, 24, 0.72);
+  background: #f8f9fa;
 }
 
 .scope-reference-bar > div {
@@ -157,8 +157,8 @@
 
 .scope-y-title,
 .scope-x-title {
-  color: #7893a2;
-  font-family: "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif;
+  color: #5d6870;
+  font-family: "Segoe UI", Arial, sans-serif;
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.1em;
@@ -178,7 +178,7 @@
   position: relative;
   grid-column: 2;
   grid-row: 1;
-  color: #9bb2be;
+  color: #59666f;
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
 }
@@ -233,7 +233,7 @@
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 3px rgba(73, 198, 237, 0.38));
+  filter: none;
 }
 
 .scope-reference-line {
@@ -261,10 +261,10 @@
   position: absolute;
   width: 9px;
   height: 9px;
-  border: 2px solid #e8fbff;
+  border: 2px solid #ffffff;
   border-radius: 50%;
   background: var(--scope-trace);
-  box-shadow: 0 0 8px rgba(73, 198, 237, 0.7);
+  box-shadow: 0 0 0 1px #0066a8;
   transform: translate(-50%, -50%);
   pointer-events: none;
 }
@@ -306,7 +306,7 @@
 
 .scope-empty strong {
   color: var(--text);
-  font-family: "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif;
+  font-family: "Segoe UI", Arial, sans-serif;
   font-size: 0.9rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -321,7 +321,7 @@
   position: relative;
   grid-column: 3;
   grid-row: 2;
-  color: #9bb2be;
+  color: #59666f;
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
 }
@@ -351,11 +351,7 @@
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   border-top: 1px solid var(--line-dim);
-  background: linear-gradient(
-    180deg,
-    rgba(16, 29, 39, 0.95),
-    rgba(8, 20, 27, 0.95)
-  );
+  background: #f1f3f4;
 }
 
 .scope-readout {
@@ -375,7 +371,7 @@
 }
 
 button.scope-readout:hover:not(:disabled) {
-  background: rgba(73, 198, 237, 0.045);
+  background: #e9f3f8;
   box-shadow: none;
   transform: none;
 }
@@ -386,7 +382,7 @@ button.scope-readout:hover:not(:disabled) {
 
 .scope-readout span {
   color: var(--text-muted);
-  font-family: "Bahnschrift SemiCondensed", "Arial Narrow", sans-serif;
+  font-family: "Segoe UI", Arial, sans-serif;
   font-size: 0.65rem;
   font-weight: 600;
   letter-spacing: 0.1em;

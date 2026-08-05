@@ -9,6 +9,20 @@
 - GUI lives in `gui/EscGui/`; `gui/EscGui/EscGui.slnx` exists as an auxiliary solution file, but official commands use individual `.csproj` paths. Projects target `net10.0`.
 - High-value docs before deep changes: `firmware/COMM_PROTOCOL.md` for frames/opcodes, `docs/PROJECT_FLOW.md` for firmware flow, `gui/EscGui/GUI_AGENT_CONTEXT.md` for GUI ownership, `gui/EscGui/BRIDGE_WALKTHROUGH.md` for bridge/HID/UDP details.
 
+## Codebase Memory MCP
+
+- Prefer `codebase-memory` for architectural discovery, symbol lookup, callers/callees, data flow, cross-service paths, change impact, complexity analysis, and code relationships. Prefer `Glob`/`Grep` for raw file-name or exact-text searches and for content that is not represented in the graph.
+- The indexed project for this repository is `D-06.-Proyectos-esc-bldc-stm32`. Confirm it with `list_projects` rather than assuming it exists in a new environment; index the repository from the Git worktree root, not from a firmware, GUI, or simulation subdirectory.
+- Do not reindex on every task. Check `index_status`; call `index_repository` when the project is missing, indexing failed, or structural results are stale after relevant code changes. Use `full` with persistence for the initial/shared index, `moderate` when semantic relationships are needed, and `fast` for routine structural refreshes.
+- Start unfamiliar or cross-cutting work with `get_architecture`, scoped by `path` and limited to the needed aspects. Use `overview` first; request `clusters`, `boundaries`, `layers`, `routes`, `hotspots`, or `file_tree` only when they help answer the task.
+- Use `search_graph` instead of text search to discover definitions and relationships. Prefer a natural-language `query` for discovery, `name_pattern`/`qn_pattern` for exact symbol matching, and `semantic_query` when vocabulary differs. Narrow by label or path and paginate while `has_more` is true.
+- Before reading a function or class through the graph, find its exact `qualified_name` with `search_graph`, then call `get_code_snippet`. Use ordinary file reads when broader surrounding file context is required.
+- Use `trace_path` for inbound/outbound call impact and `data_flow` for value propagation; enable tests explicitly when test coverage is part of the question. Use `cross_service` for HTTP, async, channel, gRPC, GraphQL, or tRPC paths when cross-repository indexes exist.
+- Use `detect_changes` before non-trivial edits to identify affected callers, tests, routes, and coupled files, and after edits when an impact summary is useful. Keep the scope and depth as narrow as the task permits.
+- Use `query_graph` only for multi-hop, aggregate, complexity, or hotspot questions that higher-level tools cannot answer. Call `get_graph_schema` before writing Cypher that depends on unfamiliar labels, relationships, or properties, and always bound broad queries with `LIMIT` or `max_rows`.
+- Compare result counts with limits. If `search_graph.has_more` is true, paginate; if `search_code.total_results` exceeds its limit, raise the limit or narrow the query. Do not treat truncated results as exhaustive.
+- After substantial structural code changes, refresh the index with persistence so `.codebase-memory/graph.db.zst` remains useful to future sessions. Do not create or update a codebase-memory ADR unless the user requests architectural documentation or the task explicitly establishes a lasting architectural decision.
+
 ## Commands
 
 - Firmware configure/build from `firmware/`: `cmake --preset Debug` then `cmake --build --preset Debug`.
@@ -19,7 +33,7 @@
 - Run GUI tests: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj`.
 - Run a focused GUI test by filter: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj --filter "FullyQualifiedName~ProtocolTests"` or replace `ProtocolTests` with the target class/method substring.
 - Publish Windows GUI exe from repo root: `powershell -ExecutionPolicy Bypass -File .\gui\EscGui\publish-gui-win-x64.ps1`; output is `gui\EscGui\publish\win-x64\Esc.Web.exe` plus required web assets in the same folder.
-- After every completed feature, run the Windows GUI publish command as final verification; a successful build alone is not sufficient.
+- Run the Windows GUI publish command as final verification when a change affects `gui/EscGui/`, the shared GUI-facing protocol, bridge behavior, web assets, or Windows packaging. Do not publish the GUI for changes limited to firmware, documentation, repository metadata, or `simulacion_agitador/` unless they also affect the GUI.
 
 ## Git Workflow
 

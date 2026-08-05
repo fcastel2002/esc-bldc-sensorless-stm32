@@ -9,8 +9,8 @@
 <main class="dashboard">
     <section class="topbar">
         <div>
-            <p class="eyebrow">ESC BLDC STM32 / CONTROL EN VIVO</p>
-            <h1>Consola de control del motor</h1>
+            <p class="eyebrow">Operación en tiempo real</p>
+            <h1>Control del motor</h1>
         </div>
 
         <div class="topbar-actions">
@@ -174,24 +174,6 @@
         </div>
     </section>
 
-    <section class="panel hil-panel">
-        <div class="panel-title">
-            <h2>Enlace HIL / Simulink</h2>
-            <span>UDP localhost:5055</span>
-        </div>
-        <div class="hil-grid">
-            <span>Estado</span><strong>@(Snapshot.Hil.Enabled ? "HIL_SIM" : "-")</strong>
-            <span>Frames RX</span><strong>@Snapshot.Hil.RxFrames</strong>
-            <span>Perdidos</span><strong>@Snapshot.Hil.LostFrames</strong>
-            <span>Rate</span><strong>@Snapshot.Hil.EffectiveRateHz.ToString("0.0") Hz</strong>
-            <span>Jitter</span><strong>@Snapshot.Hil.JitterMs.ToString("0.00") ms</strong>
-            <span>RTT medio</span><strong>@Snapshot.Hil.AverageRoundTripMs.ToString("0.00") ms</strong>
-            <span>Velocidad UDP</span><strong>@(Snapshot.Hil.LastInputs?.SpeedRpm.ToString() ?? "-") rpm</strong>
-            <span>Velocidad MCU</span><strong>@(Snapshot.Hil.LastOutputs?.MeasuredRpm.ToString() ?? "-") rpm</strong>
-            <span>PWM logico</span><strong>@(Snapshot.Hil.LastOutputs?.PwmCommand.ToString() ?? "-")</strong>
-            <span>Timeout</span><strong>@BoolText(Snapshot.Hil.LastOutputs?.TimedOut)</strong>
-        </div>
-    </section>
 </main>
 
 @code {
