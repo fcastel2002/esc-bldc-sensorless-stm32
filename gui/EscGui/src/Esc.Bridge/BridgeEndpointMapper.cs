@@ -35,8 +35,8 @@ public static class BridgeEndpointMapper
 
         group.MapPost("/mode", async (ModeRequest request, EscBridgeService bridge) =>
         {
-            await bridge.SetModeAsync(request.Mode);
-            return Results.Ok(bridge.Snapshot);
+            CommandResult result = await bridge.SetModeAsync(request.Mode);
+            return result.Success ? Results.Ok(bridge.Snapshot) : Results.Conflict(result);
         });
 
         group.MapPost("/run", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
@@ -47,6 +47,8 @@ public static class BridgeEndpointMapper
             await bridge.EmergencyStopAsync(cancellationToken));
         group.MapPost("/set-speed", async (SetSpeedRequest request, EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.SetSpeedRpmAsync(request.Rpm, cancellationToken));
+        group.MapPost("/sine-drive", async (SineDriveRequest request, EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.SetSineDriveAsync(request.ElectricalFrequencyHz, request.AmplitudePercent, cancellationToken));
 
         group.MapGet("/config/{parameter}", async (string parameter, EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.GetConfigAsync(ParseConfigParam(parameter), cancellationToken));
@@ -166,6 +168,7 @@ public static class BridgeEndpointMapper
     public sealed record ConnectRequest(string? DevicePath);
     public sealed record ModeRequest(ControlMode Mode);
     public sealed record SetSpeedRequest(int Rpm);
+    public sealed record SineDriveRequest(double ElectricalFrequencyHz, double AmplitudePercent);
     public sealed record SetConfigRequest(double Value);
     public sealed record LogRateRequest(ushort RateMs);
     public sealed record HilInputRequest(

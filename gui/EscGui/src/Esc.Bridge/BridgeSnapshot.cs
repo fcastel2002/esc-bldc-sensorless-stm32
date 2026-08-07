@@ -5,6 +5,7 @@ namespace Esc.Bridge;
 
 public sealed record BridgeSnapshot(
     DeviceConnectionState State,
+    bool TransportOpen,
     ControlMode Mode,
     IReadOnlyList<HidDeviceDescriptor> Devices,
     HidDeviceDescriptor? CurrentDevice,
@@ -18,6 +19,8 @@ public sealed record BridgeSnapshot(
     ValidationReference? ValidationReference,
     ActiveControllerConfig? ActiveControllerConfig,
     ActiveSpeedLimits? ActiveSpeedLimits,
+    StartupConfiguration? StartupConfiguration,
+    SineDriveStatus SineDrive,
     DateTimeOffset? ValidationReferenceCapturedAt,
     string? ValidationReferenceError);
 
@@ -30,6 +33,19 @@ public sealed record ActiveControllerConfig(
 public sealed record ActiveSpeedLimits(
     ushort MinRpm,
     ushort MaxRpm);
+
+public sealed record StartupConfiguration(
+    double InitialAmplitudePercent,
+    double FinalAmplitudePercent,
+    double InitialFrequencyHz,
+    double FinalFrequencyHz,
+    double DurationSeconds);
+
+public sealed record SineDriveStatus(
+    bool Active,
+    SineDriveSettings? Requested,
+    SineDriveSettings? Applied,
+    DateTimeOffset? LastAppliedAt);
 
 public sealed record TelemetryStats(
     int SampleCount,

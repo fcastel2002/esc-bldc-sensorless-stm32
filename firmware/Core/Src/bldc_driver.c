@@ -165,3 +165,16 @@ uint16_t bldc_get_pwm(void) {
 int8_t bldc_get_commutation_step(void) {
   return commutation_step;
 }
+
+void bldc_disable_power_stage(void)
+{
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  floating_U = false;
+  floating_V = false;
+  floating_W = false;
+  PWM_STOP();
+  GPIOB->ODR &= ~(EN_U | EN_V);
+  GPIOA->ODR &= ~EN_W;
+  if (primask == 0U) __enable_irq();
+}

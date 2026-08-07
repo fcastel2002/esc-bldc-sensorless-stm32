@@ -27,7 +27,8 @@ typedef enum {
   CLOSEDLOOP, // aligned
   STOPPED,
   HARD_ERROR,
-  FINISH
+  FINISH,
+  SINE_DRIVE
 
 } App_States_t;
 

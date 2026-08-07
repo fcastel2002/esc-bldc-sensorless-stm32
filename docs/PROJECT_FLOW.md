@@ -55,8 +55,8 @@ Flujo:
 
 1. [`commInit()`](../firmware/Core/Src/comm.c#L30) limpia buffers y llama a [`comm_transport_init()`](../firmware/Core/Src/comm_transport.c#L32).
 2. [`comm_transport_init()`](../firmware/Core/Src/comm_transport.c#L32) lee `PB8` (`COMM_MODE`):
-   - `PB8` alto o abierto: UART por USART1.
-   - `PB8` bajo: USB FS Custom HID.
+   - `PB8` alto o abierto: USB FS Custom HID.
+   - `PB8` bajo: UART por USART1.
 3. En UART, [`HAL_UART_RxCpltCallback()`](../firmware/Core/Src/comm_transport.c#L119) llena un buffer circular byte a byte.
 4. En USB, [`CustomHID_OutReport()`](../firmware/Core/Src/usbd_customhid_if.c#L42) entrega reports de 64 bytes a [`comm_transport_receive_usb_report()`](../firmware/Core/Src/comm_transport.c#L108).
 5. [`processUartData()`](../firmware/Core/Src/comm.c#L39) llama a [`comm_transport_process()`](../firmware/Core/Src/comm_transport.c#L87), que arma frames y los pasa a [`comm_protocol_handle_frame()`](../firmware/Core/Src/comm_protocol.c#L374).
@@ -68,8 +68,9 @@ Comandos principales implementados en [`execute_request()`](../firmware/Core/Src
 - `PING`: eco de payload.
 - `GET_STATUS`: devuelve estado, transporte, flags del motor, setpoint, velocidad y `max_pwm`.
 - `RUN`: llama a [`foc_startup()`](../firmware/Core/Src/startup.c#L94).
-- `STOP` / `ESTOP`: llaman a [`stop_motor()`](../firmware/Core/Src/motor_control.c#L310).
+- `STOP` / `ESTOP`: llaman a [`stop_motor()`](../firmware/Core/Src/motor_control.c#L310). `ESTOP` corta PWM inmediatamente, no bloquea el procesamiento de comunicaciones y se acepta en cualquier estado operativo.
 - `SET_SPEED_RPM`: cambia `speed_setpoint_rpm`.
+- `SINE_DRIVE`: entra o actualiza el lazo abierto senoidal continuo con frecuencia electrica y amplitud atomicas; `STOP` sale del modo y un watchdog de 1.5 s cubre la perdida del host.
 - `GET_CONFIG`, `SET_CONFIG`, `RESET_CONFIG`: leen, modifican o restauran parametros.
   En `CLOSEDLOOP`, `PWM_FREQ`, `KP`, `KI` y `KD` se aplican en caliente sin salir del lazo cerrado; el resto sigue pasando por `CONFIG`.
 - `LOG_START`, `LOG_STOP`, `LOG_RATE`: controlan telemetria periodica.
@@ -91,8 +92,9 @@ Defaults principales en [`set_default_esc_params()`](../firmware/Core/Src/hard_c
 - velocidad maxima: 5400 RPM.
 - velocidad minima: 200 RPM.
 - pares de polos: 2.
+- arranque: amplitud `20% -> 100%`, frecuencia electrica `2.09 -> 9.28 Hz`, duracion 3 s.
 
-La persistencia esta en [`flash_config.c`](../firmware/Core/Src/flash_config.c). Usa dos paginas rotativas al final de Flash, definidas por [`FLASH_CONFIG_START`](../firmware/Core/Inc/flash_config.h#L13). [`flash_config_init()`](../firmware/Core/Src/flash_config.c#L157) busca una pagina valida por firma y CRC; [`flash_config_save()`](../firmware/Core/Src/flash_config.c#L180) escribe en la otra pagina para repartir desgaste.
+La persistencia esta en [`flash_config.c`](../firmware/Core/Src/flash_config.c). Usa dos paginas rotativas al final de Flash, definidas por [`FLASH_CONFIG_START`](../firmware/Core/Inc/flash_config.h#L13). [`flash_config_init()`](../firmware/Core/Src/flash_config.c) busca una pagina valida por firma y CRC; [`flash_config_save()`](../firmware/Core/Src/flash_config.c) escribe en la otra pagina para repartir desgaste. La configuracion V3 amplia el bloque con cinco parametros fisicos de arranque; bloques V1/V2 se validan con su layout original y se migran sin perder los campos existentes.
 
 Cuando un comando modifica parametros, las funciones `set_*` de [`hard_config.c`](../firmware/Core/Src/hard_config.c) llaman a [`flash_config_parameter_changed()`](../firmware/Core/Src/flash_config.c#L257). Si el cambio llega durante `CLOSEDLOOP` y solo afecta `PWM_FREQ`, `KP`, `KI` o `KD`, el firmware recalcula runtime al instante y mantiene el motor girando. El resto de parametros sigue entrando por `CONFIG`, que fuerza recalculo de timers/control y deja el guardado pendiente hasta `SAVE_CONFIG`.
 
@@ -103,16 +105,18 @@ El arranque activo esta en [`startup.c`](../firmware/Core/Src/startup.c).
 [`foc_startup()`](../firmware/Core/Src/startup.c#L94) no hace FOC completo con realimentacion de corriente; usa una rampa sinusoidal open-loop:
 
 1. Genera tablas senoidales U/V/W con [`generate_sine_tables()`](../firmware/Core/Src/startup.c#L26).
-2. Reinicia fase y amplitud inicial para que cada intento de arranque empiece igual, incluso despues de un stall o cambio de sentido.
-3. Configura TIM4 como base temporal de actualizacion.
+2. Lee amplitud inicial/final, frecuencia electrica inicial/final y duracion desde la configuracion activa.
+3. Configura TIM4 desde la frecuencia fisica inicial y fuerza la carga de PSC/ARR para no heredar el periodo anterior.
 4. Habilita PWM en TIM1 y los enable de las fases.
 5. Pone `app_state = FOC_STARTUP`.
 
-Cada update de TIM4 llama a [`HAL_TIM_PeriodElapsedCallback()`](../firmware/Core/Src/isr_callbacks.c#L45), que a su vez llama a [`update_pwm_startup_foc()`](../firmware/Core/Src/startup.c#L171). Esa funcion avanza la fase de las tablas, aumenta amplitud y frecuencia, y tras `STARTUP_ITERATIONS` ejecuta [`executeTransition()`](../firmware/Core/Src/startup.c#L217).
+Cada update de TIM4 llama a [`HAL_TIM_PeriodElapsedCallback()`](../firmware/Core/Src/isr_callbacks.c), que a su vez llama a [`update_pwm_startup_foc()`](../firmware/Core/Src/startup.c). Esa funcion avanza la fase de las tablas e interpola linealmente amplitud y frecuencia segun tiempo transcurrido. Al completar la duracion configurada detiene la senoidal y pasa a six-step.
 
-[`executeTransition()`](../firmware/Core/Src/startup.c#L217) detiene la senoidal, deja un duty inicial, habilita six-step y pasa a `RUNNING`.
+El handoff detiene la senoidal, deja un duty inicial de 45%, prepara six-step y pasa a `RUNNING`.
 
-Si se detecta `motor_stalled`, o si `RUNNING` dura mas de 1.5 s sin pasar a `READY`, [`handleState()`](../firmware/Core/Src/state_machine.c#L16) corta el PWM durante 0.5 s y relanza [`foc_startup()`](../firmware/Core/Src/startup.c#L94). Este timeout no depende del detector de stall; funciona como watchdog directo del enganche sensorless.
+Si se detecta `motor_stalled`, o si `RUNNING` dura mas de 4.5 s sin pasar a `READY`, [`handleState()`](../firmware/Core/Src/state_machine.c) corta el PWM durante 0.5 s y relanza [`foc_startup()`](../firmware/Core/Src/startup.c). Este timeout no depende del detector de stall; funciona como watchdog directo del enganche sensorless.
+
+El mismo generador soporta `SINE_DRIVE`, un estado adicional sin handoff automatico. En ese estado aplica una frecuencia electrica fija de 2 a 10 Hz y una amplitud de 0 a 100%, ignora BEMF para conmutacion y exige que el bridge renueve el comando en un ciclo dedicado de 350 ms. Si pasan 1500 ms sin renovacion, el firmware deshabilita las tres fases y vuelve a `IDLE`.
 
 ## 6. Conmutacion sensorless
 
@@ -182,7 +186,7 @@ El motor se monitorea con [`check_motor_status()`](../firmware/Core/Src/motor_co
 | [`firmware/Core/Src/comm_protocol.c`](../firmware/Core/Src/comm_protocol.c) | Protocolo binario, CRC, opcodes y efectos de comandos. |
 | [`firmware/Core/Src/hard_config.c`](../firmware/Core/Src/hard_config.c) | Parametros del ESC, limites, getters/setters y actualizacion de TIM1. |
 | [`firmware/Core/Src/flash_config.c`](../firmware/Core/Src/flash_config.c) | Persistencia en Flash con paginas rotativas y CRC. |
-| [`firmware/Core/Src/startup.c`](../firmware/Core/Src/startup.c) | Arranque senoidal open-loop y transicion a six-step. |
+| [`firmware/Core/Src/startup.c`](../firmware/Core/Src/startup.c) | Generador SPWM comun, arranque configurable, modo senoidal continuo y transicion a six-step. |
 | [`firmware/Core/Src/bldc_driver.c`](../firmware/Core/Src/bldc_driver.c) | Conmutacion de seis pasos y duty PWM aplicado. |
 | [`firmware/Core/Src/motor_control.c`](../firmware/Core/Src/motor_control.c) | Integracion del PI RPM, manejo de stall y zero-crossing handler. |
 | [`firmware/Core/Src/rpm_pi_controller.c`](../firmware/Core/Src/rpm_pi_controller.c) | Nucleo PI RPM Q16.16, anti-windup y escalado de ARR. |

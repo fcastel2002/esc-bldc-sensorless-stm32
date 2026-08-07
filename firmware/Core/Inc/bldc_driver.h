@@ -30,6 +30,7 @@ extern void bldc_init(void);
 extern void bldc_set_pwm(uint16_t new_pwm);
 extern void bldc_commutate();
 extern void bldc_stop(void);
+extern void bldc_disable_power_stage(void);
 extern uint16_t bldc_get_pwm(void);
 extern int8_t bldc_get_commutation_step(void);
 #endif /* INC_BLDC_DRIVER_H_ */

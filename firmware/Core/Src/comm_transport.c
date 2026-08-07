@@ -8,7 +8,7 @@
 
 #include <string.h>
 
-static CommTransportMode active_mode = COMM_TRANSPORT_UART;
+static CommTransportMode active_mode = COMM_TRANSPORT_USB;
 static uint8_t uart_frame[COMM_FRAME_SIZE];
 static uint8_t uart_frame_index = 0;
 
@@ -34,8 +34,8 @@ bool comm_transport_is_usb_ready(void)
 void comm_transport_init(void)
 {
   active_mode = (HAL_GPIO_ReadPin(COMM_MODE_GPIO_Port, COMM_MODE_Pin) == GPIO_PIN_RESET)
-                  ? COMM_TRANSPORT_USB
-                  : COMM_TRANSPORT_UART;
+                  ? COMM_TRANSPORT_UART
+                  : COMM_TRANSPORT_USB;
 
   if (active_mode == COMM_TRANSPORT_USB) {
     MX_USB_DEVICE_Init();

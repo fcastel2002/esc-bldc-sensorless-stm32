@@ -11,17 +11,9 @@
 #include "motor_control.h"
 
 typedef struct {
-  uint16_t phase_step;         // Incremento de fase actual
-  uint16_t target_phase_step;  // Valor objetivo final
-  uint16_t initial_phase_step; // Valor inicial
-  uint32_t ramp_duration_ms;   // Duración total de la rampa
-  uint32_t ramp_start_time;    // Tiempo de inicio
-  uint16_t timer_arr;          // Valor ARR del timer
-  bool     ramping_active;     // Estado de la rampa
-  uint32_t last_update_time;   // Último tiempo de actualización
-  uint16_t update_interval_ms; // Intervalo entre actualizaciones
-  uint16_t startup_counter;    // Simple iteration counter for startup
-} SineDriveController;
+  uint32_t frequency_millihz;
+  uint16_t amplitude_permille;
+} SineDriveSettings;
 
 extern const uint16_t sineLookupTable[100];
 
@@ -33,8 +25,15 @@ extern volatile uint16_t zero_crossings;
 
 // FOC STARTUP DEFINES
 #define SIN_TABLE_SIZE 359
-extern void update_pwm_startup_foc();
+#define SINE_DRIVE_WATCHDOG_MS 1500U
+extern void update_pwm_startup_foc(void);
 extern void foc_startup(void);
+extern bool sine_drive_start_or_update(uint32_t frequency_millihz,
+                                       uint16_t amplitude_permille,
+                                       SineDriveSettings* applied);
+extern void sine_drive_stop(void);
+extern void sine_drive_check_watchdog(void);
+extern bool sine_drive_is_active(void);
 
 extern uint16_t sin_table_U[SIN_TABLE_SIZE];
 extern uint16_t sin_table_V[SIN_TABLE_SIZE];

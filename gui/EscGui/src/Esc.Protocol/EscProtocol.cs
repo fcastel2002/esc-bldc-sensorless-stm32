@@ -120,13 +120,62 @@ public static class EscProtocol
 
     public static byte[] ConfigPayload(ConfigParam parameter, double value)
     {
+        EnsureFinite(value, nameof(value));
         return parameter switch
         {
             ConfigParam.PwmFreq or ConfigParam.MaxSpeed or ConfigParam.MinSpeed => UInt16Payload((int)value),
             ConfigParam.PolePairs => new[] { checked((byte)value) },
             ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm => Int16CentiPayload(value),
+            ConfigParam.StartupInitialAmplitude or ConfigParam.StartupFinalAmplitude
+                => UInt16Payload(checked((int)Math.Round(value * 10.0))),
+            ConfigParam.StartupInitialFrequency or ConfigParam.StartupFinalFrequency
+                => UInt32Payload(checked((uint)Math.Round(value * 1000.0))),
+            ConfigParam.StartupDuration
+                => UInt32Payload(checked((uint)Math.Round(value * 1000.0))),
             _ => throw new ArgumentOutOfRangeException(nameof(parameter), parameter, "Unsupported config parameter.")
         };
+    }
+
+    public static byte[] UInt32Payload(uint value)
+    {
+        var payload = new byte[4];
+        BinaryPrimitives.WriteUInt32LittleEndian(payload, value);
+        return payload;
+    }
+
+    public static byte[] SineDrivePayload(double electricalFrequencyHz, double amplitudePercent)
+    {
+        EnsureFinite(electricalFrequencyHz, nameof(electricalFrequencyHz));
+        EnsureFinite(amplitudePercent, nameof(amplitudePercent));
+        if (electricalFrequencyHz is < CommConstants.MinSineFrequencyHz or > CommConstants.MaxSineFrequencyHz)
+        {
+            throw new ArgumentOutOfRangeException(nameof(electricalFrequencyHz));
+        }
+        if (amplitudePercent is < 0 or > CommConstants.MaxSineAmplitudePercent)
+        {
+            throw new ArgumentOutOfRangeException(nameof(amplitudePercent));
+        }
+
+        var payload = new byte[6];
+        BinaryPrimitives.WriteUInt32LittleEndian(
+            payload.AsSpan(0, 4), checked((uint)Math.Round(electricalFrequencyHz * 1000.0)));
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            payload.AsSpan(4, 2), checked((ushort)Math.Round(amplitudePercent * 10.0)));
+        return payload;
+    }
+
+    public static SineDriveSettings DecodeSineDrive(EscFrame frame)
+    {
+        EnsureOkResponse(frame, CommOpcode.SineDrive);
+        if (frame.Payload.Length != 6)
+        {
+            throw new EscProtocolException(
+                $"SINE_DRIVE response payload must be exactly 6 bytes, received {frame.Payload.Length}.");
+        }
+
+        return new SineDriveSettings(
+            BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(0, 4)) / 1000.0,
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(4, 2)) / 10.0);
     }
 
     public static byte[] ControlModePayload(ControlRuntimeMode mode)
@@ -267,6 +316,12 @@ public static class EscProtocol
                 => BinaryPrimitives.ReadUInt16LittleEndian(payload[..2]),
             ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm when payload.Length >= 2
                 => BinaryPrimitives.ReadInt16LittleEndian(payload[..2]) / 100.0,
+            ConfigParam.StartupInitialAmplitude or ConfigParam.StartupFinalAmplitude when payload.Length >= 2
+                => BinaryPrimitives.ReadUInt16LittleEndian(payload[..2]) / 10.0,
+            ConfigParam.StartupInitialFrequency or ConfigParam.StartupFinalFrequency when payload.Length >= 4
+                => BinaryPrimitives.ReadUInt32LittleEndian(payload[..4]) / 1000.0,
+            ConfigParam.StartupDuration when payload.Length >= 4
+                => BinaryPrimitives.ReadUInt32LittleEndian(payload[..4]) / 1000.0,
             _ => payload.ToArray()
         };
     }
@@ -396,7 +451,16 @@ public static class EscProtocol
             7 => "STOPPED",
             8 => "HARD_ERROR",
             9 => "FINISH",
+            10 => "SINE_DRIVE",
             _ => $"STATE_{value}"
         };
+    }
+
+    private static void EnsureFinite(double value, string parameterName)
+    {
+        if (!double.IsFinite(value))
+        {
+            throw new ArgumentOutOfRangeException(parameterName, value, "Value must be finite.");
+        }
     }
 }

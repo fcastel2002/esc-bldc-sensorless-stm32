@@ -6,8 +6,8 @@ The communication mode is selected once at boot with `PB8` (`COMM_MODE`) using t
 
 | PB8 level | Mode |
 | --- | --- |
-| HIGH or open | UART binary frames on USART1 (`PB6/PB7`, 115200 8N1) |
-| LOW | USB FS Custom HID on `PA11/PA12` |
+| HIGH or open | USB FS Custom HID on `PA11/PA12` |
+| LOW | UART binary frames on USART1 (`PB6/PB7`, 115200 8N1) |
 
 USB uses a vendor-defined Custom HID interface with 64-byte IN and OUT reports. The current USB VID/PID/manufacturer/product strings are placeholders in `Core/Src/usbd_desc.c` and must be replaced before product use.
 
@@ -56,7 +56,7 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 | `0x02` | `GET_STATUS` | ignored | empty | status payload below |
 | `0x10` | `RUN` | ignored | empty | empty |
 | `0x11` | `STOP` | ignored | empty | empty |
-| `0x12` | `ESTOP` | ignored | empty | empty |
+| `0x12` | `ESTOP` | ignored | empty | empty; immediate and accepted in every operational state |
 | `0x13` | `SET_SPEED_RPM` | ignored | `uint16 rpm` | empty |
 | `0x14` | `SET_CONTROL_MODE` | ignored | `uint8 mode` | empty |
 | `0x20` | `GET_CONFIG` | config param | empty | config value |
@@ -73,6 +73,7 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 | `0x42` | `HIL_SET_INPUTS` | ignored | HIL input payload below | empty |
 | `0x43` | `HIL_GET_OUTPUTS` | ignored | empty | HIL output payload below |
 | `0x44` | `HIL_STEP` | ignored | exact 18-byte deterministic-step payload below | exact 48-byte deterministic-step response below |
+| `0x50` | `SINE_DRIVE` | `0=APPLY`, `1=KEEPALIVE` | `uint32 frequency_mHz`, `uint16 amplitude_permille` | accepted/quantized values in the same 6-byte shape |
 
 `RUN` is valid only while `app_state == IDLE`. In every other state it returns
 `INVALID_STATE` without changing the application state, PWM outputs, or timer
@@ -89,6 +90,9 @@ configuration.
 | 4..5 | `uint16` | speed setpoint RPM |
 | 6..7 | `uint16` | measured speed RPM |
 | 8..9 | `uint16` | `max_pwm` |
+
+`app_state=10` identifies the continuous open-loop `SINE_DRIVE` state. Existing
+state values `0..9` retain their previous numeric assignments.
 
 ### `GET_VALIDATION_REFERENCE` response payload
 
@@ -131,6 +135,11 @@ than infer support from payload length alone.
 | `0x0A` | `KP_RPM` | `int16` hundredths, canonical counts/RPM | yes |
 | `0x0B` | `KI_RPM` | `int16` hundredths, canonical counts/(RPM s) | yes |
 | `0x0C` | `KD_RPM` | `int16` hundredths | only zero; nonzero is not supported in algorithm 2 |
+| `0x0D` | `STARTUP_INITIAL_AMPLITUDE` | `uint16` permille | yes, `0..1000` |
+| `0x0E` | `STARTUP_FINAL_AMPLITUDE` | `uint16` permille | yes, `0..1000` |
+| `0x0F` | `STARTUP_INITIAL_FREQUENCY` | `uint32` electrical mHz | yes, `2000..10000` |
+| `0x10` | `STARTUP_FINAL_FREQUENCY` | `uint32` electrical mHz | yes, `2000..10000` |
+| `0x11` | `STARTUP_DURATION` | `uint32 ms` | yes, `500..10000` |
 | `0xFF` | `ALL` | reset/log only | yes for `RESET_CONFIG`, `LOG_START`, `LOG_STOP` |
 
 For gains, value `100` means `1.00`. Algorithm 2 computes RPM error and a
@@ -138,12 +147,43 @@ canonical PWM output referenced to ARR=2000 using Q16.16 state and standard
 trapezoidal integration. The canonical output is scaled once to active ARR.
 `SET_CONFIG` and `RESET_CONFIG` update active RAM and mark pending changes but
 do not write flash. A v1 flash configuration preserves non-gain fields and
-resets only gains to v2 defaults (`KP=0.28`, `KI=1.00`, `KD=0`).
+resets only gains to v2 defaults (`KP=0.28`, `KI=1.00`, `KD=0`). V1 and V2
+flash blocks are validated with their original size and CRC, migrated to V3,
+and receive startup defaults of `20% -> 100%`, `2.09 Hz -> 9.28 Hz`, and `3 s`.
 
 When `app_state == CLOSEDLOOP`, changes to `PWM_FREQ`, `KP_RPM`, `KI_RPM`, and
 zero `KD_RPM` apply immediately. KD remains blocked until a fresh-sample RPM
 derivative and filter are implemented. Other parameters use the deferred
 `CONFIG` path.
+
+The five startup parameters are runtime-only until `SAVE_CONFIG` is sent. They
+may be set, reset, or saved only in `IDLE` and are consumed by the next `RUN`.
+The startup generator interpolates amplitude and electrical frequency linearly
+over the configured duration before handing off to six-step operation.
+
+## Continuous three-phase sine drive
+
+`SINE_DRIVE` is an additional diagnostic operating mode; it does not replace
+the normal `RUN` startup and never transitions to six-step. Frequency and
+amplitude are applied atomically:
+
+| Offset | Type | Meaning |
+| --- | --- | --- |
+| 0..3 | `uint32` | electrical frequency in mHz, `2000..10000` |
+| 4..5 | `uint16` | modulation amplitude in permille, `0..1000` |
+
+`APPLY` is accepted from `IDLE` to enter `SINE_DRIVE`, or from `SINE_DRIVE` to
+update both values. `KEEPALIVE` is accepted only while already in `SINE_DRIVE`,
+so a late host packet cannot restart the power stage after watchdog expiry. Both
+forms renew the lease and echo the actual quantized electrical frequency and
+accepted amplitude. While active, only `PING`, `GET_STATUS`, `SINE_DRIVE`,
+`STOP`, and `ESTOP` are accepted.
+
+The host must renew `SINE_DRIVE` before the 1500 ms firmware watchdog expires.
+The local bridge renews it on a dedicated 350 ms loop. `STOP`, `ESTOP`, watchdog expiry, or a
+lost connection stop TIM4, clear all PWM compares, disable all three power-stage
+enables, and return to `IDLE`. Conventional BEMF commutation is disabled because
+all three phases are actively modulated.
 
 ## Logging and telemetry
 

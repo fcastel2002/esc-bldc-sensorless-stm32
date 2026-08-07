@@ -313,7 +313,7 @@ void stop_motor(uint8_t mode)
     return;
   }
   if (hil_runtime_mode_selected() || control_runtime_mode == CONTROL_RUNTIME_MONITOR_ONLY) {
-    PWM_STOP();
+    bldc_disable_power_stage();
     bldc_set_pwm(0);
     motor_control_reset_runtime();
     app_state = IDLE;
@@ -323,7 +323,7 @@ void stop_motor(uint8_t mode)
   switch (mode) {
   case 0:
     // gradual stop
-    PWM_STOP();
+    bldc_disable_power_stage();
     bldc_set_pwm(0);
     motor_control_reset_runtime();
     app_state = IDLE;
@@ -331,15 +331,7 @@ void stop_motor(uint8_t mode)
   case 1:
     // emergency stop
     app_state = STOPPED;
-
-    direction                = !direction;
-    bldc_set_pwm(max_pwm);
-    uint32_t stop_start_time = HAL_GetTick();
-    commutate(POS_UV);
-    while (HAL_GetTick() - stop_start_time < 5000)
-      ;
-    PWM_STOP();
-    direction = !direction;
+    bldc_disable_power_stage();
     bldc_set_pwm(0);
     motor_control_reset_runtime();
     app_state = IDLE;
@@ -358,7 +350,7 @@ uint8_t control_mode_set(uint8_t mode)
   }
 
   if (mode != CONTROL_RUNTIME_NORMAL) {
-    PWM_STOP();
+    bldc_disable_power_stage();
     bldc_set_pwm(0);
     app_state = IDLE;
   }

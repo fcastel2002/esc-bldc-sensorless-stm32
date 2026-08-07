@@ -7,14 +7,41 @@
 
 #include "flash_config.h"
 
+#pragma pack(push, 4)
 typedef struct {
+  uint32_t signature;
+  uint16_t pwm_freq_hz;
+  uint8_t  brake_type;
+  float    current_limit;
+  uint16_t temp_limit;
+  float    speed_kp;
+  float    speed_ki;
+  float    speed_kd;
+  uint16_t speed_max_rpm;
+  uint16_t speed_min_rpm;
+  uint32_t crc32;
+  uint8_t  pole_pairs;
+} ESCparamsV2;
+#pragma pack(pop)
 
+typedef struct {
   uint32_t  signature;
   uint32_t  write_counter;
   ESCparams config;
   uint32_t  crc32;
-
 } FlashStorageBlock;
+
+typedef struct {
+  uint32_t    signature;
+  uint32_t    write_counter;
+  ESCparamsV2 config;
+  uint32_t    crc32;
+} FlashStorageBlockV2;
+
+_Static_assert(sizeof(ESCparamsV2) == 40U, "Unexpected legacy ESC config size");
+_Static_assert(sizeof(FlashStorageBlockV2) == 52U, "Unexpected legacy flash block size");
+_Static_assert(sizeof(ESCparams) == 56U, "Unexpected V3 ESC config size");
+_Static_assert(sizeof(FlashStorageBlock) == 68U, "Unexpected V3 flash block size");
 
 static ESCparams       flash_cached_config;
 static uint8_t         flash_initialized = 0;
@@ -22,8 +49,10 @@ static uint32_t        active_page_addr  = 0;
 static uint32_t        write_counter     = 0;
 static uint8_t         pending_changes   = 0;
 static uint8_t         is_saving         = 0;
+static uint8_t         loaded_legacy     = 0;
 static FlashResultCode erase_flash_page(uint32_t page_addr);
 static uint32_t        calculate_block_crc(FlashStorageBlock* block);
+static uint32_t        calculate_legacy_block_crc(FlashStorageBlockV2* block);
 static FlashResultCode write_flash_block(uint32_t addr, FlashStorageBlock* block);
 
 static uint32_t calculate_block_crc(FlashStorageBlock* block)
@@ -47,74 +76,101 @@ static uint32_t calculate_block_crc(FlashStorageBlock* block)
   // 6. No modificamos el bloque original, solo devolvemos el CRC calculado
   return calculated_crc;
 }
-static inline void write_page(FlashStorageBlock* current_page)
+
+static uint32_t calculate_legacy_block_crc(FlashStorageBlockV2* block)
 {
-  // Copiar datos con seguridad
-  ESCparams temp_config;
-
-  // Copiar la configuración a un buffer temporal alineado
-  memcpy(&temp_config, &current_page->config, sizeof(ESCparams));
-
-  // Actualizar el contador de escrituras
-  write_counter = current_page->write_counter;
-
-  // Copiar la configuración a la caché
-  memcpy(&flash_cached_config, &temp_config, sizeof(ESCparams));
+  uint32_t buffer[sizeof(FlashStorageBlockV2) / 4U];
+  memcpy(buffer, block, sizeof(FlashStorageBlockV2));
+  ((FlashStorageBlockV2*)buffer)->crc32 = 0U;
+  return HAL_CRC_Calculate(&hcrc, buffer, sizeof(buffer) / sizeof(buffer[0]));
 }
+
+static void migrate_legacy_config(const ESCparamsV2* legacy, ESCparams* migrated)
+{
+  set_default_esc_params();
+  *migrated = current_esc_params;
+  migrated->pwm_freq_hz = legacy->pwm_freq_hz;
+  migrated->brake_type = legacy->brake_type;
+  migrated->current_limit = legacy->current_limit;
+  migrated->temp_limit = legacy->temp_limit;
+  migrated->speed_max_rpm = legacy->speed_max_rpm;
+  migrated->speed_min_rpm = legacy->speed_min_rpm;
+  migrated->pole_pairs = legacy->pole_pairs;
+  if (legacy->signature == ESC_PARAMS_SIGNATURE_V2) {
+    migrated->speed_kp = legacy->speed_kp;
+    migrated->speed_ki = legacy->speed_ki;
+    migrated->speed_kd = legacy->speed_kd;
+  }
+  migrated->signature = ESC_PARAMS_SIGNATURE_V3;
+  migrated->crc32 = compute_crc32(migrated);
+}
+
+static uint8_t read_page(uint32_t page_addr, ESCparams* config, uint32_t* counter, uint8_t* legacy)
+{
+  const FlashStorageBlock* page = (const FlashStorageBlock*)page_addr;
+  if (page->signature != FLASH_CONFIG_SIGNATURE) return 0U;
+
+  uint32_t config_signature = page->config.signature;
+  if (config_signature == ESC_PARAMS_SIGNATURE_V3) {
+    FlashStorageBlock copy;
+    memcpy(&copy, page, sizeof(copy));
+    if (calculate_block_crc(&copy) != page->crc32) return 0U;
+    memcpy(config, &page->config, sizeof(*config));
+    *counter = page->write_counter;
+    *legacy = 0U;
+    return 1U;
+  }
+
+  if (config_signature == ESC_PARAMS_SIGNATURE_V1 ||
+      config_signature == ESC_PARAMS_SIGNATURE_V2) {
+    const FlashStorageBlockV2* legacy_page = (const FlashStorageBlockV2*)page_addr;
+    FlashStorageBlockV2 copy;
+    memcpy(&copy, legacy_page, sizeof(copy));
+    if (calculate_legacy_block_crc(&copy) != legacy_page->crc32) return 0U;
+    migrate_legacy_config(&legacy_page->config, config);
+    *counter = legacy_page->write_counter;
+    *legacy = 1U;
+    return 1U;
+  }
+
+  return 0U;
+}
+
 static FlashResultCode find_active_page(void)
 {
-  // Punteros a las páginas de flash
-  FlashStorageBlock* page1 = (FlashStorageBlock*)FLASH_CONFIG_START;
-  FlashStorageBlock* page2 = (FlashStorageBlock*)(FLASH_CONFIG_START + FLASH_PAGE_SIZE);
+  ESCparams page1_config;
+  ESCparams page2_config;
+  uint32_t page1_counter = 0U;
+  uint32_t page2_counter = 0U;
+  uint8_t page1_legacy = 0U;
+  uint8_t page2_legacy = 0U;
+  uint8_t page1_valid = read_page(
+      FLASH_CONFIG_START, &page1_config, &page1_counter, &page1_legacy);
+  uint8_t page2_valid = read_page(
+      FLASH_CONFIG_START + FLASH_PAGE_SIZE,
+      &page2_config,
+      &page2_counter,
+      &page2_legacy);
 
-  uint8_t page1_valid = 0;
-  uint8_t page2_valid = 0;
-
-  // Verificar validez de página 1 con manejo de errores
-  if (page1->signature == FLASH_CONFIG_SIGNATURE) {
-    // Usar try-catch simulado para manejar posibles hard faults
-    uint32_t crc;
-    if (page1 != NULL) {
-      crc = calculate_block_crc(page1);
-      if (crc == page1->crc32) {
-        page1_valid = 1;
-      }
-    }
-  }
-
-  // Verificar validez de página 2 con manejo de errores
-  if (page2->signature == FLASH_CONFIG_SIGNATURE) {
-    uint32_t crc;
-    if (page2 != NULL) {
-      crc = calculate_block_crc(page2);
-      if (crc == page2->crc32) {
-        page2_valid = 1;
-      }
-    }
-  }
-
-  // Resto de la función sin cambios...
-  if (page1_valid && page2_valid) {
-    if (page1->write_counter > page2->write_counter) {
-      active_page_addr = FLASH_CONFIG_START;
-      write_page(page1);
-    } else {
-      active_page_addr = FLASH_CONFIG_START + FLASH_PAGE_SIZE;
-      write_page(page2);
-    }
-    return FLASH_RESULT_OK;
-  } else if (page1_valid) {
+  if (page1_valid && (!page2_valid || page1_counter > page2_counter)) {
     active_page_addr = FLASH_CONFIG_START;
-    write_page(page1);
+    write_counter = page1_counter;
+    loaded_legacy = page1_legacy;
+    memcpy(&flash_cached_config, &page1_config, sizeof(ESCparams));
     return FLASH_RESULT_OK;
-  } else if (page2_valid) {
+  }
+
+  if (page2_valid) {
     active_page_addr = FLASH_CONFIG_START + FLASH_PAGE_SIZE;
-    write_page(page2);
+    write_counter = page2_counter;
+    loaded_legacy = page2_legacy;
+    memcpy(&flash_cached_config, &page2_config, sizeof(ESCparams));
     return FLASH_RESULT_OK;
-  } else {
-    active_page_addr = FLASH_CONFIG_START;
-    return FLASH_RESULT_EMPTY;
   }
+
+  active_page_addr = FLASH_CONFIG_START;
+  loaded_legacy = 0U;
+  return FLASH_RESULT_EMPTY;
 }
 
 static FlashResultCode erase_flash_page(uint32_t page_addr)
@@ -166,16 +222,11 @@ FlashResultCode flash_config_init(void)
   if (result == FLASH_RESULT_OK) {
 
     memcpy(&current_esc_params, &flash_cached_config, sizeof(ESCparams));
-    if (current_esc_params.signature == ESC_PARAMS_SIGNATURE_V1) {
-      current_esc_params.signature = ESC_PARAMS_SIGNATURE_V2;
-      current_esc_params.speed_kp = ESC_DEFAULT_KP_RPM;
-      current_esc_params.speed_ki = ESC_DEFAULT_KI_RPM;
-      current_esc_params.speed_kd = ESC_DEFAULT_KD_RPM;
-      pending_changes = 1;
-    } else if (current_esc_params.signature != ESC_PARAMS_SIGNATURE_V2) {
+    if (current_esc_params.signature != ESC_PARAMS_SIGNATURE_V3) {
       set_default_esc_params();
       pending_changes = 1;
     }
+    if (loaded_legacy) pending_changes = 1;
     flash_initialized = 1;
     return FLASH_RESULT_OK;
   } else if (result == FLASH_RESULT_EMPTY) {

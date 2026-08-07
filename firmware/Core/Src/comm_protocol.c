@@ -42,15 +42,16 @@ enum {
   REQUEST_HIL_SET_INPUTS,
   REQUEST_HIL_GET_OUTPUTS,
   REQUEST_HIL_STEP,
+  REQUEST_SINE_DRIVE,
 };
 
 static inline __attribute__((always_inline)) uint8_t request_dispatch(uint8_t opcode)
 {
-  static const uint8_t dispatch_base[] = {0U, 3U, 8U, 13U, 16U};
-  static const uint8_t maximum_low_nibble[] = {2U, 4U, 4U, 2U, 4U};
+  static const uint8_t dispatch_base[] = {0U, 3U, 8U, 13U, 16U, 21U};
+  static const uint8_t maximum_low_nibble[] = {2U, 4U, 4U, 2U, 4U, 0U};
   uint8_t group = opcode >> 4;
   uint8_t low_nibble = opcode & 0x0FU;
-  if (group > 4U || low_nibble > maximum_low_nibble[group]) return 0U;
+  if (group > 5U || low_nibble > maximum_low_nibble[group]) return 0U;
   return dispatch_base[group] + low_nibble;
 }
 
@@ -201,7 +202,14 @@ static uint8_t status_from_flash(FlashResultCode status)
 
 static bool stop_state_allows_command(void)
 {
-  return app_state == IDLE || app_state == RUNNING || app_state == CLOSEDLOOP;
+  return app_state == IDLE || app_state == FOC_STARTUP || app_state == RUNNING ||
+         app_state == CLOSEDLOOP || app_state == SINE_DRIVE;
+}
+
+static bool is_startup_param(uint8_t param)
+{
+  return param >= COMM_PARAM_STARTUP_INITIAL_AMPLITUDE &&
+         param <= COMM_PARAM_STARTUP_DURATION;
 }
 
 __attribute__((optimize("Oz"))) static uint16_t
@@ -229,6 +237,8 @@ serialize_hil_outputs(uint8_t* payload_out)
 
 __attribute__((optimize("Oz"))) static void apply_config_change(uint8_t param)
 {
+  if (is_startup_param(param)) return;
+
   if (app_state == CLOSEDLOOP) {
     if (param == COMM_PARAM_KP_RPM || param == COMM_PARAM_KI_RPM || param == COMM_PARAM_KD_RPM) {
       updateAllMotorControl();
@@ -296,6 +306,26 @@ static uint8_t get_config(uint8_t param, uint8_t* payload, uint16_t* payload_len
     write_u16_le(payload, get_min_speed());
     *payload_len = 2;
     return COMM_STATUS_OK;
+  case COMM_PARAM_STARTUP_INITIAL_AMPLITUDE:
+    write_u16_le(payload, get_startup_initial_amplitude());
+    *payload_len = 2;
+    return COMM_STATUS_OK;
+  case COMM_PARAM_STARTUP_FINAL_AMPLITUDE:
+    write_u16_le(payload, get_startup_final_amplitude());
+    *payload_len = 2;
+    return COMM_STATUS_OK;
+  case COMM_PARAM_STARTUP_INITIAL_FREQUENCY:
+    write_u32_le(payload, get_startup_initial_frequency());
+    *payload_len = 4;
+    return COMM_STATUS_OK;
+  case COMM_PARAM_STARTUP_FINAL_FREQUENCY:
+    write_u32_le(payload, get_startup_final_frequency());
+    *payload_len = 4;
+    return COMM_STATUS_OK;
+  case COMM_PARAM_STARTUP_DURATION:
+    write_u32_le(payload, get_startup_duration());
+    *payload_len = 4;
+    return COMM_STATUS_OK;
   case COMM_PARAM_CURRENT_LIMIT:
   case COMM_PARAM_TEMP_LIMIT:
   case COMM_PARAM_KP:
@@ -309,6 +339,7 @@ static uint8_t get_config(uint8_t param, uint8_t* payload, uint16_t* payload_len
 
 static uint8_t set_config(uint8_t param, const uint8_t* payload, uint16_t payload_len)
 {
+  if (is_startup_param(param) && app_state != IDLE) return COMM_STATUS_INVALID_STATE;
   ConfigStatus result = CONFIG_UNKNOWN;
 
   switch (param) {
@@ -340,6 +371,26 @@ static uint8_t set_config(uint8_t param, const uint8_t* payload, uint16_t payloa
     if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
     result = set_min_speed(read_u16_le(payload));
     break;
+  case COMM_PARAM_STARTUP_INITIAL_AMPLITUDE:
+    if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
+    result = set_startup_initial_amplitude(read_u16_le(payload));
+    break;
+  case COMM_PARAM_STARTUP_FINAL_AMPLITUDE:
+    if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
+    result = set_startup_final_amplitude(read_u16_le(payload));
+    break;
+  case COMM_PARAM_STARTUP_INITIAL_FREQUENCY:
+    if (payload_len != 4U) return COMM_STATUS_BAD_LENGTH;
+    result = set_startup_initial_frequency(read_u32_le(payload));
+    break;
+  case COMM_PARAM_STARTUP_FINAL_FREQUENCY:
+    if (payload_len != 4U) return COMM_STATUS_BAD_LENGTH;
+    result = set_startup_final_frequency(read_u32_le(payload));
+    break;
+  case COMM_PARAM_STARTUP_DURATION:
+    if (payload_len != 4U) return COMM_STATUS_BAD_LENGTH;
+    result = set_startup_duration(read_u32_le(payload));
+    break;
   case COMM_PARAM_CURRENT_LIMIT:
   case COMM_PARAM_TEMP_LIMIT:
   case COMM_PARAM_KP:
@@ -360,6 +411,7 @@ static uint8_t set_config(uint8_t param, const uint8_t* payload, uint16_t payloa
 
 static uint8_t save_config(uint8_t param)
 {
+  if (is_startup_param(param) && app_state != IDLE) return COMM_STATUS_INVALID_STATE;
   switch (param) {
   case COMM_PARAM_PWM_FREQ:
   case COMM_PARAM_POLE_PAIRS:
@@ -368,6 +420,11 @@ static uint8_t save_config(uint8_t param)
   case COMM_PARAM_KD_RPM:
   case COMM_PARAM_MAX_SPEED:
   case COMM_PARAM_MIN_SPEED:
+  case COMM_PARAM_STARTUP_INITIAL_AMPLITUDE:
+  case COMM_PARAM_STARTUP_FINAL_AMPLITUDE:
+  case COMM_PARAM_STARTUP_INITIAL_FREQUENCY:
+  case COMM_PARAM_STARTUP_FINAL_FREQUENCY:
+  case COMM_PARAM_STARTUP_DURATION:
   case COMM_PARAM_ALL:
     return status_from_flash(flash_config_save());
   case COMM_PARAM_CURRENT_LIMIT:
@@ -380,6 +437,7 @@ static uint8_t save_config(uint8_t param)
 
 static uint8_t reset_config(uint8_t param)
 {
+  if (is_startup_param(param) && app_state != IDLE) return COMM_STATUS_INVALID_STATE;
   switch (param) {
   case COMM_PARAM_ALL:
     set_default_esc_params();
@@ -411,6 +469,30 @@ static uint8_t reset_config(uint8_t param)
     break;
   case COMM_PARAM_MIN_SPEED:
     current_esc_params.speed_min_rpm = DEFAULT_MIN_SPEED_RPM;
+    flash_config_parameter_changed();
+    break;
+  case COMM_PARAM_STARTUP_INITIAL_AMPLITUDE:
+    current_esc_params.startup_initial_amplitude_permille =
+        ESC_DEFAULT_STARTUP_INITIAL_AMPLITUDE_PERMILLE;
+    flash_config_parameter_changed();
+    break;
+  case COMM_PARAM_STARTUP_FINAL_AMPLITUDE:
+    current_esc_params.startup_final_amplitude_permille =
+        ESC_DEFAULT_STARTUP_FINAL_AMPLITUDE_PERMILLE;
+    flash_config_parameter_changed();
+    break;
+  case COMM_PARAM_STARTUP_INITIAL_FREQUENCY:
+    current_esc_params.startup_initial_frequency_millihz =
+        ESC_DEFAULT_STARTUP_INITIAL_FREQUENCY_MILLIHZ;
+    flash_config_parameter_changed();
+    break;
+  case COMM_PARAM_STARTUP_FINAL_FREQUENCY:
+    current_esc_params.startup_final_frequency_millihz =
+        ESC_DEFAULT_STARTUP_FINAL_FREQUENCY_MILLIHZ;
+    flash_config_parameter_changed();
+    break;
+  case COMM_PARAM_STARTUP_DURATION:
+    current_esc_params.startup_duration_ms = ESC_DEFAULT_STARTUP_DURATION_MS;
     flash_config_parameter_changed();
     break;
   case COMM_PARAM_CURRENT_LIMIT:
@@ -456,9 +538,22 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
 
   *payload_out_len = 0;
 
-  if (hil_session_state == (uint8_t)HIL_EXECUTION_STEPPED + 1U &&
+  if (opcode != COMM_OPCODE_ESTOP &&
+      hil_session_state == (uint8_t)HIL_EXECUTION_STEPPED + 1U &&
       ((opcode >= COMM_OPCODE_SET_SPEED_RPM && opcode <= COMM_OPCODE_SET_CONTROL_MODE) ||
        (opcode >= COMM_OPCODE_SET_CONFIG && opcode <= COMM_OPCODE_SAVE_CONFIG))) {
+    return COMM_STATUS_INVALID_STATE;
+  }
+
+  if (app_state == SINE_DRIVE && opcode != COMM_OPCODE_PING &&
+      opcode != COMM_OPCODE_GET_STATUS && opcode != COMM_OPCODE_STOP &&
+      opcode != COMM_OPCODE_ESTOP && opcode != COMM_OPCODE_SINE_DRIVE) {
+    return COMM_STATUS_INVALID_STATE;
+  }
+
+  if (app_state == FOC_STARTUP &&
+      (opcode == COMM_OPCODE_SET_CONFIG || opcode == COMM_OPCODE_RESET_CONFIG ||
+       opcode == COMM_OPCODE_SAVE_CONFIG)) {
     return COMM_STATUS_INVALID_STATE;
   }
 
@@ -491,12 +586,14 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
   case REQUEST_STOP:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     if (!stop_state_allows_command()) return COMM_STATUS_INVALID_STATE;
+    if (sine_drive_is_active()) sine_drive_stop();
     stop_motor(0);
     app_state = IDLE;
     return COMM_STATUS_OK;
 
   case REQUEST_ESTOP:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
+    if (sine_drive_is_active()) sine_drive_stop();
     stop_motor(1);
     app_state = IDLE;
     return COMM_STATUS_OK;
@@ -661,6 +758,34 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     write_u16_le(&payload_out[45], requested_steps);
     payload_out[47] = step_result == HIL_STEP_REPLAYED ? 0x01U : 0x00U;
     *payload_out_len = 48U;
+    return COMM_STATUS_OK;
+  }
+
+  case REQUEST_SINE_DRIVE: {
+    if (payload_len != 6U) return COMM_STATUS_BAD_LENGTH;
+    if (param != COMM_SINE_PARAM_APPLY && param != COMM_SINE_PARAM_KEEPALIVE) {
+      return COMM_STATUS_UNKNOWN_PARAM;
+    }
+    if (param == COMM_SINE_PARAM_KEEPALIVE && app_state != SINE_DRIVE) {
+      return COMM_STATUS_INVALID_STATE;
+    }
+    uint32_t frequency_millihz = read_u32_le(payload);
+    uint16_t amplitude_permille = read_u16_le(&payload[4]);
+    if (frequency_millihz < ESC_MIN_SINE_FREQUENCY_MILLIHZ) {
+      return COMM_STATUS_UNDERLIMIT;
+    }
+    if (frequency_millihz > ESC_MAX_SINE_FREQUENCY_MILLIHZ ||
+        amplitude_permille > ESC_MAX_SINE_AMPLITUDE_PERMILLE) {
+      return COMM_STATUS_OVERLIMIT;
+    }
+
+    SineDriveSettings applied;
+    if (!sine_drive_start_or_update(frequency_millihz, amplitude_permille, &applied)) {
+      return COMM_STATUS_INVALID_STATE;
+    }
+    write_u32_le(payload_out, applied.frequency_millihz);
+    write_u16_le(&payload_out[4], applied.amplitude_permille);
+    *payload_out_len = 6U;
     return COMM_STATUS_OK;
   }
 

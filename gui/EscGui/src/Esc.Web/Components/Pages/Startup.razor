@@ -1,0 +1,217 @@
+@page "/startup"
+@implements IDisposable
+@inject EscBridgeService Bridge
+
+<PageTitle>Configuracion de arranque</PageTitle>
+
+<main class="dashboard startup-page">
+    <section class="topbar">
+        <div>
+            <p class="eyebrow">Rampa SPWM previa a six-step</p>
+            <h1>Configuracion de arranque</h1>
+        </div>
+        <div class="topbar-actions">
+            <button class="startup-estop" @onclick="EmergencyStopAsync" disabled="@(_estopBusy || !_snapshot.TransportOpen)">ESTOP</button>
+            <button @onclick="RefreshAsync" disabled="@(_isBusy || !IsConnected)">Leer desde MCU</button>
+            <div class="connection-state @(_snapshot.State.ToString().ToLowerInvariant())">
+                <span>Estado</span>
+                <strong>@(_snapshot.Status?.AppStateName ?? _snapshot.State.ToString())</strong>
+            </div>
+        </div>
+    </section>
+
+    <section class="startup-summary">
+        <p>Los cambios se aplican primero en RAM y se usan en el proximo RUN. Guardar en flash es una accion separada.</p>
+        <span>@EditHint</span>
+    </section>
+
+    <section class="panel">
+        <div class="panel-title">
+            <h2>Perfil fisico</h2>
+            <span>Interpolacion lineal</span>
+        </div>
+        <div class="startup-controls">
+            @foreach (StartupControl control in Controls)
+            {
+                <article class="startup-control">
+                    <div class="startup-control-heading">
+                        <label for="@control.Id">@control.Label</label>
+                        <span>@control.Unit</span>
+                    </div>
+                    <input id="@control.Id"
+                           type="number"
+                           min="@FormatInvariant(control.Min)"
+                           max="@FormatInvariant(control.Max)"
+                           step="@FormatInvariant(control.Step)"
+                           value="@FormatValue(control.Parameter)"
+                           @onchange="args => UpdateValue(control, args)"
+                           disabled="@(!CanEdit)" />
+                    <div class="startup-actions">
+                        <button class="primary" @onclick="() => ApplyAsync(control)" disabled="@(!CanEdit)">Aplicar en RAM</button>
+                        <button @onclick="() => ResetAsync(control)" disabled="@(!CanEdit)">Restaurar</button>
+                        <button class="save-button" @onclick="() => SaveAsync(control)" disabled="@(!CanEdit)">Guardar en flash</button>
+                    </div>
+                </article>
+            }
+        </div>
+        <p class="result">@_result</p>
+    </section>
+</main>
+
+@code {
+    private static readonly StartupControl[] Controls =
+    [
+        new("startup-amplitude-initial", "Amplitud inicial", ConfigParam.StartupInitialAmplitude, 0, 100, 1, "%"),
+        new("startup-amplitude-final", "Amplitud final", ConfigParam.StartupFinalAmplitude, 0, 100, 1, "%"),
+        new("startup-frequency-initial", "Frecuencia electrica inicial", ConfigParam.StartupInitialFrequency, 2, 10, 0.1, "Hz"),
+        new("startup-frequency-final", "Frecuencia electrica final", ConfigParam.StartupFinalFrequency, 2, 10, 0.1, "Hz"),
+        new("startup-duration", "Duracion total", ConfigParam.StartupDuration, 0.5, 10, 0.1, "s")
+    ];
+
+    private readonly Dictionary<ConfigParam, double> _values = new();
+    private readonly HashSet<ConfigParam> _dirty = [];
+    private BridgeSnapshot _snapshot = default!;
+    private bool _isBusy;
+    private bool _estopBusy;
+    private bool _disposed;
+    private string _result = "Lee la configuracion activa o edita un parametro.";
+
+    private bool IsConnected => _snapshot.State == DeviceConnectionState.Connected;
+    private bool CanEdit => IsConnected && _snapshot.Mode == ControlMode.GuiControl && _snapshot.Status?.AppState == 0 && !_isBusy;
+    private string EditHint => !IsConnected
+        ? "Conecta el ESC para leer y modificar el perfil."
+        : _snapshot.Status?.AppState != 0
+            ? "Deten el motor: los parametros de arranque solo se modifican en IDLE."
+            : "Rangos: 0-100 %, 2-10 Hz electricos y 0.5-10 s.";
+
+    protected override void OnInitialized()
+    {
+        _snapshot = Bridge.Snapshot;
+        LoadSnapshotValues();
+        Bridge.SnapshotChanged += HandleSnapshotChanged;
+    }
+
+    private void HandleSnapshotChanged(object? sender, EventArgs args)
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed) return;
+            _snapshot = Bridge.Snapshot;
+            LoadSnapshotValues();
+            StateHasChanged();
+        });
+    }
+
+    private async Task RefreshAsync() => await BusyAsync(async () =>
+    {
+        await Bridge.RefreshStatusAsync();
+        await Bridge.RefreshStartupConfigurationAsync();
+        _snapshot = Bridge.Snapshot;
+        _dirty.Clear();
+        LoadSnapshotValues();
+        _result = "Configuracion leida desde el MCU.";
+    });
+
+    private async Task ApplyAsync(StartupControl control) => await BusyAsync(async () =>
+    {
+        CommandResult result = await Bridge.SetConfigAsync(control.Parameter, Value(control.Parameter));
+        _result = result.Success ? $"{control.Label} aplicado en RAM." : result.Message;
+        if (result.Success) _dirty.Remove(control.Parameter);
+        _snapshot = Bridge.Snapshot;
+    });
+
+    private async Task ResetAsync(StartupControl control) => await BusyAsync(async () =>
+    {
+        CommandResult result = await Bridge.ResetConfigAsync(control.Parameter);
+        _result = result.Success ? $"{control.Label} restaurado en RAM." : result.Message;
+        if (result.Success) _dirty.Remove(control.Parameter);
+        _snapshot = Bridge.Snapshot;
+        LoadSnapshotValues();
+    });
+
+    private async Task SaveAsync(StartupControl control) => await BusyAsync(async () =>
+    {
+        CommandResult result = await Bridge.SaveConfigAsync(control.Parameter);
+        _result = result.Success ? "Configuracion activa persistida en flash." : result.Message;
+    });
+
+    private async Task EmergencyStopAsync()
+    {
+        if (_estopBusy || !_snapshot.TransportOpen) return;
+        _estopBusy = true;
+        try
+        {
+            CommandResult result = await Bridge.EmergencyStopAsync();
+            _result = result.Message;
+            _snapshot = Bridge.Snapshot;
+        }
+        finally
+        {
+            _estopBusy = false;
+        }
+    }
+
+    private void UpdateValue(StartupControl control, ChangeEventArgs args)
+    {
+        if (!double.TryParse(
+                args.Value?.ToString(),
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out double value)) return;
+        _values[control.Parameter] = Math.Clamp(value, control.Min, control.Max);
+        _dirty.Add(control.Parameter);
+    }
+
+    private void LoadSnapshotValues()
+    {
+        if (_snapshot.StartupConfiguration is not { } config) return;
+        SetIfClean(ConfigParam.StartupInitialAmplitude, config.InitialAmplitudePercent);
+        SetIfClean(ConfigParam.StartupFinalAmplitude, config.FinalAmplitudePercent);
+        SetIfClean(ConfigParam.StartupInitialFrequency, config.InitialFrequencyHz);
+        SetIfClean(ConfigParam.StartupFinalFrequency, config.FinalFrequencyHz);
+        SetIfClean(ConfigParam.StartupDuration, config.DurationSeconds);
+    }
+
+    private void SetIfClean(ConfigParam parameter, double value)
+    {
+        if (!_dirty.Contains(parameter)) _values[parameter] = value;
+    }
+
+    private double Value(ConfigParam parameter) => _values.GetValueOrDefault(parameter);
+    private string FormatValue(ConfigParam parameter) => FormatInvariant(Value(parameter));
+    private static string FormatInvariant(double value) =>
+        value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private async Task BusyAsync(Func<Task> operation)
+    {
+        if (_isBusy) return;
+        _isBusy = true;
+        try
+        {
+            await operation();
+        }
+        catch (Exception exception)
+        {
+            _result = exception.Message;
+        }
+        finally
+        {
+            _isBusy = false;
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        Bridge.SnapshotChanged -= HandleSnapshotChanged;
+    }
+
+    private sealed record StartupControl(
+        string Id,
+        string Label,
+        ConfigParam Parameter,
+        double Min,
+        double Max,
+        double Step,
+        string Unit);
+}

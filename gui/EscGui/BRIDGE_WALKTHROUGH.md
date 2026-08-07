@@ -79,6 +79,11 @@ EscBridgeService.cs
 
 Es el corazón del Bridge. Guarda el estado actual, conecta/desconecta el HID, manda comandos, recibe telemetría y protege el acceso al USB.
 
+Tambien mantiene el modo `SINE_DRIVE`: envia frecuencia y amplitud en una sola
+trama, conserva el readback aplicado en `BridgeSnapshot` y renueva el comando
+en un ciclo dedicado de 350 ms desde `EscBridgeWorker`. El MCU aplica un watchdog de 1500 ms, por
+lo que cerrar la GUI o perder HID no deja la salida senoidal energizada.
+
 ```text
 HilUdpBridgeService.cs
 ```

@@ -14,6 +14,7 @@
         </div>
 
         <div class="topbar-actions">
+            <button class="topbar-estop" @onclick="EmergencyStopAsync" disabled="@(_estopBusy || !CanEmergencyStop)">ESTOP</button>
             <div class="connection-state @StateClass">
                 <span>@Snapshot.State</span>
                 <strong>@ConnectionLabel</strong>
@@ -63,134 +64,251 @@
         <p>@ModeHint</p>
     </section>
 
+    <p class="command-feedback" role="status" aria-live="polite">@_lastCommandResult</p>
+
     <section class="grid">
-        <article class="panel status-panel">
+        <article class="panel status-panel collapsible-panel @(IsPanelCollapsed(PanelStatus) ? "is-collapsed" : null)">
             <div class="panel-title">
                 <h2>Estado del ESC</h2>
-                <button @onclick="RefreshStatusAsync" disabled="@(_isBusy || !IsConnected)">Actualizar</button>
+                <div class="panel-heading-actions">
+                    <button @onclick="RefreshStatusAsync" disabled="@(_isBusy || !IsConnected)">Actualizar</button>
+                    <button type="button" class="panel-toggle" aria-expanded="@(!IsPanelCollapsed(PanelStatus))" aria-controls="esc-status-body" aria-label='@PanelToggleLabel(PanelStatus, "Estado del ESC")' @onclick="() => TogglePanelAsync(PanelStatus)">
+                        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+                    </button>
+                </div>
             </div>
-            <div class="status-grid">
-                <span>App state</span><strong>@(Snapshot.Status?.AppStateName ?? "-")</strong>
-                <span>Transporte</span><strong>@(Snapshot.Status?.Transport ?? "-")</strong>
-                <span>Setpoint</span><strong>@(Snapshot.Status?.SpeedSetpointRpm.ToString() ?? "-") rpm</strong>
-                <span>Velocidad</span><strong>@(Snapshot.Status?.ActualSpeedRpm.ToString() ?? "-") rpm</strong>
-                <span>Max PWM</span><strong>@(Snapshot.Status?.MaxPwm.ToString() ?? "-")</strong>
-                <span>Stall</span><strong>@BoolText(Snapshot.Status?.MotorStalled)</strong>
-                <span>Cruces consistentes</span><strong>@BoolText(Snapshot.Status?.ConsistentZeroCrossing)</strong>
+            <div id="esc-status-body" class="panel-body" hidden="@IsPanelCollapsed(PanelStatus)">
+                <div class="status-grid">
+                    <span>App state</span><strong>@(Snapshot.Status?.AppStateName ?? "-")</strong>
+                    <span>Transporte</span><strong>@(Snapshot.Status?.Transport ?? "-")</strong>
+                    <span>Setpoint</span><strong>@(Snapshot.Status?.SpeedSetpointRpm.ToString() ?? "-") rpm</strong>
+                    <span>Velocidad</span><strong>@(Snapshot.Status?.ActualSpeedRpm.ToString() ?? "-") rpm</strong>
+                    <span>Max PWM</span><strong>@(Snapshot.Status?.MaxPwm.ToString() ?? "-")</strong>
+                    <span>Stall</span><strong>@BoolText(Snapshot.Status?.MotorStalled)</strong>
+                    <span>Cruces consistentes</span><strong>@BoolText(Snapshot.Status?.ConsistentZeroCrossing)</strong>
+                </div>
             </div>
         </article>
 
-        <article class="panel command-panel">
+        <article class="panel command-panel collapsible-panel @(IsPanelCollapsed(PanelPower) ? "is-collapsed" : null)">
             <div class="panel-title">
                 <h2>Comandos de potencia</h2>
+                <button type="button" class="panel-toggle" aria-expanded="@(!IsPanelCollapsed(PanelPower))" aria-controls="power-command-body" aria-label='@PanelToggleLabel(PanelPower, "Comandos de potencia")' @onclick="() => TogglePanelAsync(PanelPower)">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+                </button>
             </div>
-            <div class="action-grid">
-                <button class="run" @onclick="RunAsync" disabled="@(_isBusy || !CanSendControl)">RUN</button>
-                <button @onclick="StopAsync" disabled="@(_isBusy || !CanSendControl)">STOP</button>
-                <button class="estop" @onclick="EmergencyStopAsync" disabled="@(_isBusy || !IsConnected)">ESTOP</button>
+            <div id="power-command-body" class="panel-body" hidden="@IsPanelCollapsed(PanelPower)">
+                <div class="action-grid">
+                    <button class="run" @onclick="RunAsync" disabled="@(_isBusy || _estopBusy || !CanSendControl)">RUN</button>
+                    <button @onclick="StopAsync" disabled="@(_isBusy || !CanSendControl)">STOP</button>
+                    <button class="estop" @onclick="EmergencyStopAsync" disabled="@(_estopBusy || !CanEmergencyStop)">ESTOP</button>
+                </div>
+                <p class="result">@_lastCommandResult</p>
             </div>
-            <p class="result">@_lastCommandResult</p>
         </article>
     </section>
 
-    <section class="panel">
+    <section class="panel collapsible-panel @(IsPanelCollapsed(PanelParameters) ? "is-collapsed" : null)">
         <div class="panel-title">
             <h2>Ajuste de parametros</h2>
-            <span>controls.json</span>
+            <div class="panel-heading-actions">
+                <span>controls.json</span>
+                <button type="button" class="panel-toggle" aria-expanded="@(!IsPanelCollapsed(PanelParameters))" aria-controls="parameter-adjustment-body" aria-label='@PanelToggleLabel(PanelParameters, "Ajuste de parametros")' @onclick="() => TogglePanelAsync(PanelParameters)">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+                </button>
+            </div>
         </div>
-        @if (_controls.Count == 0 && !string.IsNullOrWhiteSpace(ControlProvider.LastError))
-        {
-            <p class="result" style="color: var(--red);">@ControlProvider.LastError</p>
-        }
-        <div class="controls-grid">
-            @foreach (var control in _controls)
+        <div id="parameter-adjustment-body" class="panel-body" hidden="@IsPanelCollapsed(PanelParameters)">
+            @if (_controls.Count == 0 && !string.IsNullOrWhiteSpace(ControlProvider.LastError))
             {
-                <div class="control-item">
-                    <label for="@control.Id">@control.Label</label>
-                    @if (control.Kind.Equals("slider", StringComparison.OrdinalIgnoreCase))
-                    {
-                        <input id="@control.Id" type="range" min="@ControlMin(control)" max="@ControlMax(control)" step="@control.Step" value="@ControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
-                        <div class="inline-input">
-                            <input type="number" min="@ControlMin(control)" max="@ControlMax(control)" step="@control.Step" value="@ControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
-                            <span>@control.Unit</span>
-                            <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">Aplicar</button>
-                            @if (CanPersistControl(control))
-                            {
-                                <button class="icon-button save-button" @onclick="() => SaveControlAsync(control)" disabled="@ControlDisabled(control)" title="Guardar en flash" aria-label="Guardar @control.Label en flash">
-                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                        <path d="M5 3h12l2 2v16H5V3zm2 2v5h9V5H7zm1 11v3h8v-3H8zm8-11v4h1V6l-1-1z" />
-                                    </svg>
-                                </button>
-                            }
-                        </div>
-                    }
-                    else if (control.Kind.Equals("button", StringComparison.OrdinalIgnoreCase))
-                    {
-                        <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">@control.Label</button>
-                    }
-                    else
-                    {
-                        <div class="inline-input">
-                            <input id="@control.Id" type="number" min="@control.Min" max="@control.Max" step="@control.Step" value="@ControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
-                            <span>@control.Unit</span>
-                            <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">Aplicar</button>
-                            @if (CanPersistControl(control))
-                            {
-                                <button class="icon-button save-button" @onclick="() => SaveControlAsync(control)" disabled="@ControlDisabled(control)" title="Guardar en flash" aria-label="Guardar @control.Label en flash">
-                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                        <path d="M5 3h12l2 2v16H5V3zm2 2v5h9V5H7zm1 11v3h8v-3H8zm8-11v4h1V6l-1-1z" />
-                                    </svg>
-                                </button>
-                            }
-                        </div>
-                    }
-                </div>
+                <p class="result" style="color: var(--red);">@ControlProvider.LastError</p>
             }
+            <div class="controls-grid">
+                @foreach (var control in _controls)
+                {
+                    <div class="control-item">
+                        <label for="@control.Id">@control.Label</label>
+                        @if (control.Kind.Equals("slider", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <input id="@control.Id" type="range" min="@ControlMin(control)" max="@ControlMax(control)" step="@control.Step" value="@FormatControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
+                            <div class="inline-input">
+                                <input type="number" min="@ControlMin(control)" max="@ControlMax(control)" step="@control.Step" value="@FormatControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
+                                <span>@control.Unit</span>
+                                <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">Aplicar</button>
+                                @if (CanPersistControl(control))
+                                {
+                                    <button class="icon-button save-button" @onclick="() => SaveControlAsync(control)" disabled="@ControlDisabled(control)" title="Guardar en flash" aria-label="Guardar @control.Label en flash">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                            <path d="M5 3h12l2 2v16H5V3zm2 2v5h9V5H7zm1 11v3h8v-3H8zm8-11v4h1V6l-1-1z" />
+                                        </svg>
+                                    </button>
+                                }
+                            </div>
+                        }
+                        else if (control.Kind.Equals("button", StringComparison.OrdinalIgnoreCase))
+                        {
+                            <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">@control.Label</button>
+                        }
+                        else
+                        {
+                            <div class="inline-input">
+                                <input id="@control.Id" type="number" min="@control.Min" max="@control.Max" step="@control.Step" value="@FormatControlValue(control)" @onchange="args => UpdateControlValue(control, args)" disabled="@ControlDisabled(control)" />
+                                <span>@control.Unit</span>
+                                <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">Aplicar</button>
+                                @if (CanPersistControl(control))
+                                {
+                                    <button class="icon-button save-button" @onclick="() => SaveControlAsync(control)" disabled="@ControlDisabled(control)" title="Guardar en flash" aria-label="Guardar @control.Label en flash">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                            <path d="M5 3h12l2 2v16H5V3zm2 2v5h9V5H7zm1 11v3h8v-3H8zm8-11v4h1V6l-1-1z" />
+                                        </svg>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
         </div>
     </section>
 
-    <section class="panel telemetry-panel">
+    <section class="panel sine-panel collapsible-panel @(IsPanelCollapsed(PanelSineDrive) ? "is-collapsed" : null)">
+        <div class="panel-title">
+            <div>
+                <h2>Lazo abierto sinusoidal</h2>
+                <span>SPWM trifasica · frecuencia electrica</span>
+            </div>
+            <div class="panel-heading-actions">
+                <div class="sine-mode-switch" role="group" aria-label="Modo de aplicacion del lazo abierto">
+                    <button type="button" class="@SineModeButtonClass(SineInteractionMode.Manual)" aria-pressed="@(_sineInteractionMode == SineInteractionMode.Manual)" @onclick="() => SetSineInteractionModeAsync(SineInteractionMode.Manual)">MANUAL</button>
+                    <button type="button" class="@SineModeButtonClass(SineInteractionMode.Dynamic)" aria-pressed="@(_sineInteractionMode == SineInteractionMode.Dynamic)" @onclick="() => SetSineInteractionModeAsync(SineInteractionMode.Dynamic)">DINAMICO</button>
+                </div>
+                <span class="sine-state @(Snapshot.SineDrive.Active ? "active" : null)">@(Snapshot.SineDrive.Active ? "ACTIVO" : "DETENIDO")</span>
+                <button type="button" class="panel-toggle" aria-expanded="@(!IsPanelCollapsed(PanelSineDrive))" aria-controls="sine-drive-body" aria-label='@PanelToggleLabel(PanelSineDrive, "Lazo abierto sinusoidal")' @onclick="() => TogglePanelAsync(PanelSineDrive)">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+                </button>
+            </div>
+        </div>
+        <div id="sine-drive-body" class="panel-body sine-body" hidden="@IsPanelCollapsed(PanelSineDrive)">
+            <div class="sine-control-grid">
+                <label>
+                    Frecuencia electrica
+                    <input type="number" min="2" max="10" step="0.1" value="@FormatInvariant(_sineFrequencyHz)" @oninput="UpdateSineFrequency" disabled="@(_isBusy || _estopBusy || !CanSendControl)" />
+                    <span>Hz</span>
+                </label>
+                <label>
+                    Amplitud de modulacion
+                    <input type="range" min="0" max="100" step="1" value="@FormatInvariant(_sineAmplitudePercent)" @oninput="UpdateSineAmplitudeDraft" @onchange="CommitSineAmplitude" disabled="@(_isBusy || _estopBusy || !CanSendControl)" />
+                    <span>@_sineAmplitudePercent.ToString("0.#") %</span>
+                </label>
+            </div>
+            <div class="sine-actions">
+                @if (_sineInteractionMode == SineInteractionMode.Dynamic && Snapshot.SineDrive.Active)
+                {
+                    <button class="primary sine-auto-active" disabled>Actualizacion automatica</button>
+                }
+                else
+                {
+                    <button class="primary" @onclick="ApplySineDriveAsync" disabled="@(_isBusy || _estopBusy || !CanSendControl)">@(Snapshot.SineDrive.Active ? "Aplicar cambios" : "Iniciar lazo abierto")</button>
+                }
+                <button @onclick="StopAsync" disabled="@(_isBusy || !CanSendControl)">STOP</button>
+            </div>
+            <div class="sine-readback-line">
+                <span class="sine-sync-state @SineSyncClass">@SineSyncLabel</span>
+                <p class="sine-readback">@SineReadback</p>
+            </div>
+            <p class="safety-note">Sin limite de corriente o temperatura implementado. El firmware detiene la salida si pierde la renovacion del bridge.</p>
+        </div>
+    </section>
+
+    <section class="panel telemetry-panel collapsible-panel @(IsPanelCollapsed(PanelTelemetry) ? "is-collapsed" : null)">
         <div class="panel-title">
             <h2>Adquisicion de velocidad</h2>
-            <span>@Snapshot.SpeedTelemetry.SampleCount muestras</span>
+            <div class="panel-heading-actions">
+                <span>@Snapshot.SpeedTelemetry.SampleCount muestras</span>
+                <button type="button" class="panel-toggle" aria-expanded="@(!IsPanelCollapsed(PanelTelemetry))" aria-controls="speed-acquisition-body" aria-label='@PanelToggleLabel(PanelTelemetry, "Adquisicion de velocidad")' @onclick="() => TogglePanelAsync(PanelTelemetry)">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+                </button>
+            </div>
         </div>
-        <div class="telemetry-toolbar">
-            <label>
-                Tasa
-                <input type="number" min="100" max="5000" step="50" @bind="_logRateMs" />
-                <span>ms</span>
-            </label>
-            <button @onclick="SetLogRateAsync" disabled="@(_isBusy || !IsConnected)">Aplicar tasa</button>
-            <button class="primary" @onclick="StartSpeedLogAsync" disabled="@(_isBusy || !IsConnected || Snapshot.SpeedLoggingEnabled)">Iniciar velocidad</button>
-            <button @onclick="StopSpeedLogAsync" disabled="@(_isBusy || !IsConnected || !Snapshot.SpeedLoggingEnabled)">Detener velocidad</button>
-        </div>
-        <SpeedChart Samples="@_speedSamples"
-                    SetpointRpm="@Snapshot.Status?.SpeedSetpointRpm"
-                    ClearRequested="ClearSpeedTelemetry" />
-        <div class="telemetry-stats">
-            <span>Ultima: @(Snapshot.SpeedTelemetry.LastValue?.ToString("0.0") ?? "-") @Snapshot.SpeedTelemetry.Unit</span>
-            <span>Rate efectivo: @Snapshot.SpeedTelemetry.EffectiveRateHz.ToString("0.0") Hz</span>
-            <span>Descartadas: @Snapshot.SpeedTelemetry.DroppedSamples</span>
+        <div id="speed-acquisition-body" class="panel-body" hidden="@IsPanelCollapsed(PanelTelemetry)">
+            <div class="telemetry-toolbar">
+                <label>
+                    Tasa
+                    <input type="number" min="100" max="5000" step="50" @bind="_logRateMs" />
+                    <span>ms</span>
+                </label>
+                <button @onclick="SetLogRateAsync" disabled="@(_isBusy || !IsConnected)">Aplicar tasa</button>
+                <button class="primary" @onclick="StartSpeedLogAsync" disabled="@(_isBusy || !IsConnected || Snapshot.SpeedLoggingEnabled)">Iniciar velocidad</button>
+                <button @onclick="StopSpeedLogAsync" disabled="@(_isBusy || !IsConnected || !Snapshot.SpeedLoggingEnabled)">Detener velocidad</button>
+            </div>
+            <SpeedChart Samples="@_speedSamples"
+                        SetpointRpm="@Snapshot.Status?.SpeedSetpointRpm"
+                        ClearRequested="ClearSpeedTelemetry" />
+            <div class="telemetry-stats">
+                <span>Ultima: @(Snapshot.SpeedTelemetry.LastValue?.ToString("0.0") ?? "-") @Snapshot.SpeedTelemetry.Unit</span>
+                <span>Rate efectivo: @Snapshot.SpeedTelemetry.EffectiveRateHz.ToString("0.0") Hz</span>
+                <span>Descartadas: @Snapshot.SpeedTelemetry.DroppedSamples</span>
+            </div>
         </div>
     </section>
 
 </main>
 
 @code {
+    private const string PanelStorageKey = "esc.dashboard.panels.v1";
+    private const string SineModeStorageKey = "esc.dashboard.sine-mode.v1";
+    private const string PanelStatus = "esc-status";
+    private const string PanelPower = "power-command";
+    private const string PanelParameters = "parameter-adjustment";
+    private const string PanelSineDrive = "sine-drive";
+    private const string PanelTelemetry = "speed-acquisition";
+    private static readonly string[] KnownPanels =
+        [PanelStatus, PanelPower, PanelParameters, PanelSineDrive, PanelTelemetry];
+
     private BridgeSnapshot Snapshot { get; set; } = default!;
     private IReadOnlyList<DashboardControl> _controls = Array.Empty<DashboardControl>();
     private IReadOnlyList<TelemetrySample> _speedSamples = Array.Empty<TelemetrySample>();
     private readonly Dictionary<string, double> _controlValues = new(StringComparer.OrdinalIgnoreCase);
     private string? _selectedDevicePath;
     private ushort _logRateMs = 500;
+    private double _sineFrequencyHz = 2.0;
+    private double _sineAmplitudePercent = 20.0;
+    private SineInteractionMode _sineInteractionMode = SineInteractionMode.Manual;
+    private SineDynamicState _sineDynamicState = SineDynamicState.Idle;
+    private SineDriveSettings? _lastSineRequestedSeen;
+    private SineDriveSettings? _pendingDynamicSine;
+    private CancellationTokenSource _dynamicSineCancellation = new();
+    private CancellationTokenSource? _frequencyDebounceCancellation;
+    private bool _sineDraftDirty;
+    private bool _dynamicSineSendRunning;
+    private readonly HashSet<string> _collapsedPanels = new(StringComparer.Ordinal);
     private string _lastCommandResult = "Listo.";
     private bool _isBusy;
+    private bool _estopBusy;
     private bool _disposed;
 
     private bool IsConnected => Snapshot.State == DeviceConnectionState.Connected;
+    private bool CanEmergencyStop => Snapshot.TransportOpen;
     private bool CanSendControl => IsConnected && Snapshot.Mode == ControlMode.GuiControl;
     private string StateClass => Snapshot.State.ToString().ToLowerInvariant();
     private string ConnectionLabel => Snapshot.CurrentDevice?.DisplayName ?? "VID 0x3232 / PID 0xEC32";
+    private string SineReadback => Snapshot.SineDrive.Applied is { } applied
+        ? $"Aplicado por el MCU: {applied.ElectricalFrequencyHz:0.###} Hz · {applied.AmplitudePercent:0.#} %."
+        : "Ajusta ambas consignas y activa la salida desde este panel.";
+    private string SineSyncLabel => _sineInteractionMode == SineInteractionMode.Manual
+        ? "MANUAL"
+        : _sineDynamicState switch
+        {
+            SineDynamicState.Pending => "PENDIENTE",
+            SineDynamicState.Applying => "APLICANDO",
+            SineDynamicState.Synchronized => "SINCRONIZADO",
+            SineDynamicState.Draft => "BORRADOR",
+            SineDynamicState.Error => "ERROR",
+            _ => Snapshot.SineDrive.Active ? "LISTO" : "EN ESPERA"
+        };
+    private string SineSyncClass => _sineInteractionMode == SineInteractionMode.Manual
+        ? "manual"
+        : _sineDynamicState.ToString().ToLowerInvariant();
     private string ModeHint => Snapshot.Mode switch
     {
         ControlMode.GuiControl => "La GUI puede enviar comandos al ESC.",
@@ -215,10 +333,11 @@
         }
 
         _logRateMs = Snapshot.LogRateMs;
+        SynchronizeSineDraftFromSnapshot(force: true);
         PickDefaultDevice();
     }
 
-    protected override void OnAfterRender(bool firstRender)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (!firstRender)
         {
@@ -226,6 +345,43 @@
         }
 
         Bridge.SnapshotChanged += HandleSnapshotChanged;
+        try
+        {
+            string? stored = await JS.InvokeAsync<string?>("localStorage.getItem", PanelStorageKey);
+            string[]? collapsed = string.IsNullOrWhiteSpace(stored)
+                ? null
+                : System.Text.Json.JsonSerializer.Deserialize<string[]>(stored);
+            if (collapsed is not null)
+            {
+                foreach (string panel in collapsed.Where(KnownPanels.Contains))
+                {
+                    _collapsedPanels.Add(panel);
+                }
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            // Browser storage is optional; in-memory collapse still works.
+        }
+
+        try
+        {
+            string? storedSineMode = await JS.InvokeAsync<string?>("localStorage.getItem", SineModeStorageKey);
+            if (Enum.TryParse(storedSineMode, ignoreCase: true, out SineInteractionMode storedMode) &&
+                Enum.IsDefined(storedMode))
+            {
+                _sineInteractionMode = storedMode;
+                _sineDynamicState = storedMode == SineInteractionMode.Dynamic && Snapshot.SineDrive.Active
+                    ? SineDynamicState.Synchronized
+                    : SineDynamicState.Idle;
+                StateHasChanged();
+            }
+        }
+        catch
+        {
+            // Manual remains the safe default when mode persistence is unavailable.
+        }
     }
 
     private void HandleSnapshotChanged(object? sender, EventArgs args)
@@ -238,6 +394,7 @@
             }
 
             Snapshot = Bridge.Snapshot;
+            SynchronizeSineDraftFromSnapshot();
             _speedSamples = Bridge.SpeedSamples;
             PickDefaultDevice();
             StateHasChanged();
@@ -264,6 +421,7 @@
 
     private async Task DisconnectAsync() => await BusyExecAsync(async () =>
     {
+        CancelDynamicSineQueue();
         await Bridge.DisconnectAsync();
         _lastCommandResult = "Desconectado.";
         Snapshot = Bridge.Snapshot;
@@ -282,7 +440,8 @@
             return;
         }
 
-        await Bridge.SetModeAsync(mode);
+        CommandResult result = await Bridge.SetModeAsync(mode);
+        _lastCommandResult = result.Message;
         Snapshot = Bridge.Snapshot;
     });
 
@@ -293,8 +452,46 @@
     });
 
     private async Task RunAsync() => await BusyExecAsync(() => StoreResultAsync(Bridge.RunAsync()));
-    private async Task StopAsync() => await BusyExecAsync(() => StoreResultAsync(Bridge.StopAsync()));
-    private async Task EmergencyStopAsync() => await BusyExecAsync(() => StoreResultAsync(Bridge.EmergencyStopAsync()));
+    private async Task StopAsync() => await BusyExecAsync(async () =>
+    {
+        CancelDynamicSineQueue();
+        await StoreResultAsync(Bridge.StopAsync());
+        _sineDynamicState = SineDynamicState.Idle;
+    });
+    private async Task EmergencyStopAsync()
+    {
+        if (_estopBusy || !CanEmergencyStop) return;
+        _estopBusy = true;
+        CancelDynamicSineQueue();
+        try
+        {
+            CommandResult result = await Bridge.EmergencyStopAsync();
+            _lastCommandResult = result.Message;
+            Snapshot = Bridge.Snapshot;
+            _sineDynamicState = result.Success ? SineDynamicState.Idle : SineDynamicState.Error;
+        }
+        finally
+        {
+            _estopBusy = false;
+        }
+    }
+    private async Task ApplySineDriveAsync() => await BusyExecAsync(async () =>
+    {
+        var settings = new SineDriveSettings(_sineFrequencyHz, _sineAmplitudePercent);
+        CommandResult result = await Bridge.SetSineDriveAsync(
+            settings.ElectricalFrequencyHz, settings.AmplitudePercent);
+        _lastCommandResult = result.Message;
+        Snapshot = Bridge.Snapshot;
+        if (result.Success && SineDraftMatches(settings))
+        {
+            _sineDraftDirty = false;
+            SynchronizeSineDraftFromSnapshot();
+            if (_sineInteractionMode == SineInteractionMode.Dynamic)
+            {
+                _sineDynamicState = SineDynamicState.Synchronized;
+            }
+        }
+    });
 
     private async Task SetLogRateAsync() => await BusyExecAsync(async () =>
     {
@@ -413,6 +610,234 @@
             : value;
     }
 
+    private void UpdateSineFrequency(ChangeEventArgs args)
+    {
+        if (TryParseInvariant(args.Value, out double value) && value is >= 2.0 and <= 10.0)
+        {
+            _sineFrequencyHz = value;
+            _sineDraftDirty = true;
+            ScheduleDynamicFrequencyApply();
+        }
+    }
+
+    private void UpdateSineAmplitudeDraft(ChangeEventArgs args)
+    {
+        if (TryParseInvariant(args.Value, out double value))
+        {
+            _sineAmplitudePercent = Math.Clamp(value, 0.0, 100.0);
+            _sineDraftDirty = true;
+        }
+    }
+
+    private void CommitSineAmplitude(ChangeEventArgs args)
+    {
+        UpdateSineAmplitudeDraft(args);
+        QueueDynamicSineApply();
+    }
+
+    private static bool TryParseInvariant(object? raw, out double value)
+    {
+        return double.TryParse(
+            raw?.ToString(),
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out value);
+    }
+
+    private static string FormatInvariant(double value) =>
+        value.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    private void SynchronizeSineDraftFromSnapshot(bool force = false)
+    {
+        if (Snapshot.SineDrive.Requested is not { } requested)
+        {
+            if (!Snapshot.SineDrive.Active) _lastSineRequestedSeen = null;
+            return;
+        }
+        if (!force && (requested == _lastSineRequestedSeen || _sineDraftDirty)) return;
+
+        _sineFrequencyHz = requested.ElectricalFrequencyHz;
+        _sineAmplitudePercent = requested.AmplitudePercent;
+        _lastSineRequestedSeen = requested;
+        _sineDraftDirty = false;
+    }
+
+    private string SineModeButtonClass(SineInteractionMode mode) =>
+        _sineInteractionMode == mode ? "active" : string.Empty;
+
+    private async Task SetSineInteractionModeAsync(SineInteractionMode mode)
+    {
+        if (_sineInteractionMode == mode) return;
+        _sineInteractionMode = mode;
+        CancelDynamicSineQueue();
+        _sineDynamicState = mode == SineInteractionMode.Dynamic && Snapshot.SineDrive.Active
+            ? (_sineDraftDirty ? SineDynamicState.Draft : SineDynamicState.Synchronized)
+            : SineDynamicState.Idle;
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", SineModeStorageKey, mode.ToString());
+        }
+        catch
+        {
+            // The selected mode still remains active for this browser session.
+        }
+    }
+
+    private void QueueDynamicSineApply()
+    {
+        if (_sineInteractionMode != SineInteractionMode.Dynamic ||
+            !Snapshot.SineDrive.Active ||
+            !CanSendControl ||
+            _estopBusy ||
+            _disposed)
+        {
+            return;
+        }
+
+        _pendingDynamicSine = new SineDriveSettings(_sineFrequencyHz, _sineAmplitudePercent);
+        _sineDynamicState = SineDynamicState.Pending;
+        StartDynamicSineQueue();
+    }
+
+    private void ScheduleDynamicFrequencyApply()
+    {
+        _frequencyDebounceCancellation?.Cancel();
+        _frequencyDebounceCancellation?.Dispose();
+        _frequencyDebounceCancellation =
+            CancellationTokenSource.CreateLinkedTokenSource(_dynamicSineCancellation.Token);
+        _ = ApplyDynamicFrequencyAfterDelayAsync(_frequencyDebounceCancellation.Token);
+    }
+
+    private async Task ApplyDynamicFrequencyAfterDelayAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(80, cancellationToken);
+            if (!_disposed) await InvokeAsync(QueueDynamicSineApply);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private void StartDynamicSineQueue()
+    {
+        if (_dynamicSineSendRunning || _pendingDynamicSine is null) return;
+        _dynamicSineSendRunning = true;
+        _ = ProcessDynamicSineQueueAsync();
+    }
+
+    private async Task ProcessDynamicSineQueueAsync()
+    {
+        try
+        {
+            while (!_disposed &&
+                   _sineInteractionMode == SineInteractionMode.Dynamic &&
+                   Snapshot.SineDrive.Active &&
+                   !_estopBusy &&
+                   _pendingDynamicSine is { } settings)
+            {
+                _pendingDynamicSine = null;
+                _sineDynamicState = SineDynamicState.Applying;
+                CancellationToken dynamicCancellation = _dynamicSineCancellation.Token;
+                if (_disposed) return;
+                await InvokeAsync(StateHasChanged);
+
+                CommandResult result = await Bridge.UpdateSineDriveAsync(
+                    settings.ElectricalFrequencyHz,
+                    settings.AmplitudePercent,
+                    dynamicCancellation);
+                if (_disposed) return;
+
+                Snapshot = Bridge.Snapshot;
+                _lastCommandResult = result.Message;
+                if (!result.Success)
+                {
+                    _pendingDynamicSine = null;
+                    _sineDynamicState = SineDynamicState.Error;
+                    return;
+                }
+
+                if (SineDraftMatches(settings) && _pendingDynamicSine is null)
+                {
+                    _sineDraftDirty = false;
+                    _lastSineRequestedSeen = Snapshot.SineDrive.Requested;
+                    _sineDynamicState = SineDynamicState.Synchronized;
+                }
+                else
+                {
+                    _sineDynamicState = SineDynamicState.Pending;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (!_disposed) _sineDynamicState = SineDynamicState.Idle;
+        }
+        catch (Exception exception)
+        {
+            if (!_disposed)
+            {
+                _lastCommandResult = exception.Message;
+                _sineDynamicState = SineDynamicState.Error;
+            }
+        }
+        finally
+        {
+            _dynamicSineSendRunning = false;
+            if (!_disposed && _pendingDynamicSine is not null &&
+                _sineInteractionMode == SineInteractionMode.Dynamic &&
+                Snapshot.SineDrive.Active && !_estopBusy)
+            {
+                StartDynamicSineQueue();
+            }
+            if (!_disposed) await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private bool SineDraftMatches(SineDriveSettings settings) =>
+        _sineFrequencyHz == settings.ElectricalFrequencyHz &&
+        _sineAmplitudePercent == settings.AmplitudePercent;
+
+    private void CancelDynamicSineQueue(bool renew = true)
+    {
+        _pendingDynamicSine = null;
+        _frequencyDebounceCancellation?.Cancel();
+        _frequencyDebounceCancellation?.Dispose();
+        _frequencyDebounceCancellation = null;
+        _dynamicSineCancellation.Cancel();
+        _dynamicSineCancellation.Dispose();
+        if (renew && !_disposed) _dynamicSineCancellation = new CancellationTokenSource();
+    }
+
+    private bool IsPanelCollapsed(string panel) => _collapsedPanels.Contains(panel);
+
+    private string PanelToggleLabel(string panel, string title) =>
+        $"{(IsPanelCollapsed(panel) ? "Restaurar" : "Minimizar")} {title}";
+
+    private async Task TogglePanelAsync(string panel)
+    {
+        if (!KnownPanels.Contains(panel)) return;
+        if (!_collapsedPanels.Add(panel))
+        {
+            _collapsedPanels.Remove(panel);
+        }
+
+        try
+        {
+            string json = System.Text.Json.JsonSerializer.Serialize(
+                _collapsedPanels.Order(StringComparer.Ordinal));
+            await JS.InvokeVoidAsync("localStorage.setItem", PanelStorageKey, json);
+        }
+        catch
+        {
+            // Keep the local state when storage is unavailable.
+        }
+    }
+
+    private string FormatControlValue(DashboardControl control) =>
+        ControlValue(control).ToString(System.Globalization.CultureInfo.InvariantCulture);
+
     private double ControlMin(DashboardControl control) =>
         IsSpeedSetpoint(control) && Snapshot.ActiveSpeedLimits is { } limits ? limits.MinRpm : control.Min;
 
@@ -480,6 +905,23 @@
     public void Dispose()
     {
         _disposed = true;
+        CancelDynamicSineQueue(renew: false);
         Bridge.SnapshotChanged -= HandleSnapshotChanged;
+    }
+
+    private enum SineInteractionMode
+    {
+        Manual,
+        Dynamic
+    }
+
+    private enum SineDynamicState
+    {
+        Idle,
+        Pending,
+        Applying,
+        Draft,
+        Synchronized,
+        Error
     }
 }

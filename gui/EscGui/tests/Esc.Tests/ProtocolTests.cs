@@ -68,6 +68,81 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public void DecodeStatusRecognizesSineDriveStateWithoutRenumberingExistingStates()
+    {
+        byte[] payload = new byte[10];
+        payload[0] = 10;
+        byte[] raw = EscProtocol.BuildFrame(
+            3, CommOpcode.GetStatus, 0, payload, CommFrameType.Response, CommStatus.Ok);
+
+        EscStatus status = EscProtocol.DecodeStatus(EscProtocol.Parse(raw));
+
+        Assert.Equal("SINE_DRIVE", status.AppStateName);
+        Assert.Equal(0x50, (byte)CommOpcode.SineDrive);
+        Assert.Equal(0, (byte)SineDriveCommand.Apply);
+        Assert.Equal(1, (byte)SineDriveCommand.KeepAlive);
+    }
+
+    [Fact]
+    public void SineDrivePayloadUsesExactFixedPointWireShape()
+    {
+        byte[] payload = EscProtocol.SineDrivePayload(7.25, 42.5);
+
+        Assert.Equal([0x52, 0x1C, 0x00, 0x00, 0xA9, 0x01], payload);
+    }
+
+    [Theory]
+    [InlineData(1.99, 20)]
+    [InlineData(10.01, 20)]
+    [InlineData(5, -0.1)]
+    [InlineData(5, 100.1)]
+    [InlineData(double.NaN, 20)]
+    public void SineDrivePayloadRejectsOutOfRangeValues(double frequencyHz, double amplitudePercent)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => EscProtocol.SineDrivePayload(frequencyHz, amplitudePercent));
+    }
+
+    [Fact]
+    public void DecodeSineDriveReadsAppliedQuantizedSettings()
+    {
+        byte[] raw = EscProtocol.BuildFrame(
+            2,
+            CommOpcode.SineDrive,
+            0,
+            [0x51, 0x1C, 0x00, 0x00, 0xA9, 0x01],
+            CommFrameType.Response,
+            CommStatus.Ok);
+
+        SineDriveSettings settings = EscProtocol.DecodeSineDrive(EscProtocol.Parse(raw));
+
+        Assert.Equal(7.249, settings.ElectricalFrequencyHz);
+        Assert.Equal(42.5, settings.AmplitudePercent);
+    }
+
+    [Theory]
+    [InlineData(ConfigParam.StartupInitialAmplitude, 20.0, 2)]
+    [InlineData(ConfigParam.StartupFinalAmplitude, 100.0, 2)]
+    [InlineData(ConfigParam.StartupInitialFrequency, 2.09, 4)]
+    [InlineData(ConfigParam.StartupFinalFrequency, 9.28, 4)]
+    [InlineData(ConfigParam.StartupDuration, 3.0, 4)]
+    public void StartupConfigPayloadRoundTripsPhysicalUnits(ConfigParam parameter, double value, int length)
+    {
+        byte[] payload = EscProtocol.ConfigPayload(parameter, value);
+
+        Assert.Equal(length, payload.Length);
+        Assert.Equal(value, Assert.IsType<double>(EscProtocol.DecodeConfigValue(parameter, payload)), 3);
+    }
+
+    [Fact]
+    public void StartupConfigPayloadsUseDocumentedWireUnits()
+    {
+        Assert.Equal([0xC8, 0x00], EscProtocol.ConfigPayload(ConfigParam.StartupInitialAmplitude, 20));
+        Assert.Equal([0x2A, 0x08, 0x00, 0x00], EscProtocol.ConfigPayload(ConfigParam.StartupInitialFrequency, 2.09));
+        Assert.Equal([0xB8, 0x0B, 0x00, 0x00], EscProtocol.ConfigPayload(ConfigParam.StartupDuration, 3));
+    }
+
+    [Fact]
     public void DecodeValidationReferenceReadsStructuralControllerValues()
     {
         byte[] payload = new byte[20];

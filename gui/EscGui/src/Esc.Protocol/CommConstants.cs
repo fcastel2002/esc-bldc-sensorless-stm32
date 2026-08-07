@@ -14,6 +14,12 @@ public static class CommConstants
 
     public const int DefaultVendorId = 0x3232;
     public const int DefaultProductId = 0xEC32;
+
+    public const double MinSineFrequencyHz = 2.0;
+    public const double MaxSineFrequencyHz = 10.0;
+    public const double MaxSineAmplitudePercent = 100.0;
+    public const double MinStartupDurationSeconds = 0.5;
+    public const double MaxStartupDurationSeconds = 10.0;
 }
 
 public enum CommFrameType : byte
@@ -46,6 +52,7 @@ public enum CommOpcode : byte
     HilSetInputs = 0x42,
     HilGetOutputs = 0x43,
     HilStep = 0x44,
+    SineDrive = 0x50,
 }
 
 public enum CommStatus : byte
@@ -77,6 +84,12 @@ public enum HilExecutionMode : byte
     Stepped = 1,
 }
 
+public enum SineDriveCommand : byte
+{
+    Apply = 0,
+    KeepAlive = 1,
+}
+
 public enum ConfigParam : byte
 {
     PwmFreq = 0x01,
@@ -91,6 +104,11 @@ public enum ConfigParam : byte
     KpRpm = 0x0A,
     KiRpm = 0x0B,
     KdRpm = 0x0C,
+    StartupInitialAmplitude = 0x0D,
+    StartupFinalAmplitude = 0x0E,
+    StartupInitialFrequency = 0x0F,
+    StartupFinalFrequency = 0x10,
+    StartupDuration = 0x11,
     All = 0xFF,
 }
 

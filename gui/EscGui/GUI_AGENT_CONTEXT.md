@@ -98,7 +98,7 @@ Consecuencia: si un cambio afecta estado observable, casi seguro debe terminar a
 
 - `App.razor` monta `Routes` y `ReconnectModal`.
 - `Routes.razor` usa `MainLayout` y enruta a paginas Razor.
-- La unica pagina funcional importante hoy es `Components/Pages/Home.razor`.
+- Las paginas operativas principales son `Components/Pages/Home.razor`, `Startup.razor`, las validaciones y el monitor PIL.
 - `Home.razor`:
   - inyecta `EscBridgeService` y `ModularControlProvider`.
   - se suscribe a `Bridge.SnapshotChanged`.
@@ -109,7 +109,9 @@ Consecuencia: si un cambio afecta estado observable, casi seguro debe terminar a
     - comandos RUN/STOP/ESTOP
     - controles modulares desde `controls.json`
     - telemetria de velocidad
-    - panel HIL/Simulink
+    - lazo abierto sinusoidal trifasico
+    - paneles minimizables con preferencias en `localStorage`
+- `Startup.razor` muestra los cinco parametros fisicos de la rampa de arranque y separa Aplicar en RAM de Guardar en flash.
 
 ## 7. Worker de fondo
 
@@ -118,6 +120,7 @@ Consecuencia: si un cambio afecta estado observable, casi seguro debe terminar a
   - `ScanAsync()`
   - `ReadTelemetryOnceAsync()`
   - `RefreshStatusAsync()` si hay conexion
+- Un ciclo separado de 350 ms mantiene el `KEEPALIVE` de `SINE_DRIVE` sin depender del refresh general.
 - `ReadTelemetryOnceAsync()` solo lee una trama por iteracion y solo si `SpeedLoggingEnabled` es `true`.
 
 Consecuencia: la telemetria no es un stream continuo separado; depende del worker y del log habilitado.
@@ -140,6 +143,10 @@ Detalles importantes:
 - `SetSpeedRpmFromSimulinkAsync()` valida `SimulinkControl`.
 - `HilStartAsync()` y `HilSetInputsAsync()` validan `mode != MonitorOnly`.
 - `EmergencyStopAsync()` no depende del modo.
+- `SetSineDriveAsync()` solo admite `GuiControl`; `EscBridgeWorker` envia `KEEPALIVE` en un ciclo dedicado de 350 ms y el firmware corta tras 1500 ms sin renovacion. `KEEPALIVE` nunca puede iniciar el modo desde `IDLE`.
+- El panel ofrece `Manual`, que conserva un borrador hasta pulsar Aplicar, y `Dinamico`, que usa `UpdateSineDriveAsync()` con `KEEPALIVE` y sin `GET_STATUS` adicional para enviar frecuencia en cada input valido y amplitud al soltar el slider. Al usar `KEEPALIVE`, una edicion dinamica nunca puede iniciar desde `IDLE`.
+- `Dinamico` nunca inicia el motor por editar estando detenido, conserva solo el ultimo valor pendiente si el HID esta ocupado y persiste la seleccion en `localStorage`.
+- Cambiar fuera de `GuiControl` o desconectar detiene primero el lazo abierto; `ESTOP` conserva su camino inmediato sin `GET_STATUS` posterior.
 
 ## 9. Controles modulares
 
@@ -163,6 +170,7 @@ La persistencia en flash no viene del JSON. La UI muestra el boton guardar solo 
 - `EscBridgeService.HandleFrame()` decodifica el evento y lo guarda en `TelemetryStore`.
 - `TelemetryStore` conserva hasta 2000 muestras por variable.
 - `BridgeSnapshot.SpeedTelemetry` trae estadisticas agregadas.
+- `BridgeSnapshot.StartupConfiguration` y `BridgeSnapshot.SineDrive` exponen configuracion y readback del nuevo modo.
 - `Bridge.SpeedSamples` expone las muestras de `speed`.
 - `SpeedChart.razor` dibuja SVG manual.
 
@@ -223,6 +231,7 @@ Los endpoints viven en `BridgeEndpointMapper.cs`.
   - `POST /api/bridge/stop`
   - `POST /api/bridge/estop`
   - `POST /api/bridge/set-speed`
+  - `POST /api/bridge/sine-drive`
 - config:
   - `GET /api/bridge/config/{parameter}`
   - `POST /api/bridge/config/{parameter}`
@@ -253,6 +262,7 @@ Importante: la pagina `Home.razor` no usa estos endpoints. Llama al bridge en me
   - `GetConfig`, `SetConfig`, `ResetConfig`, `SaveConfig`
   - `LogStart`, `LogStop`, `LogRate`, `TelemetryEvent`
   - `HilStart`, `HilStop`, `HilSetInputs`, `HilGetOutputs`
+  - `SineDrive`
 - `HidSharpEscTransport`:
   - abre por VID/PID y `DevicePath`
   - agrega report ID 0 al escribir cuando Windows lo necesita
@@ -271,6 +281,7 @@ Importante: la pagina `Home.razor` no usa estos endpoints. Llama al bridge en me
   - metodo en `EscBridgeService`
   - UI o endpoint que lo invoque
   - tests
+- El lazo abierto usa un payload atomico de frecuencia electrica en mHz y amplitud en permille. No se modela como dos controles independientes de `controls.json`.
 - Agregar telemetria nueva:
   - `LogParam`
   - decode en `EscProtocol.DecodeTelemetry()`

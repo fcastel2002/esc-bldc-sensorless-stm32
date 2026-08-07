@@ -10,7 +10,7 @@
 
 #pragma GCC optimize("Os")
 
-#define RUNNING_RESTART_TIMEOUT_MS 1500U
+#define RUNNING_RESTART_TIMEOUT_MS 4500U
 #define RUNNING_RESTART_BRAKE_MS 500U
 
 volatile App_States_t app_state = IDLE;
@@ -53,6 +53,8 @@ __attribute__((optimize("Oz"))) App_States_t handleState(void)
     process_logging_queue();
   }
 
+  sine_drive_check_watchdog();
+
   if (cmd_received_ack && (app_state == IDLE || app_state == RUNNING || app_state == CLOSEDLOOP)) {
     if (process_speed_command()) {
       cmd_speed_received_ack = 0;
@@ -94,6 +96,8 @@ __attribute__((optimize("Oz"))) App_States_t handleState(void)
     break;
 
   case FOC_STARTUP:
+    break;
+  case SINE_DRIVE:
     break;
   case RUNNING:
     if (consistent_zero_crossing) {

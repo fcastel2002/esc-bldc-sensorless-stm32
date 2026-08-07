@@ -28,7 +28,7 @@ ESCparams        current_esc_params    = {0};
 
 void             set_default_esc_params()
 {
-  current_esc_params.signature     = ESC_PARAMS_SIGNATURE_V2;
+  current_esc_params.signature     = ESC_PARAMS_SIGNATURE_V3;
   current_esc_params.pwm_freq_hz   = 18000;
   current_esc_params.current_limit = 10;
   current_esc_params.temp_limit    = 70;
@@ -38,6 +38,15 @@ void             set_default_esc_params()
   current_esc_params.speed_max_rpm = 5400;
   current_esc_params.speed_min_rpm = 200; // Default minimum speed
   current_esc_params.pole_pairs    = 2; // Default pole pairs
+  current_esc_params.startup_initial_amplitude_permille =
+      ESC_DEFAULT_STARTUP_INITIAL_AMPLITUDE_PERMILLE;
+  current_esc_params.startup_final_amplitude_permille =
+      ESC_DEFAULT_STARTUP_FINAL_AMPLITUDE_PERMILLE;
+  current_esc_params.startup_initial_frequency_millihz =
+      ESC_DEFAULT_STARTUP_INITIAL_FREQUENCY_MILLIHZ;
+  current_esc_params.startup_final_frequency_millihz =
+      ESC_DEFAULT_STARTUP_FINAL_FREQUENCY_MILLIHZ;
+  current_esc_params.startup_duration_ms = ESC_DEFAULT_STARTUP_DURATION_MS;
 
   current_esc_params.crc32 = compute_crc32(&current_esc_params);
 }
@@ -200,4 +209,90 @@ ConfigStatus set_min_speed(uint16_t new_speed)
   current_esc_params.speed_min_rpm = new_speed;
   flash_config_parameter_changed();
   return CONFIG_OK;
+}
+
+static ConfigStatus validate_sine_amplitude(uint16_t amplitude_permille)
+{
+  return amplitude_permille <= ESC_MAX_SINE_AMPLITUDE_PERMILLE
+      ? CONFIG_OK
+      : CONFIG_ERROR_OVERLIMIT;
+}
+
+static ConfigStatus validate_sine_frequency(uint32_t frequency_millihz)
+{
+  if (frequency_millihz < ESC_MIN_SINE_FREQUENCY_MILLIHZ)
+    return CONFIG_ERROR_UNDERLIMIT;
+  if (frequency_millihz > ESC_MAX_SINE_FREQUENCY_MILLIHZ)
+    return CONFIG_ERROR_OVERLIMIT;
+  return CONFIG_OK;
+}
+
+ConfigStatus set_startup_initial_amplitude(uint16_t amplitude_permille)
+{
+  ConfigStatus status = validate_sine_amplitude(amplitude_permille);
+  if (status != CONFIG_OK) return status;
+  current_esc_params.startup_initial_amplitude_permille = amplitude_permille;
+  flash_config_parameter_changed();
+  return CONFIG_OK;
+}
+
+ConfigStatus set_startup_final_amplitude(uint16_t amplitude_permille)
+{
+  ConfigStatus status = validate_sine_amplitude(amplitude_permille);
+  if (status != CONFIG_OK) return status;
+  current_esc_params.startup_final_amplitude_permille = amplitude_permille;
+  flash_config_parameter_changed();
+  return CONFIG_OK;
+}
+
+ConfigStatus set_startup_initial_frequency(uint32_t frequency_millihz)
+{
+  ConfigStatus status = validate_sine_frequency(frequency_millihz);
+  if (status != CONFIG_OK) return status;
+  current_esc_params.startup_initial_frequency_millihz = frequency_millihz;
+  flash_config_parameter_changed();
+  return CONFIG_OK;
+}
+
+ConfigStatus set_startup_final_frequency(uint32_t frequency_millihz)
+{
+  ConfigStatus status = validate_sine_frequency(frequency_millihz);
+  if (status != CONFIG_OK) return status;
+  current_esc_params.startup_final_frequency_millihz = frequency_millihz;
+  flash_config_parameter_changed();
+  return CONFIG_OK;
+}
+
+ConfigStatus set_startup_duration(uint32_t duration_ms)
+{
+  if (duration_ms < ESC_MIN_STARTUP_DURATION_MS) return CONFIG_ERROR_UNDERLIMIT;
+  if (duration_ms > ESC_MAX_STARTUP_DURATION_MS) return CONFIG_ERROR_OVERLIMIT;
+  current_esc_params.startup_duration_ms = duration_ms;
+  flash_config_parameter_changed();
+  return CONFIG_OK;
+}
+
+uint16_t get_startup_initial_amplitude(void)
+{
+  return current_esc_params.startup_initial_amplitude_permille;
+}
+
+uint16_t get_startup_final_amplitude(void)
+{
+  return current_esc_params.startup_final_amplitude_permille;
+}
+
+uint32_t get_startup_initial_frequency(void)
+{
+  return current_esc_params.startup_initial_frequency_millihz;
+}
+
+uint32_t get_startup_final_frequency(void)
+{
+  return current_esc_params.startup_final_frequency_millihz;
+}
+
+uint32_t get_startup_duration(void)
+{
+  return current_esc_params.startup_duration_ms;
 }

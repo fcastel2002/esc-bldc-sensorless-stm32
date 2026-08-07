@@ -19,10 +19,32 @@ public sealed class BridgeTests
         Assert.Equal(DeviceConnectionState.Connected, bridge.Snapshot.State);
         Assert.Equal("USB", bridge.Snapshot.Status?.Transport);
         Assert.Equal(new ActiveSpeedLimits(200, 5400), bridge.Snapshot.ActiveSpeedLimits);
+        Assert.Equal(3.0, bridge.Snapshot.StartupConfiguration?.DurationSeconds);
     }
 
     [Fact]
-    public async Task SimulinkModeBlocksGuiControlButAllowsEmergencyStop()
+    public async Task EmergencyStopIsAllowedInEveryControlModeWithoutStatusRefresh()
+    {
+        foreach (ControlMode mode in Enum.GetValues<ControlMode>())
+        {
+            FakeEscTransport transport = new();
+            var bridge = CreateBridge(transport);
+            await bridge.ConnectAsync();
+            await bridge.SetModeAsync(mode);
+            int statusRequestsBeforeEstop = transport.RequestedOpcodes.Count(opcode => opcode == CommOpcode.GetStatus);
+
+            CommandResult estop = await bridge.EmergencyStopAsync();
+
+            Assert.True(estop.Success);
+            Assert.Contains(CommOpcode.EmergencyStop, transport.RequestedOpcodes);
+            Assert.Equal(
+                statusRequestsBeforeEstop,
+                transport.RequestedOpcodes.Count(opcode => opcode == CommOpcode.GetStatus));
+        }
+    }
+
+    [Fact]
+    public async Task SimulinkModeStillBlocksGuiRun()
     {
         FakeEscTransport transport = new();
         var bridge = CreateBridge(transport);
@@ -30,12 +52,9 @@ public sealed class BridgeTests
         await bridge.SetModeAsync(ControlMode.SimulinkControl);
 
         CommandResult run = await bridge.RunAsync();
-        CommandResult estop = await bridge.EmergencyStopAsync();
 
         Assert.False(run.Success);
-        Assert.True(estop.Success);
         Assert.DoesNotContain(CommOpcode.Run, transport.RequestedOpcodes);
-        Assert.Contains(CommOpcode.EmergencyStop, transport.RequestedOpcodes);
     }
 
     [Fact]
@@ -151,6 +170,142 @@ public sealed class BridgeTests
 
         Assert.True(result.Success);
         Assert.Equal(new ActiveSpeedLimits(200, 6000), bridge.Snapshot.ActiveSpeedLimits);
+    }
+
+    [Fact]
+    public async Task SineDriveUsesAtomicPayloadAndUpdatesSnapshot()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+
+        CommandResult result = await bridge.SetSineDriveAsync(7.25, 42.5);
+
+        Assert.True(result.Success);
+        Assert.True(bridge.Snapshot.SineDrive.Active);
+        Assert.Equal(new SineDriveSettings(7.25, 42.5), bridge.Snapshot.SineDrive.Applied);
+        byte[] payload = Assert.Single(
+            transport.RequestPayloads,
+            candidate => candidate.Length == 6 && BitConverter.ToUInt32(candidate, 0) == 7250);
+        Assert.Equal((ushort)425, BitConverter.ToUInt16(payload, 4));
+
+        await bridge.MaintainSineDriveAsync();
+        Assert.Contains(
+            transport.Requests,
+            request => request.Opcode == CommOpcode.SineDrive &&
+                       request.Parameter == (byte)SineDriveCommand.KeepAlive);
+
+        transport.SimulateSineWatchdogTimeout();
+        await bridge.MaintainSineDriveAsync();
+        Assert.Null(bridge.Snapshot.SineDrive.Requested);
+        Assert.True(bridge.Snapshot.SineDrive.Active);
+        await bridge.RefreshStatusAsync();
+        Assert.False(bridge.Snapshot.SineDrive.Active);
+    }
+
+    [Fact]
+    public async Task DynamicSineUpdateUsesReadbackWithoutStatusRoundTrip()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        await bridge.SetSineDriveAsync(5, 20);
+        int statusRequestsBeforeUpdate = transport.RequestedOpcodes.Count(
+            opcode => opcode == CommOpcode.GetStatus);
+
+        CommandResult result = await bridge.UpdateSineDriveAsync(6.4, 37);
+
+        Assert.True(result.Success);
+        Assert.Equal(
+            statusRequestsBeforeUpdate,
+            transport.RequestedOpcodes.Count(opcode => opcode == CommOpcode.GetStatus));
+        Assert.Equal(new SineDriveSettings(6.4, 37), bridge.Snapshot.SineDrive.Requested);
+        Assert.Equal(new SineDriveSettings(6.4, 37), bridge.Snapshot.SineDrive.Applied);
+        Assert.True(bridge.Snapshot.SineDrive.Active);
+        Assert.Contains(
+            transport.Requests,
+            request => request.Opcode == CommOpcode.SineDrive &&
+                       request.Parameter == (byte)SineDriveCommand.KeepAlive);
+    }
+
+    [Fact]
+    public async Task DynamicSineUpdateCannotRestartAfterFirmwareWatchdog()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        await bridge.SetSineDriveAsync(5, 20);
+        transport.SimulateSineWatchdogTimeout();
+
+        CommandResult result = await bridge.UpdateSineDriveAsync(6, 30);
+        await bridge.RefreshStatusAsync();
+
+        Assert.False(result.Success);
+        Assert.False(bridge.Snapshot.SineDrive.Active);
+        Assert.Single(
+            transport.Requests,
+            request => request.Opcode == CommOpcode.SineDrive &&
+                       request.Parameter == (byte)SineDriveCommand.Apply);
+    }
+
+    [Fact]
+    public async Task SineDriveIsBlockedOutsideGuiModeAndStopClearsIt()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        await bridge.SetModeAsync(ControlMode.SimulinkControl);
+
+        CommandResult blocked = await bridge.SetSineDriveAsync(5, 20);
+        await bridge.SetModeAsync(ControlMode.GuiControl);
+        CommandResult started = await bridge.SetSineDriveAsync(5, 20);
+        CommandResult stopped = await bridge.StopAsync();
+
+        Assert.False(blocked.Success);
+        Assert.True(started.Success);
+        Assert.True(stopped.Success);
+        Assert.False(bridge.Snapshot.SineDrive.Active);
+        Assert.Single(transport.RequestedOpcodes, opcode => opcode == CommOpcode.SineDrive);
+        Assert.Contains(CommOpcode.Stop, transport.RequestedOpcodes);
+    }
+
+    [Fact]
+    public async Task FailedEmergencyStopCancelsRenewalAndKeepsRetryAvailable()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        await bridge.SetSineDriveAsync(5, 20);
+        transport.ResponseStatuses[CommOpcode.EmergencyStop] = CommStatus.InvalidState;
+        int sineRequestsBeforeEstop = transport.RequestedOpcodes.Count(
+            opcode => opcode == CommOpcode.SineDrive);
+
+        CommandResult result = await bridge.EmergencyStopAsync();
+        await bridge.MaintainSineDriveAsync();
+
+        Assert.False(result.Success);
+        Assert.True(bridge.Snapshot.TransportOpen);
+        Assert.True(bridge.Snapshot.SineDrive.Active);
+        Assert.Equal(
+            sineRequestsBeforeEstop,
+            transport.RequestedOpcodes.Count(opcode => opcode == CommOpcode.SineDrive));
+    }
+
+    [Fact]
+    public async Task StartupConfigAppliesInRamAndRefreshesSnapshot()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+
+        CommandResult result = await bridge.SetConfigAsync(ConfigParam.StartupDuration, 4.5);
+
+        Assert.True(result.Success);
+        Assert.Equal(4.5, bridge.Snapshot.StartupConfiguration?.DurationSeconds);
+        Assert.Contains(
+            transport.Requests,
+            request => request.Opcode == CommOpcode.SetConfig &&
+                       request.Parameter == (byte)ConfigParam.StartupDuration);
     }
 
     [Fact]
@@ -541,7 +696,12 @@ public sealed class BridgeTests
             [ConfigParam.PolePairs] = 2,
             [ConfigParam.PwmFreq] = 18_000,
             [ConfigParam.MinSpeed] = 200,
-            [ConfigParam.MaxSpeed] = 5400
+            [ConfigParam.MaxSpeed] = 5400,
+            [ConfigParam.StartupInitialAmplitude] = 20,
+            [ConfigParam.StartupFinalAmplitude] = 100,
+            [ConfigParam.StartupInitialFrequency] = 2.09,
+            [ConfigParam.StartupFinalFrequency] = 9.28,
+            [ConfigParam.StartupDuration] = 3.0
         };
 
         public Task OpenAsync(HidDeviceDescriptor descriptor, CancellationToken cancellationToken = default)
@@ -561,6 +721,7 @@ public sealed class BridgeTests
         public Task WriteFrameAsync(byte[] frame, CancellationToken cancellationToken = default)
         {
             EscFrame request = EscProtocol.Parse(frame);
+            CommStatus responseStatus = ResponseStatuses.GetValueOrDefault(request.Opcode, CommStatus.Ok);
             RequestedOpcodes.Add(request.Opcode);
             RequestPayloads.Add(request.Payload);
             Requests.Add((request.Opcode, request.Parameter));
@@ -582,6 +743,22 @@ public sealed class BridgeTests
             else if (request.Opcode == CommOpcode.HilStop)
             {
                 _runtimeMode = ControlRuntimeMode.Normal;
+                _appState = 0;
+            }
+            else if (request.Opcode == CommOpcode.SineDrive)
+            {
+                if (request.Parameter == (byte)SineDriveCommand.KeepAlive && _appState != 10)
+                {
+                    responseStatus = CommStatus.InvalidState;
+                }
+                else
+                {
+                    _appState = 10;
+                }
+            }
+            else if ((request.Opcode is CommOpcode.Stop or CommOpcode.EmergencyStop) &&
+                     responseStatus == CommStatus.Ok)
+            {
                 _appState = 0;
             }
 
@@ -609,6 +786,7 @@ public sealed class BridgeTests
                 CommOpcode.GetValidationReference => ValidationReferencePayload(),
                 CommOpcode.HilGetOutputs => HilOutputsPayload(),
                 CommOpcode.HilStep => HilStepResultPayload(),
+                CommOpcode.SineDrive => request.Payload,
                 _ => []
             };
 
@@ -618,7 +796,7 @@ public sealed class BridgeTests
                 request.Parameter,
                 payload,
                 CommFrameType.Response,
-                ResponseStatuses.GetValueOrDefault(request.Opcode, CommStatus.Ok));
+                responseStatus);
 
             if (request.Opcode == CommOpcode.HilStep && HilStepResponsesToDrop > 0)
             {
@@ -646,15 +824,20 @@ public sealed class BridgeTests
             _readQueue.Enqueue(EscProtocol.Parse(raw));
         }
 
+        public void SimulateSineWatchdogTimeout()
+        {
+            _appState = 0;
+        }
+
         public ValueTask DisposeAsync()
         {
             return ValueTask.CompletedTask;
         }
 
-        private static byte[] StatusPayload()
+        private byte[] StatusPayload()
         {
             byte[] payload = new byte[10];
-            payload[0] = 0;
+            payload[0] = _appState;
             payload[1] = 1;
             BitConverter.GetBytes((ushort)1000).CopyTo(payload, 4);
             BitConverter.GetBytes((ushort)980).CopyTo(payload, 6);
@@ -747,6 +930,10 @@ public sealed class BridgeTests
             {
                 ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm => BitConverter.GetBytes((short)Math.Round(value * 100)),
                 ConfigParam.PolePairs => [(byte)value],
+                ConfigParam.StartupInitialAmplitude or ConfigParam.StartupFinalAmplitude
+                    => BitConverter.GetBytes((ushort)Math.Round(value * 10)),
+                ConfigParam.StartupInitialFrequency or ConfigParam.StartupFinalFrequency or ConfigParam.StartupDuration
+                    => BitConverter.GetBytes((uint)Math.Round(value * 1000)),
                 _ => BitConverter.GetBytes((ushort)value)
             };
         }
@@ -757,6 +944,10 @@ public sealed class BridgeTests
             {
                 ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm => BitConverter.ToInt16(payload) / 100d,
                 ConfigParam.PolePairs => payload[0],
+                ConfigParam.StartupInitialAmplitude or ConfigParam.StartupFinalAmplitude
+                    => BitConverter.ToUInt16(payload) / 10d,
+                ConfigParam.StartupInitialFrequency or ConfigParam.StartupFinalFrequency or ConfigParam.StartupDuration
+                    => BitConverter.ToUInt32(payload) / 1000d,
                 _ => BitConverter.ToUInt16(payload)
             };
         }

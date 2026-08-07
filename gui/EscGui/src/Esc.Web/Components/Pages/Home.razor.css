@@ -1,0 +1,245 @@
+.grid {
+    align-items: start;
+}
+
+.panel-body[hidden] {
+    display: none;
+}
+
+.topbar-estop {
+    min-height: 38px;
+    border-color: #a92f38;
+    background: #8f202a;
+    color: #fff;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+}
+
+.topbar-estop:hover:not(:disabled) {
+    border-color: #c43a45;
+    background: #a82732;
+}
+
+.command-feedback {
+    min-height: 1.3em;
+    margin: 8px 2px 0;
+    color: #53616c;
+    font-size: 0.76rem;
+}
+
+.panel-heading-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.panel-toggle {
+    display: inline-grid;
+    width: 36px;
+    min-width: 36px;
+    height: 34px;
+    place-items: center;
+    padding: 0;
+}
+
+.panel-toggle svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-linecap: square;
+    stroke-linejoin: miter;
+    stroke-width: 1.7;
+    transition: transform 160ms ease-out;
+}
+
+.panel-toggle[aria-expanded="false"] svg {
+    transform: rotate(-90deg);
+}
+
+.collapsible-panel.is-collapsed .panel-title {
+    border-bottom-color: transparent;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.sine-panel {
+    border-top: 2px solid #2d718d;
+}
+
+.sine-panel .panel-title > div:first-child {
+    display: grid;
+    gap: 3px;
+}
+
+.sine-state {
+    border: 1px solid #bcc4ca;
+    background: #f0f2f3;
+    color: #64717a;
+    padding: 5px 8px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+}
+
+.sine-state.active {
+    border-color: #2d7b66;
+    background: #e5f3ed;
+    color: #1b654f;
+}
+
+.sine-mode-switch {
+    display: inline-flex;
+    border: 1px solid #bcc4ca;
+    background: #f0f2f3;
+    padding: 2px;
+}
+
+.sine-mode-switch button {
+    min-height: 28px;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 4px 9px;
+    color: #64717a;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+
+.sine-mode-switch button:hover:not(:disabled) {
+    border: 0;
+    background: #e2e7ea;
+}
+
+.sine-mode-switch button.active {
+    background: #2d718d;
+    color: #fff;
+}
+
+.sine-body {
+    display: grid;
+    gap: 14px;
+}
+
+.sine-control-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.sine-control-grid label {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid #d6dade;
+    border-top: 2px solid #4a697b;
+    background: #f8f9fa;
+    padding: 13px;
+    color: #53616c;
+    font-size: 0.76rem;
+    font-weight: 600;
+}
+
+.sine-control-grid input {
+    grid-column: 1 / -1;
+    width: 100%;
+}
+
+.sine-control-grid label > span {
+    grid-column: 2;
+    grid-row: 1;
+    color: #344957;
+    font-family: var(--mono);
+}
+
+.sine-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.sine-readback,
+.safety-note {
+    margin: 0;
+}
+
+.sine-readback-line {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 9px;
+}
+
+.sine-sync-state {
+    border: 1px solid #bdc6cc;
+    background: #eef1f3;
+    color: #52616b;
+    padding: 4px 7px;
+    font-size: 0.63rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+
+.sine-sync-state.applying,
+.sine-sync-state.pending,
+.sine-sync-state.draft {
+    border-color: #b98935;
+    background: #fff4dc;
+    color: #735315;
+}
+
+.sine-sync-state.synchronized {
+    border-color: #2d7b66;
+    background: #e5f3ed;
+    color: #1b654f;
+}
+
+.sine-sync-state.error {
+    border-color: #a92f38;
+    background: #f9e5e7;
+    color: #8f202a;
+}
+
+.sine-auto-active:disabled {
+    border-color: #2d718d;
+    background: #e3f0f5;
+    color: #245b72;
+    opacity: 1;
+}
+
+.sine-readback {
+    color: #344957;
+    font-family: var(--mono);
+    font-size: 0.77rem;
+}
+
+.safety-note {
+    border: 1px solid #e2c98f;
+    background: #fff8e8;
+    color: #654f1d;
+    padding: 10px 12px;
+    font-size: 0.76rem;
+}
+
+@media (max-width: 700px) {
+    .panel-heading-actions {
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+
+    .sine-mode-switch {
+        order: 2;
+    }
+
+    .sine-control-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .panel-toggle svg {
+        transition: none;
+    }
+}

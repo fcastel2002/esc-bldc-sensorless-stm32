@@ -6,239 +6,248 @@
  */
 
 #include "startup.h"
+
 #include "bldc_driver.h"
-#define Q15_ONE 32768U
+#include "hard_config.h"
+
 #define Q15_MAX 32760U
+#define SINE_TIMER_PSC 35U
+#define SINE_PHASE_STEP 3U
 
 volatile uint16_t zero_crossings = 0;
 
 bool ready_for_update_pwm = true;
 bool finished_foc_startup = false;
 
-uint16_t          sin_table_U[SIN_TABLE_SIZE] = {0};
-uint16_t          sin_table_V[SIN_TABLE_SIZE] = {0};
-uint16_t          sin_table_W[SIN_TABLE_SIZE] = {0};
-static uint16_t   zero_sine_value             = 0;
-volatile uint16_t mod_q15                     = 6553; // 0.2 in Q15
-static void       generate_sine_tables(uint16_t pwm_arr, uint8_t direction);
-static void       executeTransition(void);
-static uint16_t   phase_counter               = 0;
+uint16_t sin_table_U[SIN_TABLE_SIZE] = {0};
+uint16_t sin_table_V[SIN_TABLE_SIZE] = {0};
+uint16_t sin_table_W[SIN_TABLE_SIZE] = {0};
 
-static void generate_sine_tables(uint16_t pwm_arr, uint8_t direction)
+static uint16_t phase_counter = 0;
+static uint32_t startup_start_tick = 0;
+static uint32_t sine_drive_last_command_tick = 0;
+static SineDriveSettings manual_settings = {0};
+
+static void generate_sine_tables(uint8_t selected_direction)
 {
   for (uint16_t i = 0; i < SIN_TABLE_SIZE; i++) {
-    /* Ángulo base 0°-360° (rad) */
     float angle = 2.0f * (float)M_PI * i / SIN_TABLE_SIZE;
-
-    /* -------------------------------------------------------------
-     * Convertimos de rango [-1 … +1] a [0 … Q15_MAX]
-     *    ( 0 = 0 % duty, 32 767 ≈ 100 % duty )
-     *    Fórmula:  q15 = (sin + 1) * 0.5 * 32767
-     * -------------------------------------------------------------*/
     uint16_t u = (uint16_t)((sinf(angle) * 0.5f + 0.5f) * Q15_MAX);
     uint16_t v = (uint16_t)((sinf(angle - 2.0f * (float)M_PI / 3.0f) * 0.5f + 0.5f) * Q15_MAX);
     uint16_t w = (uint16_t)((sinf(angle - 4.0f * (float)M_PI / 3.0f) * 0.5f + 0.5f) * Q15_MAX);
 
-    /* Sentido de giro: cambia el orden de las fases si direction=1 */
-    if (direction == 0) // Sentido “normal”
-    {
-      sin_table_U[i] = u;
-      sin_table_V[i] = v;
-      sin_table_W[i] = w;
-    } else // Sentido invertido
-    {
-      sin_table_U[i] = u;
-      sin_table_V[i] = w; // intercambio V<->W
-      sin_table_W[i] = v;
-    }
+    sin_table_U[i] = u;
+    sin_table_V[i] = selected_direction == 0U ? v : w;
+    sin_table_W[i] = selected_direction == 0U ? w : v;
   }
 }
-static const uint16_t initial_arr = 8000;
-SineDriveController   sine_ctrl   = {
-        .phase_step = 3,
-        .timer_arr  = initial_arr, // Frecuencia inicial baja (~50 Hz)
-};
 
-/**
- * @brief Inicializa y ejecuta el arranque suave del motor usando control FOC sinusoidal
- *
- * Esta función implementa un arranque suave del motor BLDC utilizando señales sinusoidales
- * en las tres fases. El arranque FOC (Field Oriented Control) permite acelerar gradualmente
- * el motor desde velocidad cero hasta una velocidad donde el control six-step puede tomar
- * el control de manera estable.
- *
- * @details Secuencia de inicialización:
- * 1. Configura el timer ARR con frecuencia inicial baja (initial_arr = 8000)
- * 2. Genera tablas sinusoidales para las tres fases según la dirección del motor
- * 3. Configura TIM4 como timer de actualización PWM con PSC=35
- * 4. Habilita todas las salidas PWM y los enable de las tres fases
- * 5. Inicia el timer TIM4 con interrupción de actualización
- * 6. Cambia el estado de la aplicación a FOC_STARTUP
- *
- * @note Configuración de hardware:
- * - TIM1: Generación PWM para las tres fases del motor
- * - TIM4: Timer de control de frecuencia del arranque FOC
- * - PSC de TIM4: 35 (para obtener frecuencia de actualización adecuada)
- * - ARR inicial: 8000 (frecuencia aproximada de 50 Hz)
- *
- * @note Variables globales inicializadas:
- * - app_state: Cambia a FOC_STARTUP
- * - floating_U, floating_V, floating_W: Todas configuradas como true
- * - sine_ctrl.startup_counter: Resetea a 0
- * - sine_ctrl.timer_arr: Configurado con valor inicial
- *
- * @note Solo genera las tablas sinusoidales en la primera ejecución para optimizar performance
- *
- * @warning Esta función debe ser llamada solo cuando el motor está detenido
- * @warning Requiere que las variables de dirección y configuración estén previamente establecidas
- */
-void foc_startup(void)
+static uint32_t sine_timer_clock_hz(void)
 {
-  motor_control_reset_runtime();
-  sine_ctrl.timer_arr = initial_arr;
-  mod_q15             = 6553; // 0.2 in Q15
-  phase_counter       = 0;
-  generate_sine_tables(TIM1->ARR, direction);
+  uint32_t timer_clock_hz = HAL_RCC_GetPCLK1Freq();
+  if ((RCC->CFGR & RCC_CFGR_PPRE1) != RCC_CFGR_PPRE1_DIV1) {
+    timer_clock_hz *= 2U;
+  }
+  return timer_clock_hz;
+}
 
-  TIM4->PSC = 35;
-  TIM4->ARR = sine_ctrl.timer_arr;
+static uint16_t timer_arr_from_frequency(uint32_t frequency_millihz)
+{
+  uint64_t counter_hz = sine_timer_clock_hz() / (SINE_TIMER_PSC + 1U);
+  uint64_t denominator = (uint64_t)frequency_millihz * SIN_TABLE_SIZE;
+  uint64_t ticks = (counter_hz * SINE_PHASE_STEP * 1000U + denominator / 2U) /
+                   denominator;
+  if (ticks < 2U) ticks = 2U;
+  if (ticks > 65536U) ticks = 65536U;
+  return (uint16_t)(ticks - 1U);
+}
 
-  app_state = FOC_STARTUP;
-  PWM_INIT();
-  GPIOB->ODR |= EN_U;
-  GPIOB->ODR |= EN_V;
-  GPIOA->ODR |= EN_W;
+static uint32_t frequency_from_timer_arr(uint16_t timer_arr)
+{
+  uint64_t counter_hz = sine_timer_clock_hz() / (SINE_TIMER_PSC + 1U);
+  uint64_t denominator = (uint64_t)SIN_TABLE_SIZE * ((uint32_t)timer_arr + 1U);
+  return (uint32_t)((counter_hz * SINE_PHASE_STEP * 1000U + denominator / 2U) /
+                    denominator);
+}
+
+static uint32_t interpolate_u32(uint32_t initial, uint32_t final, uint32_t progress_permille)
+{
+  int64_t delta = (int64_t)final - (int64_t)initial;
+  return (uint32_t)((int64_t)initial + delta * progress_permille / 1000);
+}
+
+static uint16_t interpolate_u16(uint16_t initial, uint16_t final, uint32_t progress_permille)
+{
+  int32_t delta = (int32_t)final - (int32_t)initial;
+  return (uint16_t)((int32_t)initial + delta * (int32_t)progress_permille / 1000);
+}
+
+static uint32_t configure_sine_frequency(uint32_t frequency_millihz)
+{
+  uint16_t timer_arr = timer_arr_from_frequency(frequency_millihz);
+  TIM4->ARR = timer_arr;
+  return frequency_from_timer_arr(timer_arr);
+}
+
+static void configure_sine_timer(uint32_t frequency_millihz)
+{
+  HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
+  HAL_TIM_Base_Stop_IT(&htim4);
+  TIM4->PSC = SINE_TIMER_PSC;
+  TIM4->ARR = timer_arr_from_frequency(frequency_millihz);
+  TIM4->CNT = 0U;
+  TIM4->EGR = TIM_EGR_UG;
+  __HAL_TIM_CLEAR_FLAG(&htim4, TIM_FLAG_UPDATE | TIM_FLAG_CC1);
   __HAL_TIM_ENABLE_IT(&htim4, TIM_IT_UPDATE);
-  floating_U = true;
-  floating_V = true;
-  floating_W = true;
+}
 
-  // Reset startup counter
-  sine_ctrl.startup_counter = 0;
-
+static void enable_sine_output(void)
+{
+  PWM_STOP();
+  PWM_INIT();
+  GPIOB->ODR |= EN_U | EN_V;
+  GPIOA->ODR |= EN_W;
+  floating_U = false;
+  floating_V = false;
+  floating_W = false;
   HAL_TIM_Base_Start_IT(&htim4);
 }
 
-volatile uint16_t pwm_u  = 0;
-volatile uint16_t pwm_v  = 0;
-volatile uint16_t pwm_w  = 0;
-volatile uint16_t sine_u = 0;
-volatile uint16_t sine_v = 0;
-volatile uint16_t sine_w = 0;
-
-const uint16_t ARR_LOCK_TEST      = 1800; // ≈300 rpm eléctricos
-const uint16_t STARTUP_ITERATIONS = 2000; // Fixed startup time iterations
-
-/**
- * @brief Actualiza las señales PWM durante el arranque FOC sinusoidal del motor
- *
- * Esta función es llamada periódicamente por la interrupción de TIM4 para generar
- * señales sinusoidales trifásicas con rampa de frecuencia y amplitud. Implementa
- * un arranque de duración fija que acelera gradualmente el motor hasta alcanzar
- * una velocidad estable para la transición al control six-step.
- *
- * @details Algoritmo de control:
- * 1. Verifica que el estado sea FOC_STARTUP, sino retorna
- * 2. Incrementa contador de fase según phase_step para generar rotación
- * 3. Implementa rampa de frecuencia reduciendo timer_arr hasta ARR_LOCK_TEST
- * 4. Implementa rampa de amplitud incrementando mod_q15 hasta 1.0 (Q15_ONE)
- * 5. Calcula valores PWM sinusoidales para cada fase usando las tablas precalculadas
- * 6. Aplica modulación de amplitud y escalado a rango PWM del timer
- * 7. Después de STARTUP_ITERATIONS, ejecuta transición a modo six-step
- *
- * @note Parámetros de control:
- * - phase_step: Incremento de fase por actualización (determina velocidad eléctrica)
- * - timer_arr: Período de actualización (decrece para acelerar)
- * - mod_q15: Amplitud de modulación en formato Q15 (0.2 a 1.0)
- * - ARR_LOCK_TEST: Frecuencia objetivo (~300 rpm eléctricos, valor 1800)
- * - STARTUP_ITERATIONS: Duración fija del arranque (2000 iteraciones)
- *
- * @details Generación de señales PWM:
- * - Utiliza tablas sinusoidales precalculadas con desfase de 120° eléctricos
- * - Aplica modulación de amplitud: señal_final = sin_table[idx] * mod_q15
- * - Escalado final: PWM = (señal_modulada >> 15) * TIM1->ARR >> 15
- * - Actualiza directamente los registros de comparación de TIM1
- *
- * @note Variables globales utilizadas:
- * - sine_ctrl: Estructura de control con contadores y parámetros
- * - sin_table_U/V/W: Tablas sinusoidales para cada fase
- * - mod_q15: Amplitud de modulación en formato Q15
- * - app_state: Estado actual de la aplicación
- *
- * @warning Solo opera cuando app_state == FOC_STARTUP
- * @warning Debe ser llamada desde ISR de TIM4 con frecuencia constante
- * @warning La transición automática puede interrumpir el arranque prematuramente
- */
-void update_pwm_startup_foc(void)
+static void write_sine_pwm(uint16_t amplitude_permille)
 {
-  if (app_state != FOC_STARTUP)
-    return;
+  phase_counter += SINE_PHASE_STEP;
+  if (phase_counter >= SIN_TABLE_SIZE) phase_counter -= SIN_TABLE_SIZE;
 
-  /* ---------- Generación senoidal open-loop ---------- */
-  phase_counter += sine_ctrl.phase_step;
-  if (phase_counter >= SIN_TABLE_SIZE)
-    phase_counter -= SIN_TABLE_SIZE;
+  uint32_t pwm_arr = TIM1->ARR;
+  uint64_t divisor = (uint64_t)Q15_MAX * 1000U;
+  uint16_t du = (uint16_t)(((uint64_t)sin_table_U[phase_counter] *
+                            amplitude_permille * pwm_arr) /
+                           divisor);
+  uint16_t dv = (uint16_t)(((uint64_t)sin_table_V[phase_counter] *
+                            amplitude_permille * pwm_arr) /
+                           divisor);
+  uint16_t dw = (uint16_t)(((uint64_t)sin_table_W[phase_counter] *
+                            amplitude_permille * pwm_arr) /
+                           divisor);
 
-  /* Rampa de frecuencia */
-  if (sine_ctrl.timer_arr > ARR_LOCK_TEST)
-    sine_ctrl.timer_arr -= 8;
-  TIM4->ARR = sine_ctrl.timer_arr;
-
-  if (mod_q15 < (uint16_t)(1 * Q15_ONE))
-    mod_q15 += (mod_q15 >> 6);
-
-  /* ---------- Simple iteration counter startup ---------- */
-  sine_ctrl.startup_counter++;
-
-  if (sine_ctrl.startup_counter >= STARTUP_ITERATIONS) {
-    HAL_TIM_Base_Stop_IT(&htim4);
-    executeTransition();
-    phase_counter = 0;
-    return;
-  }
-
-  /* ---------- Actualización de PWM ---------- */
-  uint16_t idx   = phase_counter;
-  uint32_t u_raw = (sin_table_U[idx] * mod_q15);
-  uint32_t v_raw = (sin_table_V[idx] * mod_q15);
-  uint32_t w_raw = (sin_table_W[idx] * mod_q15);
-  uint16_t du    = (u_raw >> 15) * TIM1->ARR >> 15;
-  uint16_t dv    = (v_raw >> 15) * TIM1->ARR >> 15;
-  uint16_t dw    = (w_raw >> 15) * TIM1->ARR >> 15;
-
+  if (du > pwm_arr) du = (uint16_t)pwm_arr;
+  if (dv > pwm_arr) dv = (uint16_t)pwm_arr;
+  if (dw > pwm_arr) dw = (uint16_t)pwm_arr;
   __HAL_TIM_SET_COMPARE(&htim1, IN_U, du);
   __HAL_TIM_SET_COMPARE(&htim1, IN_V, dv);
   __HAL_TIM_SET_COMPARE(&htim1, IN_W, dw);
 }
 
-volatile bool ready_for_running = false;
-
-static void executeTransition(void)
+void foc_startup(void)
 {
-  // Configurar para six-step
-  bldc_set_pwm(max_pwm * 0.45f); // 30% duty cycle inicial
-  // Desactivar salidas temporalmente
-  GPIOB->ODR &= ~EN_U;
-  GPIOB->ODR &= ~EN_V;
-  GPIOA->ODR &= ~EN_W;
+  motor_control_reset_runtime();
+  phase_counter = 0U;
+  startup_start_tick = HAL_GetTick();
+  generate_sine_tables(direction);
+  configure_sine_timer(get_startup_initial_frequency());
+  app_state = FOC_STARTUP;
+  enable_sine_output();
+}
 
-  // Detener PWM sinusoidal
+bool sine_drive_start_or_update(uint32_t frequency_millihz,
+                                uint16_t amplitude_permille,
+                                SineDriveSettings* applied)
+{
+  if (frequency_millihz < ESC_MIN_SINE_FREQUENCY_MILLIHZ ||
+      frequency_millihz > ESC_MAX_SINE_FREQUENCY_MILLIHZ ||
+      amplitude_permille > ESC_MAX_SINE_AMPLITUDE_PERMILLE ||
+      control_runtime_mode != CONTROL_RUNTIME_NORMAL ||
+      hil_session_state != 0U ||
+      (app_state != IDLE && app_state != SINE_DRIVE)) {
+    return false;
+  }
+
+  uint32_t command_tick = HAL_GetTick();
+  if (app_state == IDLE) {
+    motor_control_reset_runtime();
+    phase_counter = 0U;
+    generate_sine_tables(direction);
+    manual_settings.frequency_millihz = frequency_millihz;
+    manual_settings.amplitude_permille = amplitude_permille;
+    configure_sine_timer(frequency_millihz);
+    app_state = SINE_DRIVE;
+    enable_sine_output();
+  } else {
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    manual_settings.frequency_millihz = frequency_millihz;
+    manual_settings.amplitude_permille = amplitude_permille;
+    configure_sine_frequency(frequency_millihz);
+    if (primask == 0U) __enable_irq();
+  }
+
+  sine_drive_last_command_tick = command_tick;
+  manual_settings.frequency_millihz =
+      frequency_from_timer_arr((uint16_t)TIM4->ARR);
+  if (applied != NULL) *applied = manual_settings;
+  return true;
+}
+
+void sine_drive_stop(void)
+{
+  HAL_TIM_Base_Stop_IT(&htim4);
   PWM_STOP();
+  bldc_set_pwm(0U);
+  bldc_disable_power_stage();
+  manual_settings = (SineDriveSettings){0};
+  phase_counter = 0U;
+}
 
-  // Inicializar configuración six-step
+void sine_drive_check_watchdog(void)
+{
+  if (app_state == SINE_DRIVE &&
+      (uint32_t)(HAL_GetTick() - sine_drive_last_command_tick) > SINE_DRIVE_WATCHDOG_MS) {
+    sine_drive_stop();
+    motor_control_reset_runtime();
+    app_state = IDLE;
+  }
+}
+
+bool sine_drive_is_active(void)
+{
+  return app_state == SINE_DRIVE;
+}
+
+void update_pwm_startup_foc(void)
+{
+  if (app_state == SINE_DRIVE) {
+    write_sine_pwm(manual_settings.amplitude_permille);
+    return;
+  }
+
+  if (app_state != FOC_STARTUP) return;
+
+  uint32_t duration_ms = get_startup_duration();
+  uint32_t elapsed_ms = HAL_GetTick() - startup_start_tick;
+  uint32_t progress_permille = elapsed_ms >= duration_ms
+      ? 1000U
+      : elapsed_ms * 1000U / duration_ms;
+  uint32_t frequency_millihz = interpolate_u32(
+      get_startup_initial_frequency(),
+      get_startup_final_frequency(),
+      progress_permille);
+  uint16_t amplitude_permille = interpolate_u16(
+      get_startup_initial_amplitude(),
+      get_startup_final_amplitude(),
+      progress_permille);
+
+  configure_sine_frequency(frequency_millihz);
+  write_sine_pwm(amplitude_permille);
+  if (progress_permille < 1000U) return;
+
+  HAL_TIM_Base_Stop_IT(&htim4);
+  bldc_set_pwm((uint16_t)(max_pwm * 0.45f)); // 45% duty cycle inicial
+  bldc_disable_power_stage();
+  PWM_STOP();
   PWM_INIT();
-
-  // Configurar estado de las fases
   floating_U = true;
   floating_V = true;
   floating_W = true;
-
-  // Cambiar estado de la aplicación
   app_state = RUNNING;
-
-  // Detener timer de actualización sinusoidal
-  HAL_TIM_Base_Stop_IT(&htim4);
-
-  // Resetear variables
-  ready_for_running = false;
+  phase_counter = 0U;
 }

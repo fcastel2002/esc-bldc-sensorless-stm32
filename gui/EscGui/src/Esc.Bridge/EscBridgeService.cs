@@ -13,6 +13,7 @@ public sealed class EscBridgeService
     private readonly TelemetryStore _telemetryStore;
     private readonly ILogger<EscBridgeService> _logger;
     private readonly SemaphoreSlim _ioLock = new(1, 1);
+    private readonly SemaphoreSlim _controlGate = new(1, 1);
     private readonly object _stateGate = new();
     private readonly List<HilFrameTraceEntry> _hilFrameTrace = new();
 
@@ -25,10 +26,16 @@ public sealed class EscBridgeService
     private bool _speedLoggingEnabled;
     private ushort _logRateMs = 500;
     private byte _sequence;
+    private int _emergencyStopPending;
+    private int _emergencyStopGeneration;
     private HilBridgeStats _hilStats = new(false, 0, 0, 0, 0, 0, null, null);
     private ValidationReference? _validationReference;
     private ActiveControllerConfig? _activeControllerConfig;
     private ActiveSpeedLimits? _activeSpeedLimits;
+    private StartupConfiguration? _startupConfiguration;
+    private SineDriveSettings? _requestedSineDrive;
+    private SineDriveSettings? _appliedSineDrive;
+    private DateTimeOffset? _sineDriveLastAppliedAt;
     private DateTimeOffset? _validationReferenceCapturedAt;
     private string? _validationReferenceError;
 
@@ -58,6 +65,7 @@ public sealed class EscBridgeService
     }
 
     public IReadOnlyList<TelemetrySample> SpeedSamples => _telemetryStore.GetSamples("speed");
+    public bool IsTransportOpen => _transport.IsOpen;
 
     public void ClearSpeedTelemetry()
     {
@@ -81,6 +89,7 @@ public sealed class EscBridgeService
                 _lastError = "Dispositivo HID desconectado.";
                 _status = null;
                 _currentDevice = null;
+                ClearSineDrive();
                 ClearValidationReference();
             }
             else if (!_transport.IsOpen && devices.Count > 0 && _state is DeviceConnectionState.NotDetected or DeviceConnectionState.Disconnected)
@@ -94,6 +103,7 @@ public sealed class EscBridgeService
                 _lastError = null;
                 _currentDevice = null;
                 _status = null;
+                ClearSineDrive();
                 ClearValidationReference();
             }
         }
@@ -135,6 +145,7 @@ public sealed class EscBridgeService
             (ValidationReference validationReference, ActiveControllerConfig activeControllerConfig) =
                 await ReadValidationReferenceCoreAsync(cancellationToken).ConfigureAwait(false);
             ActiveSpeedLimits activeSpeedLimits = await ReadSpeedLimitsCoreAsync(cancellationToken).ConfigureAwait(false);
+            StartupConfiguration startupConfiguration = await ReadStartupConfigurationCoreAsync(cancellationToken).ConfigureAwait(false);
 
             lock (_stateGate)
             {
@@ -145,6 +156,7 @@ public sealed class EscBridgeService
                 _validationReference = validationReference;
                 _activeControllerConfig = activeControllerConfig;
                 _activeSpeedLimits = activeSpeedLimits;
+                _startupConfiguration = startupConfiguration;
                 _validationReferenceCapturedAt = DateTimeOffset.UtcNow;
                 _validationReferenceError = null;
             }
@@ -163,29 +175,63 @@ public sealed class EscBridgeService
 
     public async Task DisconnectAsync(CancellationToken cancellationToken = default)
     {
-        await _transport.CloseAsync(cancellationToken).ConfigureAwait(false);
-        _speedLoggingEnabled = false;
-        lock (_stateGate)
+        await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            _state = _devices.Count > 0 ? DeviceConnectionState.Detected : DeviceConnectionState.NotDetected;
-            _currentDevice = null;
-            _status = null;
-            _lastError = null;
-            ClearValidationReference();
-        }
+            if (HasRequestedSineDrive() && _transport.IsOpen)
+            {
+                await StopSineDriveCoreAsync(false, false, cancellationToken).ConfigureAwait(false);
+            }
+            lock (_stateGate)
+            {
+                ClearSineDrive();
+            }
+            await _transport.CloseAsync(cancellationToken).ConfigureAwait(false);
+            _speedLoggingEnabled = false;
+            lock (_stateGate)
+            {
+                _state = _devices.Count > 0 ? DeviceConnectionState.Detected : DeviceConnectionState.NotDetected;
+                _currentDevice = null;
+                _status = null;
+                _lastError = null;
+                ClearValidationReference();
+            }
 
-        Notify();
+            Notify();
+        }
+        finally
+        {
+            _controlGate.Release();
+        }
     }
 
-    public Task SetModeAsync(ControlMode mode)
+    public async Task<CommandResult> SetModeAsync(ControlMode mode, CancellationToken cancellationToken = default)
     {
-        lock (_stateGate)
+        await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            _mode = mode;
-        }
+            if (mode != ControlMode.GuiControl && HasRequestedSineDrive())
+            {
+                CommandResult stop = await StopSineDriveCoreAsync(
+                    false, true, cancellationToken).ConfigureAwait(false);
+                if (!stop.Success)
+                {
+                    return CommandResult.Failed("No se pudo detener el lazo abierto antes de cambiar de modo.");
+                }
+            }
 
-        Notify();
-        return Task.CompletedTask;
+            lock (_stateGate)
+            {
+                _mode = mode;
+            }
+
+            Notify();
+            return CommandResult.Ok("Modo actualizado.");
+        }
+        finally
+        {
+            _controlGate.Release();
+        }
     }
 
     public Task<CommandResult> RunAsync(CancellationToken cancellationToken = default)
@@ -193,14 +239,229 @@ public sealed class EscBridgeService
         return SendControlCommandAsync(CommOpcode.Run, cancellationToken);
     }
 
-    public Task<CommandResult> StopAsync(CancellationToken cancellationToken = default)
+    public async Task<CommandResult> StopAsync(CancellationToken cancellationToken = default)
     {
-        return SendControlCommandAsync(CommOpcode.Stop, cancellationToken);
+        if (!AllowsGuiControl())
+        {
+            return CommandResult.Failed("Control bloqueado por el modo actual.");
+        }
+
+        await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!AllowsGuiControl()) return CommandResult.Failed("Control bloqueado por el modo actual.");
+            return await StopSineDriveCoreAsync(false, true, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _controlGate.Release();
+        }
     }
 
-    public Task<CommandResult> EmergencyStopAsync(CancellationToken cancellationToken = default)
+    public async Task<CommandResult> EmergencyStopAsync(CancellationToken cancellationToken = default)
     {
-        return SendCommandAsync(CommOpcode.EmergencyStop, 0, Array.Empty<byte>(), cancellationToken);
+        if (Interlocked.Exchange(ref _emergencyStopPending, 1) != 0)
+        {
+            return CommandResult.Failed("ESTOP ya esta en curso.");
+        }
+        Interlocked.Increment(ref _emergencyStopGeneration);
+
+        lock (_stateGate)
+        {
+            _requestedSineDrive = null;
+        }
+        Notify();
+        try
+        {
+            return await StopSineDriveCoreAsync(true, false, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _emergencyStopPending, 0);
+        }
+    }
+
+    public Task<CommandResult> SetSineDriveAsync(
+        double electricalFrequencyHz,
+        double amplitudePercent,
+        CancellationToken cancellationToken = default)
+    {
+        return ApplySineDriveAsync(
+            electricalFrequencyHz,
+            amplitudePercent,
+            SineDriveCommand.Apply,
+            refreshStatus: true,
+            requireActive: false,
+            cancellationToken: cancellationToken);
+    }
+
+    public Task<CommandResult> UpdateSineDriveAsync(
+        double electricalFrequencyHz,
+        double amplitudePercent,
+        CancellationToken cancellationToken = default)
+    {
+        return ApplySineDriveAsync(
+            electricalFrequencyHz,
+            amplitudePercent,
+            SineDriveCommand.KeepAlive,
+            refreshStatus: false,
+            requireActive: true,
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task<CommandResult> ApplySineDriveAsync(
+        double electricalFrequencyHz,
+        double amplitudePercent,
+        SineDriveCommand command,
+        bool refreshStatus,
+        bool requireActive,
+        CancellationToken cancellationToken = default)
+    {
+        int emergencyGeneration = Volatile.Read(ref _emergencyStopGeneration);
+        if (IsEmergencyStopPending()) return CommandResult.Failed("ESTOP en curso.");
+        await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!AllowsGuiControl())
+            {
+                return CommandResult.Failed("Control bloqueado por el modo actual.");
+            }
+            if (IsEmergencyStopPending() ||
+                emergencyGeneration != Volatile.Read(ref _emergencyStopGeneration))
+            {
+                return CommandResult.Failed("ESTOP en curso.");
+            }
+            if (requireActive)
+            {
+                lock (_stateGate)
+                {
+                    if (_status?.AppState != 10 || _requestedSineDrive is null)
+                    {
+                        return CommandResult.Failed("El lazo abierto ya no esta activo.");
+                    }
+                }
+            }
+
+            byte[] payload;
+            try
+            {
+                payload = EscProtocol.SineDrivePayload(electricalFrequencyHz, amplitudePercent);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return CommandResult.Failed("La frecuencia debe estar entre 2 y 10 Hz y la amplitud entre 0 y 100 %.");
+            }
+
+            EscFrame response = await SendRequestAsync(
+                CommOpcode.SineDrive, (byte)command, payload, cancellationToken).ConfigureAwait(false);
+            if (IsEmergencyStopPending() ||
+                emergencyGeneration != Volatile.Read(ref _emergencyStopGeneration))
+            {
+                return CommandResult.Failed("ESTOP en curso; la salida sera detenida.");
+            }
+            CommandResult result = CommandResult.FromStatus(response.Status);
+            if (!result.Success)
+            {
+                await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+                return result;
+            }
+
+            SineDriveSettings applied = EscProtocol.DecodeSineDrive(response);
+            lock (_stateGate)
+            {
+                _requestedSineDrive = new SineDriveSettings(electricalFrequencyHz, amplitudePercent);
+                _appliedSineDrive = applied;
+                _sineDriveLastAppliedAt = DateTimeOffset.UtcNow;
+            }
+            if (refreshStatus)
+            {
+                await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+            }
+            else
+            {
+                lock (_stateGate)
+                {
+                    if (_status is not null)
+                    {
+                        _status = _status with { AppState = 10, AppStateName = "SINE_DRIVE" };
+                    }
+                }
+                Notify();
+            }
+            return CommandResult.Ok(
+                $"Lazo abierto activo: {applied.ElectricalFrequencyHz:0.###} Hz, {applied.AmplitudePercent:0.#} %.");
+        }
+        catch (OperationCanceledException) when (IsEmergencyStopPending())
+        {
+            return CommandResult.Failed("Comando interrumpido por ESTOP.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return CommandResult.Failed("Actualizacion cancelada.");
+        }
+        catch (Exception ex)
+        {
+            SetError(DeviceConnectionState.Error, ex.Message);
+            return CommandResult.Failed(ex.Message);
+        }
+        finally
+        {
+            _controlGate.Release();
+        }
+    }
+
+    public async Task MaintainSineDriveAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_transport.IsOpen) return;
+
+        if (!await _controlGate.WaitAsync(0, cancellationToken).ConfigureAwait(false)) return;
+
+        try
+        {
+            await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                SineDriveSettings? requested;
+                lock (_stateGate)
+                {
+                    requested = _mode == ControlMode.GuiControl ? _requestedSineDrive : null;
+                }
+                if (requested is null) return;
+
+                byte[] payload = EscProtocol.SineDrivePayload(
+                    requested.ElectricalFrequencyHz, requested.AmplitudePercent);
+                EscFrame response = await SendRequestCoreAsync(
+                    CommOpcode.SineDrive,
+                    (byte)SineDriveCommand.KeepAlive,
+                    payload,
+                    cancellationToken,
+                    responseDeadlineMs: 300).ConfigureAwait(false);
+                if (response.Status != CommStatus.Ok)
+                {
+                    lock (_stateGate)
+                    {
+                        ClearSineDrive();
+                    }
+                    Notify();
+                    return;
+                }
+
+                SineDriveSettings applied = EscProtocol.DecodeSineDrive(response);
+                lock (_stateGate)
+                {
+                    _appliedSineDrive = applied;
+                    _sineDriveLastAppliedAt = DateTimeOffset.UtcNow;
+                }
+            }
+            finally
+            {
+                _ioLock.Release();
+            }
+        }
+        finally
+        {
+            _controlGate.Release();
+        }
     }
 
     public async Task<CommandResult> SetSpeedRpmAsync(int rpm, CancellationToken cancellationToken = default)
@@ -338,6 +599,10 @@ public sealed class EscBridgeService
         {
             await RefreshSpeedLimitsAsync(cancellationToken).ConfigureAwait(false);
         }
+        if (result.Success && IsStartupParameter(parameter))
+        {
+            await RefreshStartupConfigurationAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         return result;
     }
@@ -357,6 +622,10 @@ public sealed class EscBridgeService
             if (parameter is ConfigParam.MinSpeed or ConfigParam.MaxSpeed or ConfigParam.All)
             {
                 await RefreshSpeedLimitsAsync(cancellationToken).ConfigureAwait(false);
+            }
+            if (IsStartupParameter(parameter) || parameter == ConfigParam.All)
+            {
+                await RefreshStartupConfigurationAsync(cancellationToken).ConfigureAwait(false);
             }
         }
 
@@ -590,7 +859,9 @@ public sealed class EscBridgeService
         return result;
     }
 
-    public async Task RefreshStatusAsync(CancellationToken cancellationToken = default)
+    public async Task RefreshStatusAsync(
+        CancellationToken cancellationToken = default,
+        int responseDeadlineMs = 1_000)
     {
         if (!_transport.IsOpen)
         {
@@ -599,16 +870,26 @@ public sealed class EscBridgeService
 
         try
         {
-            EscFrame frame = await SendRequestAsync(CommOpcode.GetStatus, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+            EscFrame frame = await SendRequestAsync(
+                CommOpcode.GetStatus,
+                0,
+                Array.Empty<byte>(),
+                cancellationToken,
+                responseDeadlineMs).ConfigureAwait(false);
             EscStatus status = EscProtocol.DecodeStatus(frame);
             lock (_stateGate)
             {
                 _status = status;
+                SynchronizeSineDrive(status);
                 _lastError = null;
                 _state = DeviceConnectionState.Connected;
             }
 
             Notify();
+        }
+        catch (OperationCanceledException) when (IsEmergencyStopPending())
+        {
+            return;
         }
         catch (Exception ex)
         {
@@ -654,7 +935,36 @@ public sealed class EscBridgeService
             return CommandResult.Failed("Control bloqueado por el modo actual.");
         }
 
-        return await SendCommandAsync(opcode, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+        return await SendMotorCommandWithEstopGuardAsync(
+            opcode, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<CommandResult> StopSineDriveCoreAsync(
+        bool emergency,
+        bool refreshStatus,
+        CancellationToken cancellationToken)
+    {
+        CommOpcode opcode = emergency ? CommOpcode.EmergencyStop : CommOpcode.Stop;
+        CommandResult result = await SendCommandAsync(
+            opcode, 0, Array.Empty<byte>(), cancellationToken, refreshStatus).ConfigureAwait(false);
+        if (!result.Success) return result;
+
+        lock (_stateGate)
+        {
+            ClearSineDrive();
+            if (_status is not null)
+            {
+                _status = _status with
+                {
+                    AppState = 0,
+                    AppStateName = "IDLE",
+                    MotorStalled = false,
+                    ConsistentZeroCrossing = false
+                };
+            }
+        }
+        Notify();
+        return result;
     }
 
     private async Task<CommandResult> SendSimulinkControlCommandAsync(CommOpcode opcode, CancellationToken cancellationToken)
@@ -664,7 +974,51 @@ public sealed class EscBridgeService
             return CommandResult.Failed("Cambia el modo a Simulink control para enviar comandos de motor.");
         }
 
-        return await SendCommandAsync(opcode, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+        return await SendMotorCommandWithEstopGuardAsync(
+            opcode, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<CommandResult> SendMotorCommandWithEstopGuardAsync(
+        CommOpcode opcode,
+        CancellationToken cancellationToken)
+    {
+        int emergencyGeneration = Volatile.Read(ref _emergencyStopGeneration);
+        if (IsEmergencyStopPending()) return CommandResult.Failed("ESTOP en curso.");
+
+        try
+        {
+            EscFrame response;
+            await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                if (IsEmergencyStopPending() ||
+                    emergencyGeneration != Volatile.Read(ref _emergencyStopGeneration))
+                {
+                    return CommandResult.Failed("Comando cancelado por ESTOP.");
+                }
+                response = await SendRequestCoreAsync(
+                    opcode, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                _ioLock.Release();
+            }
+
+            CommandResult result = opcode == CommOpcode.Run && response.Status == CommStatus.InvalidState
+                ? new CommandResult(false, response.Status, "RUN no permitido en el estado actual del ESC.")
+                : CommandResult.FromStatus(response.Status);
+            await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+            return result;
+        }
+        catch (OperationCanceledException) when (IsEmergencyStopPending())
+        {
+            return CommandResult.Failed("Comando interrumpido por ESTOP.");
+        }
+        catch (Exception ex)
+        {
+            SetError(DeviceConnectionState.Error, ex.Message);
+            return CommandResult.Failed(ex.Message);
+        }
     }
 
     private async Task<CommandResult> SendCommandAsync(CommOpcode opcode, byte parameter, byte[] payload, CancellationToken cancellationToken, bool refreshStatus = true)
@@ -683,6 +1037,10 @@ public sealed class EscBridgeService
         }
         catch (Exception ex)
         {
+            if (IsEmergencyStopPending())
+            {
+                return CommandResult.Failed("Comando interrumpido por ESTOP.");
+            }
             SetError(DeviceConnectionState.Error, ex.Message);
             return CommandResult.Failed(ex.Message);
         }
@@ -697,6 +1055,7 @@ public sealed class EscBridgeService
             lock (_stateGate)
             {
                 _status = status;
+                SynchronizeSineDrive(status);
             }
         }
         catch (Exception ex)
@@ -737,6 +1096,10 @@ public sealed class EscBridgeService
         CancellationToken cancellationToken,
         int responseDeadlineMs = 1_000)
     {
+        if (opcode != CommOpcode.EmergencyStop && IsEmergencyStopPending())
+        {
+            throw new OperationCanceledException("Request interrupted by ESTOP.");
+        }
         byte sequence = unchecked(++_sequence);
         byte[] request = EscProtocol.BuildRequest(sequence, opcode, parameter, payload);
         if (IsPilOpcode(opcode))
@@ -749,8 +1112,15 @@ public sealed class EscBridgeService
         DateTimeOffset deadline = DateTimeOffset.UtcNow.AddMilliseconds(responseDeadlineMs);
         while (DateTimeOffset.UtcNow < deadline)
         {
+            if (opcode != CommOpcode.EmergencyStop && IsEmergencyStopPending())
+            {
+                throw new OperationCanceledException("Request interrupted by ESTOP.");
+            }
             TimeSpan remaining = deadline - DateTimeOffset.UtcNow;
-            EscFrame? frame = await _transport.ReadFrameAsync(remaining, cancellationToken).ConfigureAwait(false);
+            TimeSpan readSlice = remaining > TimeSpan.FromMilliseconds(50)
+                ? TimeSpan.FromMilliseconds(50)
+                : remaining;
+            EscFrame? frame = await _transport.ReadFrameAsync(readSlice, cancellationToken).ConfigureAwait(false);
             if (frame is null)
             {
                 continue;
@@ -818,11 +1188,52 @@ public sealed class EscBridgeService
         }
     }
 
+    public async Task<StartupConfiguration> RefreshStartupConfigurationAsync(
+        CancellationToken cancellationToken = default)
+    {
+        await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            StartupConfiguration configuration =
+                await ReadStartupConfigurationCoreAsync(cancellationToken).ConfigureAwait(false);
+            lock (_stateGate)
+            {
+                _startupConfiguration = configuration;
+            }
+            Notify();
+            return configuration;
+        }
+        finally
+        {
+            _ioLock.Release();
+        }
+    }
+
     private async Task<ActiveSpeedLimits> ReadSpeedLimitsCoreAsync(CancellationToken cancellationToken)
     {
         double minSpeed = await ReadConfigCoreAsync(ConfigParam.MinSpeed, cancellationToken).ConfigureAwait(false);
         double maxSpeed = await ReadConfigCoreAsync(ConfigParam.MaxSpeed, cancellationToken).ConfigureAwait(false);
         return new ActiveSpeedLimits(checked((ushort)minSpeed), checked((ushort)maxSpeed));
+    }
+
+    private async Task<StartupConfiguration> ReadStartupConfigurationCoreAsync(CancellationToken cancellationToken)
+    {
+        double initialAmplitude = await ReadConfigCoreAsync(
+            ConfigParam.StartupInitialAmplitude, cancellationToken).ConfigureAwait(false);
+        double finalAmplitude = await ReadConfigCoreAsync(
+            ConfigParam.StartupFinalAmplitude, cancellationToken).ConfigureAwait(false);
+        double initialFrequency = await ReadConfigCoreAsync(
+            ConfigParam.StartupInitialFrequency, cancellationToken).ConfigureAwait(false);
+        double finalFrequency = await ReadConfigCoreAsync(
+            ConfigParam.StartupFinalFrequency, cancellationToken).ConfigureAwait(false);
+        double duration = await ReadConfigCoreAsync(
+            ConfigParam.StartupDuration, cancellationToken).ConfigureAwait(false);
+        return new StartupConfiguration(
+            initialAmplitude,
+            finalAmplitude,
+            initialFrequency,
+            finalFrequency,
+            duration);
     }
 
     private async Task<double> ReadConfigCoreAsync(ConfigParam parameter, CancellationToken cancellationToken)
@@ -922,6 +1333,7 @@ public sealed class EscBridgeService
         HilBridgeStats hilStats = _hilStats with { RecentFrames = _hilFrameTrace.AsEnumerable().Reverse().ToArray() };
         return new BridgeSnapshot(
             _state,
+            _transport.IsOpen,
             _mode,
             _devices,
             _currentDevice,
@@ -935,6 +1347,12 @@ public sealed class EscBridgeService
             _validationReference,
             _activeControllerConfig,
             _activeSpeedLimits,
+            _startupConfiguration,
+            new SineDriveStatus(
+                _status?.AppState == 10,
+                _requestedSineDrive,
+                _appliedSineDrive,
+                _sineDriveLastAppliedAt),
             _validationReferenceCapturedAt,
             _validationReferenceError);
     }
@@ -944,8 +1362,43 @@ public sealed class EscBridgeService
         _validationReference = null;
         _activeControllerConfig = null;
         _activeSpeedLimits = null;
+        _startupConfiguration = null;
         _validationReferenceCapturedAt = null;
         _validationReferenceError = null;
+    }
+
+    private void SynchronizeSineDrive(EscStatus status)
+    {
+        if (status.AppState != 10)
+        {
+            ClearSineDrive();
+        }
+    }
+
+    private void ClearSineDrive()
+    {
+        _requestedSineDrive = null;
+        _appliedSineDrive = null;
+        _sineDriveLastAppliedAt = null;
+    }
+
+    private bool HasRequestedSineDrive()
+    {
+        lock (_stateGate)
+        {
+            return _requestedSineDrive is not null;
+        }
+    }
+
+    private bool IsEmergencyStopPending() => Volatile.Read(ref _emergencyStopPending) != 0;
+
+    private static bool IsStartupParameter(ConfigParam parameter)
+    {
+        return parameter is ConfigParam.StartupInitialAmplitude
+            or ConfigParam.StartupFinalAmplitude
+            or ConfigParam.StartupInitialFrequency
+            or ConfigParam.StartupFinalFrequency
+            or ConfigParam.StartupDuration;
     }
 
     private void Notify()

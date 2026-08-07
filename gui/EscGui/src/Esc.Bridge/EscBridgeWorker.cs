@@ -16,17 +16,54 @@ public sealed class EscBridgeWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        Task sineMaintenance = RunSineMaintenanceAsync(stoppingToken);
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    await _bridge.ScanAsync(stoppingToken).ConfigureAwait(false);
+                    await _bridge.ReadTelemetryOnceAsync(stoppingToken).ConfigureAwait(false);
+
+                    if (_bridge.IsTransportOpen &&
+                        _bridge.Snapshot.State is DeviceConnectionState.Connected or DeviceConnectionState.Error)
+                    {
+                        await _bridge.RefreshStatusAsync(
+                            stoppingToken, responseDeadlineMs: 300).ConfigureAwait(false);
+                    }
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "ESC bridge background iteration failed.");
+                }
+
+                await Task.Delay(500, stoppingToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            try
+            {
+                await sineMaintenance.ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+            }
+        }
+    }
+
+    private async Task RunSineMaintenanceAsync(CancellationToken stoppingToken)
+    {
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await _bridge.ScanAsync(stoppingToken).ConfigureAwait(false);
-                await _bridge.ReadTelemetryOnceAsync(stoppingToken).ConfigureAwait(false);
-
-                if (_bridge.Snapshot.State == DeviceConnectionState.Connected)
-                {
-                    await _bridge.RefreshStatusAsync(stoppingToken).ConfigureAwait(false);
-                }
+                await _bridge.MaintainSineDriveAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -34,10 +71,10 @@ public sealed class EscBridgeWorker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "ESC bridge background iteration failed.");
+                _logger.LogDebug(ex, "Sine-drive keepalive failed.");
             }
 
-            await Task.Delay(500, stoppingToken).ConfigureAwait(false);
+            await Task.Delay(350, stoppingToken).ConfigureAwait(false);
         }
     }
 }
