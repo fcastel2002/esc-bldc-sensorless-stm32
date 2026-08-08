@@ -121,7 +121,7 @@ Consecuencia: si un cambio afecta estado observable, casi seguro debe terminar a
   - `ReadTelemetryOnceAsync()`
   - `RefreshStatusAsync()` si hay conexion
 - Un ciclo separado de 350 ms mantiene el `KEEPALIVE` de `SINE_DRIVE` sin depender del refresh general.
-- `ReadTelemetryOnceAsync()` solo lee una trama por iteracion y solo si `SpeedLoggingEnabled` es `true`.
+- `ReadTelemetryOnceAsync()` lee una trama cuando cualquier canal esta activo; un loop dedicado de 10 ms evita acumular eventos mientras el status conserva su ciclo de 500 ms.
 
 Consecuencia: la telemetria no es un stream continuo separado; depende del worker y del log habilitado.
 
@@ -170,6 +170,7 @@ La persistencia en flash no viene del JSON. La UI muestra el boton guardar solo 
 - `EscBridgeService.HandleFrame()` decodifica el evento y lo guarda en `TelemetryStore`.
 - `TelemetryStore` conserva hasta 2000 muestras por variable.
 - `BridgeSnapshot.SpeedTelemetry` trae estadisticas agregadas.
+- Los canales disponibles son velocidad, `IU`, `IV` y periodo/calidad BEMF. Las corrientes incluyen cuentas ADC, flags de validez y sector de conmutacion.
 - `BridgeSnapshot.StartupConfiguration` y `BridgeSnapshot.SineDrive` exponen configuracion y readback del nuevo modo.
 - `Bridge.SpeedSamples` expone las muestras de `speed`.
 - `SpeedChart.razor` dibuja SVG manual.

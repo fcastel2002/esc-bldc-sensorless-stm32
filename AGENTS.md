@@ -9,6 +9,12 @@
 - GUI lives in `gui/EscGui/`; `gui/EscGui/EscGui.slnx` exists as an auxiliary solution file, but official commands use individual `.csproj` paths. Projects target `net10.0`.
 - High-value docs before deep changes: `firmware/COMM_PROTOCOL.md` for frames/opcodes, `docs/PROJECT_FLOW.md` for firmware flow, `gui/EscGui/GUI_AGENT_CONTEXT.md` for GUI ownership, `gui/EscGui/BRIDGE_WALKTHROUGH.md` for bridge/HID/UDP details.
 
+## Knowledge Base and PDF Usage
+
+- For questions based on `tf_control_y_sistemas/BaseConocimiento/`, always consult the corresponding Markdown (`.md`) knowledge-base file.
+- Do not open, render, OCR, extract, or otherwise inspect the source PDF when answering those questions if a Markdown version exists. This avoids unnecessary token and compute usage.
+- Access a source PDF only when the user explicitly asks to inspect, convert, or verify that PDF. A missing or incomplete Markdown file is not implicit permission: report the limitation and ask before opening the PDF.
+
 ## Codebase Memory MCP
 
 - Prefer `codebase-memory` for architectural discovery, symbol lookup, callers/callees, data flow, cross-service paths, change impact, complexity analysis, and code relationships. Prefer `Glob`/`Grep` for raw file-name or exact-text searches and for content that is not represented in the graph.
@@ -49,7 +55,7 @@
 
 ## Firmware Invariants
 
-- Communication transport is selected only at boot by `PB8`: HIGH/open is UART on `USART1 PB6/PB7 115200 8N1`; LOW is USB FS Custom HID on `PA11/PA12`. Do not add runtime transport switching.
+- Communication transport is selected only at boot by `PB8`: HIGH/open is USB FS Custom HID on `PA11/PA12`; LOW is UART on `USART1 PB6/PB7 115200 8N1`. Do not add runtime transport switching.
 - All protocol frames are fixed 64 bytes, little-endian, magic `0xEC 0xB1`, version `0x01`, CRC16-CCITT-FALSE over bytes `0..61`.
 - Main protocol effects live in `firmware/Core/Src/comm_protocol.c`; transport selection is in `comm_transport.c`; periodic communication/telemetry facade is in `comm.c`.
 - `foc_startup()` is historical naming: it is open-loop sinusoidal/SPWM startup, not field-oriented control and not a current loop.
@@ -57,7 +63,7 @@
 - RPM PI v2 stores gains as floats but executes Q16.16; `KP_RPM/KI_RPM` payloads use `int16` hundredths. KD is fixed at zero.
 - In `CLOSEDLOOP`, `PWM_FREQ`, `KP`, `KI`, and `KD` apply hot; other config changes use the deferred `CONFIG` path.
 - RPM PI v2 controls direct RPM error with canonical ARR=2000 output and trapezoidal integration; KD is not implemented.
-- `CURRENT_LIMIT` and `TEMP_LIMIT` are protocol placeholders and return/use `NOT_IMPLEMENTED`; current and temperature telemetry are placeholders too.
+- `CURRENT_LIMIT` and `TEMP_LIMIT` remain `NOT_IMPLEMENTED`. `CURRENT_U`/`CURRENT_V` telemetry comes from synchronized low-side shunts; temperature telemetry remains a placeholder.
 - CubeMX-generated files may contain `USER CODE BEGIN/END` regions; avoid editing generated sections outside those regions unless the task explicitly requires it.
 - C formatting/lint config exists at repo root as `.clang-format` and `.clang-tidy`.
 

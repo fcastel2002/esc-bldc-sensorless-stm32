@@ -401,6 +401,21 @@ uint16_t speed_sensor_get_speed_period(void)
   return (uint16_t)filtered_speed;
 }
 
+uint8_t speed_sensor_get_bemf_quality_flags(void)
+{
+  uint8_t flags = 0U;
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  if (speed_measurement_ready != 0U) flags |= 1U;
+  for (uint8_t phase = 0; phase < PHASE_COUNT; phase++) {
+    if (phase_measurements[phase].is_consistent != 0U) {
+      flags |= (uint8_t)(1U << (phase + 1U));
+    }
+  }
+  if (primask == 0U) __enable_irq();
+  return flags;
+}
+
 bool speed_sensor_is_ready(void)
 {
   return speed_measurement_ready != 0U;

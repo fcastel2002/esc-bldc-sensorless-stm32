@@ -17,6 +17,7 @@ public sealed class EscBridgeWorker : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         Task sineMaintenance = RunSineMaintenanceAsync(stoppingToken);
+        Task telemetryPump = RunTelemetryPumpAsync(stoppingToken);
         try
         {
             while (!stoppingToken.IsCancellationRequested)
@@ -24,8 +25,6 @@ public sealed class EscBridgeWorker : BackgroundService
                 try
                 {
                     await _bridge.ScanAsync(stoppingToken).ConfigureAwait(false);
-                    await _bridge.ReadTelemetryOnceAsync(stoppingToken).ConfigureAwait(false);
-
                     if (_bridge.IsTransportOpen &&
                         _bridge.Snapshot.State is DeviceConnectionState.Connected or DeviceConnectionState.Error)
                     {
@@ -50,10 +49,32 @@ public sealed class EscBridgeWorker : BackgroundService
             try
             {
                 await sineMaintenance.ConfigureAwait(false);
+                await telemetryPump.ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
             }
+        }
+    }
+
+    private async Task RunTelemetryPumpAsync(CancellationToken stoppingToken)
+    {
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try
+            {
+                await _bridge.ReadTelemetryOnceAsync(stoppingToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "ESC telemetry read failed.");
+            }
+
+            await Task.Delay(10, stoppingToken).ConfigureAwait(false);
         }
     }
 

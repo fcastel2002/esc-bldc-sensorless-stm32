@@ -8,6 +8,8 @@
 
 #include "comm_protocol.h"
 #include "comm_transport.h"
+#include "current_sense.h"
+#include "bldc_driver.h"
 #include "motor_control.h"
 #include "speed_sensor.h"
 
@@ -76,26 +78,61 @@ static uint8_t logging_id_to_protocol(LoggeableVariable variable)
     return COMM_LOG_PARAM_SPEED;
   case VAR_TEMP:
     return COMM_LOG_PARAM_TEMP;
-  case VAR_CURRENT:
-    return COMM_LOG_PARAM_CURRENT;
+  case VAR_CURRENT_U:
+    return COMM_LOG_PARAM_CURRENT_U;
+  case VAR_CURRENT_V:
+    return COMM_LOG_PARAM_CURRENT_V;
+  case VAR_BEMF_PERIOD:
+    return COMM_LOG_PARAM_BEMF_PERIOD;
   default:
     return 0;
   }
 }
 
-static int32_t logging_value(LoggeableVariable variable)
+typedef struct {
+  int32_t value;
+  uint16_t raw;
+  uint16_t valid_samples;
+  uint8_t flags;
+  int8_t commutation_step;
+} LoggingValue;
+
+static LoggingValue logging_value(LoggeableVariable variable,
+                                  const CurrentSenseSnapshot* current)
 {
+  LoggingValue result = { .commutation_step = bldc_get_commutation_step() };
   switch (variable) {
   case VAR_SPEED:
-    return hil_session_state != 0U
+    result.value = hil_session_state != 0U
         ? (int32_t)hil_speed_rpm
         : (int32_t)period_to_rpm(get_actual_speed());
+    result.raw = speed_sensor_get_speed_period();
+    result.flags = speed_sensor_get_bemf_quality_flags();
+    return result;
   case VAR_TEMP:
-    return 3640; /* centi-degrees C, placeholder until a real sensor exists. */
-  case VAR_CURRENT:
-    return 1230; /* mA, placeholder until current feedback is implemented. */
+    result.value = 3640; /* centi-degrees C, placeholder until a real sensor exists. */
+    return result;
+  case VAR_CURRENT_U:
+    result.value = current->phase_u.current_ma;
+    result.raw = current->phase_u.raw_adc;
+    result.valid_samples = current->phase_u.valid_samples;
+    result.flags = current->phase_u.flags;
+    result.commutation_step = current->phase_u.commutation_step;
+    return result;
+  case VAR_CURRENT_V:
+    result.value = current->phase_v.current_ma;
+    result.raw = current->phase_v.raw_adc;
+    result.valid_samples = current->phase_v.valid_samples;
+    result.flags = current->phase_v.flags;
+    result.commutation_step = current->phase_v.commutation_step;
+    return result;
+  case VAR_BEMF_PERIOD:
+    result.raw = speed_sensor_get_speed_period();
+    result.value = result.raw;
+    result.flags = speed_sensor_get_bemf_quality_flags();
+    return result;
   default:
-    return 0;
+    return result;
   }
 }
 
@@ -109,22 +146,31 @@ void process_logging_queue(void)
   }
   last_log_tick = now;
 
+  CurrentSenseSnapshot current_snapshot;
+  current_sense_get_snapshot(&current_snapshot);
+
   for (uint8_t i = 0; i < logging_queue.count; i++) {
     uint8_t frame[COMM_FRAME_SIZE];
-    uint8_t payload[9];
+    uint8_t payload[15];
     LoggeableVariable variable = logging_queue.params[i];
-    int32_t value = logging_value(variable);
+    LoggingValue reading = logging_value(variable, &current_snapshot);
     uint32_t tick = HAL_GetTick();
 
     payload[0] = logging_id_to_protocol(variable);
-    payload[1] = (uint8_t)(value & 0xFF);
-    payload[2] = (uint8_t)((uint32_t)value >> 8);
-    payload[3] = (uint8_t)((uint32_t)value >> 16);
-    payload[4] = (uint8_t)((uint32_t)value >> 24);
+    payload[1] = (uint8_t)(reading.value & 0xFF);
+    payload[2] = (uint8_t)((uint32_t)reading.value >> 8);
+    payload[3] = (uint8_t)((uint32_t)reading.value >> 16);
+    payload[4] = (uint8_t)((uint32_t)reading.value >> 24);
     payload[5] = (uint8_t)(tick & 0xFF);
     payload[6] = (uint8_t)(tick >> 8);
     payload[7] = (uint8_t)(tick >> 16);
     payload[8] = (uint8_t)(tick >> 24);
+    payload[9] = (uint8_t)(reading.raw & 0xFFU);
+    payload[10] = (uint8_t)(reading.raw >> 8);
+    payload[11] = reading.flags;
+    payload[12] = (uint8_t)(reading.valid_samples & 0xFFU);
+    payload[13] = (uint8_t)(reading.valid_samples >> 8);
+    payload[14] = (uint8_t)reading.commutation_step;
 
     comm_protocol_build_event(COMM_OPCODE_TELEMETRY_EVENT,
                               payload[0],

@@ -223,6 +223,68 @@
     font-size: 0.76rem;
 }
 
+.electrical-telemetry {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.electrical-channel {
+    display: grid;
+    gap: 12px;
+    border: 1px solid #c8d6dc;
+    border-top: 2px solid #2d718d;
+    background: linear-gradient(145deg, #f7fafb, #eef4f6);
+    padding: 14px;
+}
+
+.electrical-channel strong,
+.electrical-channel small {
+    display: block;
+}
+
+.electrical-channel small {
+    margin-top: 4px;
+    color: #64717a;
+}
+
+.channel-kicker {
+    color: #2d718d;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.channel-reading {
+    color: #1c3442;
+    font-family: var(--mono);
+    font-size: clamp(1.45rem, 3vw, 2.15rem);
+    font-weight: 700;
+}
+
+.channel-reading span {
+    color: #64717a;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.channel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.bemf-channel {
+    border-top-color: #9a8230;
+    background: linear-gradient(145deg, #fbfaf4, #f3f0df);
+}
+
+.bemf-channel .channel-kicker {
+    color: #806c27;
+}
+
 @media (max-width: 700px) {
     .panel-heading-actions {
         flex-wrap: wrap;
@@ -234,6 +296,10 @@
     }
 
     .sine-control-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .electrical-telemetry {
         grid-template-columns: 1fr;
     }
 }

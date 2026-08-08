@@ -52,7 +52,9 @@ typedef enum {
 
 typedef enum {
   VAR_TEMP,
-  VAR_CURRENT,
+  VAR_CURRENT_U,
+  VAR_CURRENT_V,
+  VAR_BEMF_PERIOD,
   VAR_SPEED,
 } LoggeableVariable;
 
@@ -88,4 +90,3 @@ uint8_t set_logging_rate_ms(uint16_t rate_ms);
 void process_logging_queue(void);
 
 #endif /* INC_COMM_H_ */
-

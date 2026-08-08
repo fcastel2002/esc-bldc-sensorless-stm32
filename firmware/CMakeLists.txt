@@ -21,8 +21,6 @@ endif()
 # Set the project name
 set(CMAKE_PROJECT_NAME firmware_esc_bldc_v1)
 
-# Include toolchain file
-include("cmake/gcc-arm-none-eabi.cmake")
 
 # Enable compile command to ease indexing with e.g. clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
@@ -53,6 +51,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/comm.c
     Core/Src/comm_protocol.c
     Core/Src/comm_transport.c
+    Core/Src/current_sense.c
     Core/Src/hard_config.c
     Core/Src/flash_config.c
     Core/Src/main.c

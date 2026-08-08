@@ -116,6 +116,18 @@ public enum LogParam : byte
 {
     Speed = 0x01,
     Temperature = 0x02,
-    Current = 0x03,
+    CurrentU = 0x03,
+    CurrentV = 0x04,
+    BemfPeriod = 0x05,
     All = 0xFF,
+}
+
+[Flags]
+public enum TelemetryQuality : byte
+{
+    None = 0,
+    Valid = 1 << 0,
+    Calibrated = 1 << 1,
+    Saturated = 1 << 2,
+    Overcurrent = 1 << 3,
 }

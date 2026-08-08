@@ -75,6 +75,19 @@ public sealed class HomeControlTests
         Assert.Contains("_pendingDynamicSine", homeMarkup, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void DashboardExposesSynchronizedCurrentAndBemfChannels()
+    {
+        string homeMarkup = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Home.razor"));
+
+        Assert.Contains("PA3 · SENSE_A", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains("PA4 · SENSE_B", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains("LogParam.CurrentU", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains("LogParam.CurrentV", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains("LogParam.BemfPeriod", homeMarkup, StringComparison.Ordinal);
+    }
+
     private static int Count(string source, string value)
     {
         int count = 0;

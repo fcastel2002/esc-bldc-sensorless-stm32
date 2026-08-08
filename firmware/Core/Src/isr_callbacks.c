@@ -7,6 +7,7 @@
 
 #include "tim.h"
 #include "motor_control.h"
+#include "current_sense.h"
 
 #pragma GCC optimize("Os")
 
@@ -51,5 +52,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
     if (hil_session_state != (uint8_t)HIL_EXECUTION_STEPPED + 1U) {
       update_pwm_startup_foc();
     }
+  }
+}
+
+void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef* hadc)
+{
+  if (hadc->Instance == ADC1) {
+    current_sense_handle_conversion();
   }
 }

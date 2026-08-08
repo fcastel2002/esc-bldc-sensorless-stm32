@@ -519,7 +519,13 @@ static uint8_t logging_variable_from_param(uint8_t param, LoggeableVariable* var
     *variable = VAR_TEMP;
     return COMM_STATUS_OK;
   case COMM_LOG_PARAM_CURRENT:
-    *variable = VAR_CURRENT;
+    *variable = VAR_CURRENT_U;
+    return COMM_STATUS_OK;
+  case COMM_LOG_PARAM_CURRENT_V:
+    *variable = VAR_CURRENT_V;
+    return COMM_STATUS_OK;
+  case COMM_LOG_PARAM_BEMF_PERIOD:
+    *variable = VAR_BEMF_PERIOD;
     return COMM_STATUS_OK;
   default:
     return COMM_STATUS_UNKNOWN_PARAM;
@@ -651,7 +657,9 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     if (param == COMM_PARAM_ALL) {
       start_logging_param(VAR_SPEED);
       start_logging_param(VAR_TEMP);
-      start_logging_param(VAR_CURRENT);
+      start_logging_param(VAR_CURRENT_U);
+      start_logging_param(VAR_CURRENT_V);
+      start_logging_param(VAR_BEMF_PERIOD);
       return COMM_STATUS_OK;
     } else {
       LoggeableVariable variable;

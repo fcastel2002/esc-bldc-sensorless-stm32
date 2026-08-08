@@ -18,8 +18,8 @@
 ## Invariants
 
 - Communication transport is selected only at boot by `PB8`.
-- `PB8` HIGH/open selects UART on `USART1 PB6/PB7 115200 8N1`.
-- `PB8` LOW selects USB FS Custom HID on `PA11/PA12`.
+- `PB8` HIGH/open selects USB FS Custom HID on `PA11/PA12`.
+- `PB8` LOW selects UART on `USART1 PB6/PB7 115200 8N1`.
 - Do not add runtime transport switching.
 - Protocol frames are fixed at 64 bytes.
 - Frames use little-endian fields, magic `0xEC 0xB1`, version `0x01`, and CRC16-CCITT-FALSE over bytes `0..61`.
@@ -27,7 +27,7 @@
 - RPM PI v2 stores gains as floats but executes Q16.16; `KP_RPM/KI_RPM` payloads use `int16` hundredths. KD is fixed at zero.
 - In `CLOSEDLOOP`, `PWM_FREQ`, `KP`, `KI`, and `KD` apply hot. Other config changes use the deferred `CONFIG` path.
 - `KD` acts on measured-speed derivative, not error derivative.
-- `CURRENT_LIMIT` and `TEMP_LIMIT` are protocol placeholders and return or use `NOT_IMPLEMENTED`; current and temperature telemetry are placeholders too.
+- `CURRENT_LIMIT` and `TEMP_LIMIT` remain `NOT_IMPLEMENTED`. `CURRENT_U`/`CURRENT_V` telemetry comes from synchronized low-side shunts; temperature telemetry remains a placeholder.
 - `foc_startup()` is historical naming: it is open-loop sinusoidal/SPWM startup, not field-oriented control and not a current loop.
 
 ## Critical Files

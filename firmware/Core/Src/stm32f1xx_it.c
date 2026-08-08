@@ -55,6 +55,7 @@
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern ADC_HandleTypeDef hadc1;
 extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
@@ -67,6 +68,15 @@ extern PCD_HandleTypeDef hpcd_USB_FS;
 /******************************************************************************/
 /*           Cortex-M3 Processor Interruption and Exception Handlers          */
 /******************************************************************************/
+
+/**
+  * @brief This function handles ADC1 and ADC2 global interrupts.
+  */
+void ADC1_2_IRQHandler(void)
+{
+  HAL_ADC_IRQHandler(&hadc1);
+}
+
 /**
   * @brief This function handles Non maskable interrupt.
   */

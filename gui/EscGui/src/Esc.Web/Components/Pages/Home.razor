@@ -249,6 +249,47 @@
                 <span>Rate efectivo: @Snapshot.SpeedTelemetry.EffectiveRateHz.ToString("0.0") Hz</span>
                 <span>Descartadas: @Snapshot.SpeedTelemetry.DroppedSamples</span>
             </div>
+            <div class="electrical-telemetry" aria-label="Corrientes sincronizadas y BEMF">
+                <article class="electrical-channel">
+                    <div>
+                        <span class="channel-kicker">PA3 · SENSE_A</span>
+                        <strong>Corriente IU</strong>
+                        <small>@CurrentDetail(LogParam.CurrentU, Snapshot.CurrentUTelemetry)</small>
+                    </div>
+                    <div class="channel-reading">@(Snapshot.CurrentUTelemetry.LastValue?.ToString("0") ?? "-") <span>mA</span></div>
+                    <div class="channel-actions">
+                        <button class="primary" @onclick="() => StartLogAsync(LogParam.CurrentU)" disabled="@(_isBusy || !IsConnected || Snapshot.CurrentULoggingEnabled)">Iniciar</button>
+                        <button @onclick="() => StopLogAsync(LogParam.CurrentU)" disabled="@(_isBusy || !IsConnected || !Snapshot.CurrentULoggingEnabled)">Detener</button>
+                        <button @onclick="() => ClearTelemetry(LogParam.CurrentU)" disabled="@(Snapshot.CurrentUTelemetry.SampleCount == 0)">Limpiar</button>
+                    </div>
+                </article>
+                <article class="electrical-channel">
+                    <div>
+                        <span class="channel-kicker">PA4 · SENSE_B</span>
+                        <strong>Corriente IV</strong>
+                        <small>@CurrentDetail(LogParam.CurrentV, Snapshot.CurrentVTelemetry)</small>
+                    </div>
+                    <div class="channel-reading">@(Snapshot.CurrentVTelemetry.LastValue?.ToString("0") ?? "-") <span>mA</span></div>
+                    <div class="channel-actions">
+                        <button class="primary" @onclick="() => StartLogAsync(LogParam.CurrentV)" disabled="@(_isBusy || !IsConnected || Snapshot.CurrentVLoggingEnabled)">Iniciar</button>
+                        <button @onclick="() => StopLogAsync(LogParam.CurrentV)" disabled="@(_isBusy || !IsConnected || !Snapshot.CurrentVLoggingEnabled)">Detener</button>
+                        <button @onclick="() => ClearTelemetry(LogParam.CurrentV)" disabled="@(Snapshot.CurrentVTelemetry.SampleCount == 0)">Limpiar</button>
+                    </div>
+                </article>
+                <article class="electrical-channel bemf-channel">
+                    <div>
+                        <span class="channel-kicker">TIM2 · LM339</span>
+                        <strong>Periodo BEMF</strong>
+                        <small>@CurrentDetail(LogParam.BemfPeriod, Snapshot.BemfTelemetry)</small>
+                    </div>
+                    <div class="channel-reading">@(Snapshot.BemfTelemetry.LastValue?.ToString("0") ?? "-") <span>ticks</span></div>
+                    <div class="channel-actions">
+                        <button class="primary" @onclick="() => StartLogAsync(LogParam.BemfPeriod)" disabled="@(_isBusy || !IsConnected || Snapshot.BemfLoggingEnabled)">Iniciar</button>
+                        <button @onclick="() => StopLogAsync(LogParam.BemfPeriod)" disabled="@(_isBusy || !IsConnected || !Snapshot.BemfLoggingEnabled)">Detener</button>
+                        <button @onclick="() => ClearTelemetry(LogParam.BemfPeriod)" disabled="@(Snapshot.BemfTelemetry.SampleCount == 0)">Limpiar</button>
+                    </div>
+                </article>
+            </div>
         </div>
     </section>
 
@@ -507,6 +548,36 @@
     {
         await StoreResultAsync(Bridge.StopSpeedLogAsync());
     });
+
+    private async Task StartLogAsync(LogParam parameter) => await BusyExecAsync(async () =>
+    {
+        await StoreResultAsync(Bridge.StartLogAsync(parameter));
+    });
+
+    private async Task StopLogAsync(LogParam parameter) => await BusyExecAsync(async () =>
+    {
+        await StoreResultAsync(Bridge.StopLogAsync(parameter));
+    });
+
+    private void ClearTelemetry(LogParam parameter)
+    {
+        Bridge.ClearTelemetry(parameter);
+        Snapshot = Bridge.Snapshot;
+        _lastCommandResult = $"Telemetria {parameter} limpiada; la adquisicion continua activa.";
+    }
+
+    private string CurrentDetail(LogParam parameter, TelemetryStats stats)
+    {
+        TelemetrySample? sample = Bridge.GetTelemetrySamples(parameter).LastOrDefault();
+        if (sample is null) return $"{stats.SampleCount} muestras";
+        string raw = sample.AdcRawValue.HasValue
+            ? parameter == LogParam.BemfPeriod
+                ? $"periodo {sample.AdcRawValue.Value} ticks"
+                : $"ADC {sample.AdcRawValue.Value}"
+            : "sin raw";
+        string validity = sample.IsValid ? "valida" : "fuera de ventana";
+        return $"{stats.SampleCount} muestras · {raw} · {validity}";
+    }
 
     private void ClearSpeedTelemetry()
     {

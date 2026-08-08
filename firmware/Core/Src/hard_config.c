@@ -6,6 +6,8 @@
  */
 
 #include "hard_config.h"
+#include "bldc_driver.h"
+#include "current_sense.h"
 
 #include <math.h>
 
@@ -56,6 +58,7 @@ void update_all_esc()
   uint32_t tim_arr = CPU_clock / (2 * current_esc_params.pwm_freq_hz);
   TIM1->PSC        = 0;
   TIM1->ARR        = tim_arr;
+  current_sense_update_pwm_window(bldc_get_pwm());
   esc_config_done = 1;
 }
 

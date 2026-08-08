@@ -55,6 +55,46 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public void DecodeTelemetryReadsExtendedCurrentMetadata()
+    {
+        byte[] payload = new byte[15];
+        payload[0] = (byte)LogParam.CurrentU;
+        BitConverter.GetBytes(1200).CopyTo(payload, 1);
+        BitConverter.GetBytes(5678u).CopyTo(payload, 5);
+        BitConverter.GetBytes((ushort)700).CopyTo(payload, 9);
+        payload[11] = (byte)(TelemetryQuality.Valid | TelemetryQuality.Calibrated);
+        BitConverter.GetBytes((ushort)25).CopyTo(payload, 12);
+        payload[14] = 3;
+
+        byte[] raw = EscProtocol.BuildFrame(
+            2, CommOpcode.TelemetryEvent, (byte)LogParam.CurrentU,
+            payload, CommFrameType.Event, CommStatus.Ok);
+        TelemetrySample sample = EscProtocol.DecodeTelemetry(
+            EscProtocol.Parse(raw), DateTimeOffset.UnixEpoch);
+
+        Assert.Equal("current_u", sample.Variable);
+        Assert.Equal("mA", sample.Unit);
+        Assert.Equal(1200, sample.RawValue);
+        Assert.Equal((ushort)700, sample.AdcRawValue);
+        Assert.True(sample.IsValid);
+        Assert.Equal((ushort)25, sample.ValidSampleCount);
+        Assert.Equal((sbyte)3, sample.CommutationStep);
+    }
+
+    [Fact]
+    public void DecodeTelemetryRejectsPartialExtendedPayload()
+    {
+        byte[] payload = new byte[12];
+        payload[0] = (byte)LogParam.CurrentU;
+        byte[] raw = EscProtocol.BuildFrame(
+            2, CommOpcode.TelemetryEvent, (byte)LogParam.CurrentU,
+            payload, CommFrameType.Event, CommStatus.Ok);
+
+        Assert.Throws<EscProtocolException>(() =>
+            EscProtocol.DecodeTelemetry(EscProtocol.Parse(raw), DateTimeOffset.UnixEpoch));
+    }
+
+    [Fact]
     public void DecodeStatusUsesFirmwareStateOrder()
     {
         byte[] payload = new byte[10];

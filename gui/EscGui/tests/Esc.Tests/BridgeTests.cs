@@ -104,6 +104,30 @@ public sealed class BridgeTests
     }
 
     [Fact]
+    public async Task CurrentLoggingIsIndependentAndBuffersExtendedSample()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+
+        await bridge.StartLogAsync(LogParam.CurrentU);
+        transport.EnqueueTelemetry(
+            LogParam.CurrentU, 1200, 1000, 700,
+            TelemetryQuality.Valid | TelemetryQuality.Calibrated, 25, 3);
+        await bridge.ReadTelemetryOnceAsync();
+
+        TelemetrySample sample = Assert.Single(bridge.CurrentUSamples);
+        Assert.Equal((ushort)700, sample.AdcRawValue);
+        Assert.True(sample.IsValid);
+        Assert.True(bridge.Snapshot.CurrentULoggingEnabled);
+        Assert.False(bridge.Snapshot.SpeedLoggingEnabled);
+        Assert.Equal(1200, bridge.Snapshot.CurrentUTelemetry.LastValue);
+
+        await bridge.StopLogAsync(LogParam.CurrentU);
+        Assert.False(bridge.Snapshot.CurrentULoggingEnabled);
+    }
+
+    [Fact]
     public async Task ClearSpeedTelemetryEmptiesBufferAndNotifiesSubscribers()
     {
         FakeEscTransport transport = new();
@@ -814,13 +838,33 @@ public sealed class BridgeTests
             return Task.FromResult(_readQueue.Count > 0 ? _readQueue.Dequeue() : null);
         }
 
-        public void EnqueueTelemetry(int rpm, uint tickMs)
+        public void EnqueueTelemetry(int rpm, uint tickMs) =>
+            EnqueueTelemetry(LogParam.Speed, rpm, tickMs);
+
+        public void EnqueueTelemetry(
+            LogParam parameter,
+            int value,
+            uint tickMs,
+            ushort rawValue = 0,
+            TelemetryQuality quality = TelemetryQuality.None,
+            ushort validSamples = 0,
+            sbyte commutationStep = 0)
         {
-            byte[] payload = new byte[9];
-            payload[0] = (byte)LogParam.Speed;
-            BitConverter.GetBytes(rpm).CopyTo(payload, 1);
+            bool extended = parameter is LogParam.CurrentU or LogParam.CurrentV or LogParam.BemfPeriod;
+            byte[] payload = new byte[extended ? 15 : 9];
+            payload[0] = (byte)parameter;
+            BitConverter.GetBytes(value).CopyTo(payload, 1);
             BitConverter.GetBytes(tickMs).CopyTo(payload, 5);
-            byte[] raw = EscProtocol.BuildFrame(100, CommOpcode.TelemetryEvent, (byte)LogParam.Speed, payload, CommFrameType.Event, CommStatus.Ok);
+            if (extended)
+            {
+                BitConverter.GetBytes(rawValue).CopyTo(payload, 9);
+                payload[11] = (byte)quality;
+                BitConverter.GetBytes(validSamples).CopyTo(payload, 12);
+                payload[14] = unchecked((byte)commutationStep);
+            }
+            byte[] raw = EscProtocol.BuildFrame(
+                100, CommOpcode.TelemetryEvent, (byte)parameter,
+                payload, CommFrameType.Event, CommStatus.Ok);
             _readQueue.Enqueue(EscProtocol.Parse(raw));
         }
 

@@ -1,11 +1,11 @@
 {
     "schema_version": 2,
-    "commit": "68d2d7d589e3915236f81c999f9a694bdc58c878",
-    "indexed_at": "2026-07-27T13:45:26Z",
+    "commit": "e9ce866413cb10df7b05b3fc0f4cad684c26cb24",
+    "indexed_at": "2026-08-08T13:41:28Z",
     "project": "D-06.-Proyectos-esc-bldc-stm32",
-    "nodes": 24725,
-    "edges": 31518,
-    "original_size": 41549824,
-    "compressed_size": 5443794,
+    "nodes": 25130,
+    "edges": 31679,
+    "original_size": 41615360,
+    "compressed_size": 5384129,
     "compression_level": 3
 }

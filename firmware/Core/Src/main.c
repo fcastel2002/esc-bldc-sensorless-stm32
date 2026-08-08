@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
 #include "crc.h"
 #include "tim.h"
 #include "usart.h"
@@ -25,6 +26,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "current_sense.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -94,7 +96,11 @@ int main(void)
   MX_TIM1_Init();
   MX_CRC_Init();
   MX_TIM3_Init();
+  MX_USART1_UART_Init();
+  MX_ADC2_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
+  current_sense_init();
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
   TIM1->PSC = 0;
   TIM2->PSC = 399;
@@ -167,6 +173,12 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV8;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /* USER CODE BEGIN 4 */
@@ -186,8 +198,7 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
-#ifdef  USE_FULL_ASSERT
+#ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
   *         where the assert_param error has occurred.

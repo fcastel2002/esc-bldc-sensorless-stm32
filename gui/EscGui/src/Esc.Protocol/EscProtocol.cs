@@ -381,15 +381,24 @@ public static class EscProtocol
         {
             throw new EscProtocolException("Telemetry event payload is shorter than 9 bytes.");
         }
+        if (frame.Payload.Length is > 9 and < 15)
+        {
+            throw new EscProtocolException("Extended telemetry payload must be at least 15 bytes.");
+        }
 
         var logParam = (LogParam)frame.Payload[0];
+        if (frame.Parameter != frame.Payload[0])
+        {
+            throw new EscProtocolException("Telemetry parameter does not match its payload identifier.");
+        }
         int value = BinaryPrimitives.ReadInt32LittleEndian(frame.Payload.AsSpan(1, 4));
         uint targetTick = BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(5, 4));
         string unit = logParam switch
         {
             LogParam.Speed => "rpm",
             LogParam.Temperature => "cdeg",
-            LogParam.Current => "mA",
+            LogParam.CurrentU or LogParam.CurrentV => "mA",
+            LogParam.BemfPeriod => "ticks",
             _ => "raw"
         };
 
@@ -397,11 +406,28 @@ public static class EscProtocol
         {
             LogParam.Speed => "speed",
             LogParam.Temperature => "temperature",
-            LogParam.Current => "current",
+            LogParam.CurrentU => "current_u",
+            LogParam.CurrentV => "current_v",
+            LogParam.BemfPeriod => "bemf_period",
             _ => $"0x{frame.Payload[0]:X2}"
         };
 
-        return new TelemetrySample(name, logParam, value, unit, targetTick, hostTimestamp);
+        ushort? adcRaw = frame.Payload.Length >= 11
+            ? BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(9, 2))
+            : null;
+        TelemetryQuality quality = frame.Payload.Length >= 12
+            ? (TelemetryQuality)frame.Payload[11]
+            : TelemetryQuality.None;
+        ushort validSamples = frame.Payload.Length >= 14
+            ? BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(12, 2))
+            : (ushort)0;
+        sbyte? commutationStep = frame.Payload.Length >= 15
+            ? unchecked((sbyte)frame.Payload[14])
+            : null;
+
+        return new TelemetrySample(
+            name, logParam, value, unit, targetTick, hostTimestamp,
+            adcRaw, quality, validSamples, commutationStep);
     }
 
     public static void EnsureOkResponse(EscFrame frame, CommOpcode expectedOpcode)

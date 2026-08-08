@@ -23,6 +23,8 @@ public static class BridgeEndpointMapper
             return bridge.Snapshot.Devices;
         });
         group.MapGet("/telemetry/speed", (EscBridgeService bridge) => bridge.SpeedSamples);
+        group.MapGet("/telemetry/{parameter}", (string parameter, EscBridgeService bridge) =>
+            bridge.GetTelemetrySamples(ParseLogParam(parameter)));
 
         group.MapPost("/connect", async (ConnectRequest request, EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.ConnectAsync(request.DevicePath, cancellationToken));
@@ -67,6 +69,10 @@ public static class BridgeEndpointMapper
             await bridge.StartSpeedLogAsync(cancellationToken));
         group.MapPost("/log/speed/stop", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.StopSpeedLogAsync(cancellationToken));
+        group.MapPost("/log/{parameter}/start", async (string parameter, EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.StartLogAsync(ParseLogParam(parameter), cancellationToken));
+        group.MapPost("/log/{parameter}/stop", async (string parameter, EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.StopLogAsync(ParseLogParam(parameter), cancellationToken));
 
         group.MapPost("/hil/start", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.HilStartAsync(cancellationToken: cancellationToken));
@@ -162,6 +168,22 @@ public static class BridgeEndpointMapper
             "MIN_SPEED" => ConfigParam.MinSpeed,
             "ALL" => ConfigParam.All,
             _ => throw new BadHttpRequestException($"Unknown config parameter '{parameter}'.")
+        };
+    }
+
+    private static LogParam ParseLogParam(string parameter)
+    {
+        if (Enum.TryParse(parameter, true, out LogParam parsed) && parsed != LogParam.All)
+        {
+            return parsed;
+        }
+
+        return parameter.ToUpperInvariant() switch
+        {
+            "CURRENT_U" or "IU" => LogParam.CurrentU,
+            "CURRENT_V" or "IV" => LogParam.CurrentV,
+            "BEMF" or "BEMF_PERIOD" => LogParam.BemfPeriod,
+            _ => throw new BadHttpRequestException($"Unknown telemetry parameter '{parameter}'.")
         };
     }
 

@@ -193,7 +193,9 @@ Log params:
 | --- | --- |
 | `0x01` | `SPEED` |
 | `0x02` | `TEMP` |
-| `0x03` | `CURRENT` |
+| `0x03` | `CURRENT_U` (`PA3`, L298 `SENSE_A`) |
+| `0x04` | `CURRENT_V` (`PA4`, L298 `SENSE_B`) |
+| `0x05` | `BEMF_PERIOD` (periodo filtrado de capturas `TIM2`) |
 | `0xFF` | `ALL` |
 
 `LOG_RATE` accepts `100..5000 ms`. Telemetry is sent as `type=0x82`, `opcode=0x33`.
@@ -206,7 +208,26 @@ Telemetry event payload:
 | 1..4 | `int32` | value: RPM, centi-degrees C, or mA |
 | 5..8 | `uint32` | `HAL_GetTick()` timestamp |
 
-Temperature and current telemetry currently use placeholders until real sensing logic exists.
+Firmware actual emite una extension de 6 bytes, manteniendo intactos los primeros
+9 bytes para receptores anteriores:
+
+| Offset | Type | Meaning |
+| --- | --- | --- |
+| 9..10 | `uint16` | cuentas ADC raw; para velocidad/BEMF, periodo en ticks |
+| 11 | `uint8` | flags: bit 0 valido, bit 1 calibrado, bit 2 saturado, bit 3 sobrecorriente |
+| 12..13 | `uint16` | cantidad acumulada de muestras validas |
+| 14 | `int8` | sector de conmutacion activo |
+
+`CURRENT_U` y `CURRENT_V` usan conversiones inyectadas simultaneas de ADC1/ADC2,
+disparadas internamente por `TIM1_CH4`. La escala nominal usa `VDDA=3.3 V` y
+shunts de `0.47 ohm`: aproximadamente `1.714 mA` por cuenta ADC. Una muestra de
+corriente solo es valida cuando la fase correspondiente conduce por low-side y
+la ventana PWM tiene margen suficiente respecto de ambos flancos.
+
+`BEMF_PERIOD` no representa una tension analogica. Expone el periodo y calidad
+de la ruta existente LM339/TIM2; la conmutacion sensorless sigue usando esa ruta.
+
+Temperature telemetry remains a placeholder until a real sensor exists.
 
 ## HIL mode
 

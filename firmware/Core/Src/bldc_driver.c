@@ -1,4 +1,5 @@
 #include "bldc_driver.h"
+#include "current_sense.h"
 
 // MANEJO DE CONMUTACION
 // Variables
@@ -156,6 +157,7 @@ void bldc_commutate() {
 
 void bldc_set_pwm(uint16_t new_pwm) {
   g_pwm_val = (uint16_t)new_pwm;
+  current_sense_update_pwm_window(g_pwm_val);
 }
 
 uint16_t bldc_get_pwm(void) {

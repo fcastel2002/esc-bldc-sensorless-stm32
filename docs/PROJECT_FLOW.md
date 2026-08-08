@@ -191,6 +191,7 @@ El motor se monitorea con [`check_motor_status()`](../firmware/Core/Src/motor_co
 | [`firmware/Core/Src/motor_control.c`](../firmware/Core/Src/motor_control.c) | Integracion del PI RPM, manejo de stall y zero-crossing handler. |
 | [`firmware/Core/Src/rpm_pi_controller.c`](../firmware/Core/Src/rpm_pi_controller.c) | Nucleo PI RPM Q16.16, anti-windup y escalado de ARR. |
 | [`firmware/Core/Src/speed_sensor.c`](../firmware/Core/Src/speed_sensor.c) | Medicion de velocidad por cruces por cero y consenso trifasico. |
+| [`firmware/Core/Src/current_sense.c`](../firmware/Core/Src/current_sense.c) | Muestreo dual ADC sincronizado con TIM1, escala de shunt y validez por sector. |
 | [`firmware/Core/Src/isr_callbacks.c`](../firmware/Core/Src/isr_callbacks.c) | Callbacks HAL para captura, output compare y update de timers. |
 | [`firmware/Core/Src/stm32f1xx_it.c`](../firmware/Core/Src/stm32f1xx_it.c) | Handlers de interrupcion generados y ruteo hacia HAL. |
 | [`gui/protocol.py`](../gui/protocol.py) | Utilidades Python para construir, parsear y mostrar frames binarios. |
@@ -203,6 +204,7 @@ Una ejecucion normal queda asi:
 main()
   -> inicializa HAL, clocks, GPIO, timers, CRC
   -> habilita captura TIM2 para BEMF
+  -> calibra ADC1/ADC2 y arma corriente IU/IV por TIM1_CH4
   -> detect_motor()
   -> while:
        handleState()

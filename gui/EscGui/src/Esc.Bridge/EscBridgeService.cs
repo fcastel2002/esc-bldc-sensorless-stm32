@@ -23,7 +23,7 @@ public sealed class EscBridgeService
     private DeviceConnectionState _state = DeviceConnectionState.NotDetected;
     private ControlMode _mode = ControlMode.GuiControl;
     private string? _lastError;
-    private bool _speedLoggingEnabled;
+    private readonly HashSet<LogParam> _enabledLogs = new();
     private ushort _logRateMs = 500;
     private byte _sequence;
     private int _emergencyStopPending;
@@ -65,11 +65,23 @@ public sealed class EscBridgeService
     }
 
     public IReadOnlyList<TelemetrySample> SpeedSamples => _telemetryStore.GetSamples("speed");
+    public IReadOnlyList<TelemetrySample> CurrentUSamples => _telemetryStore.GetSamples("current_u");
+    public IReadOnlyList<TelemetrySample> CurrentVSamples => _telemetryStore.GetSamples("current_v");
+    public IReadOnlyList<TelemetrySample> BemfSamples => _telemetryStore.GetSamples("bemf_period");
     public bool IsTransportOpen => _transport.IsOpen;
 
     public void ClearSpeedTelemetry()
     {
         _telemetryStore.Clear("speed");
+        Notify();
+    }
+
+    public IReadOnlyList<TelemetrySample> GetTelemetrySamples(LogParam parameter) =>
+        _telemetryStore.GetSamples(TelemetryVariable(parameter));
+
+    public void ClearTelemetry(LogParam parameter)
+    {
+        _telemetryStore.Clear(TelemetryVariable(parameter));
         Notify();
     }
 
@@ -85,6 +97,7 @@ public sealed class EscBridgeService
 
             if (_transport.IsOpen && !currentStillPresent)
             {
+                _enabledLogs.Clear();
                 _state = DeviceConnectionState.Disconnected;
                 _lastError = "Dispositivo HID desconectado.";
                 _status = null;
@@ -99,6 +112,7 @@ public sealed class EscBridgeService
             }
             else if (!_transport.IsOpen && devices.Count == 0)
             {
+                _enabledLogs.Clear();
                 _state = DeviceConnectionState.NotDetected;
                 _lastError = null;
                 _currentDevice = null;
@@ -187,9 +201,9 @@ public sealed class EscBridgeService
                 ClearSineDrive();
             }
             await _transport.CloseAsync(cancellationToken).ConfigureAwait(false);
-            _speedLoggingEnabled = false;
             lock (_stateGate)
             {
+                _enabledLogs.Clear();
                 _state = _devices.Count > 0 ? DeviceConnectionState.Detected : DeviceConnectionState.NotDetected;
                 _currentDevice = null;
                 _status = null;
@@ -835,24 +849,48 @@ public sealed class EscBridgeService
         return result;
     }
 
-    public async Task<CommandResult> StartSpeedLogAsync(CancellationToken cancellationToken = default)
+    public Task<CommandResult> StartSpeedLogAsync(CancellationToken cancellationToken = default) =>
+        StartLogAsync(LogParam.Speed, cancellationToken);
+
+    public async Task<CommandResult> StartLogAsync(LogParam parameter, CancellationToken cancellationToken = default)
     {
-        CommandResult result = await SendCommandAsync(CommOpcode.LogStart, (byte)LogParam.Speed, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+        if (parameter == LogParam.All)
+        {
+            return CommandResult.Failed("Use un canal de telemetria concreto.");
+        }
+
+        CommandResult result = await SendCommandAsync(
+            CommOpcode.LogStart, (byte)parameter, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
         if (result.Success)
         {
-            _speedLoggingEnabled = true;
+            lock (_stateGate)
+            {
+                _enabledLogs.Add(parameter);
+            }
             Notify();
         }
 
         return result;
     }
 
-    public async Task<CommandResult> StopSpeedLogAsync(CancellationToken cancellationToken = default)
+    public Task<CommandResult> StopSpeedLogAsync(CancellationToken cancellationToken = default) =>
+        StopLogAsync(LogParam.Speed, cancellationToken);
+
+    public async Task<CommandResult> StopLogAsync(LogParam parameter, CancellationToken cancellationToken = default)
     {
-        CommandResult result = await SendCommandAsync(CommOpcode.LogStop, (byte)LogParam.Speed, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+        if (parameter == LogParam.All)
+        {
+            return CommandResult.Failed("Use un canal de telemetria concreto.");
+        }
+
+        CommandResult result = await SendCommandAsync(
+            CommOpcode.LogStop, (byte)parameter, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
         if (result.Success)
         {
-            _speedLoggingEnabled = false;
+            lock (_stateGate)
+            {
+                _enabledLogs.Remove(parameter);
+            }
             Notify();
         }
 
@@ -900,7 +938,12 @@ public sealed class EscBridgeService
 
     public async Task ReadTelemetryOnceAsync(CancellationToken cancellationToken = default)
     {
-        if (!_transport.IsOpen || !_speedLoggingEnabled)
+        bool loggingEnabled;
+        lock (_stateGate)
+        {
+            loggingEnabled = _enabledLogs.Count > 0;
+        }
+        if (!_transport.IsOpen || !loggingEnabled)
         {
             return;
         }
@@ -912,7 +955,7 @@ public sealed class EscBridgeService
 
         try
         {
-            EscFrame? frame = await _transport.ReadFrameAsync(TimeSpan.FromMilliseconds(25), cancellationToken).ConfigureAwait(false);
+            EscFrame? frame = await _transport.ReadFrameAsync(TimeSpan.FromMilliseconds(5), cancellationToken).ConfigureAwait(false);
             if (frame is not null)
             {
                 HandleFrame(frame);
@@ -1340,9 +1383,15 @@ public sealed class EscBridgeService
             _status,
             _lastError,
             DateTimeOffset.UtcNow,
-            _speedLoggingEnabled,
+            _enabledLogs.Contains(LogParam.Speed),
             _logRateMs,
             _telemetryStore.GetStats("speed", "rpm"),
+            _enabledLogs.Contains(LogParam.CurrentU),
+            _enabledLogs.Contains(LogParam.CurrentV),
+            _enabledLogs.Contains(LogParam.BemfPeriod),
+            _telemetryStore.GetStats("current_u", "mA"),
+            _telemetryStore.GetStats("current_v", "mA"),
+            _telemetryStore.GetStats("bemf_period", "ticks"),
             hilStats,
             _validationReference,
             _activeControllerConfig,
@@ -1356,6 +1405,16 @@ public sealed class EscBridgeService
             _validationReferenceCapturedAt,
             _validationReferenceError);
     }
+
+    private static string TelemetryVariable(LogParam parameter) => parameter switch
+    {
+        LogParam.Speed => "speed",
+        LogParam.Temperature => "temperature",
+        LogParam.CurrentU => "current_u",
+        LogParam.CurrentV => "current_v",
+        LogParam.BemfPeriod => "bemf_period",
+        _ => throw new ArgumentOutOfRangeException(nameof(parameter), parameter, "Canal de telemetria no soportado.")
+    };
 
     private void ClearValidationReference()
     {
