@@ -13,14 +13,23 @@
 #define ESC_PARAMS_SIGNATURE_V1 0x50415055U
 #define ESC_PARAMS_SIGNATURE_V2 0x32504345U
 #define ESC_PARAMS_SIGNATURE_V3 0x33504345U
-#define ESC_DEFAULT_KP_RPM 0.28f
+#define ESC_PARAMS_SIGNATURE_V4 0x34504345U
+#define ESC_DEFAULT_KP_RPM 1.00f
 #define ESC_DEFAULT_KI_RPM 1.00f
 #define ESC_DEFAULT_KD_RPM 0.00f
+#define ESC_DEFAULT_MAX_SPEED_RPM 5400U
+#define ESC_DEFAULT_MIN_SPEED_RPM 200U
+#define ESC_DEFAULT_PWM_FREQ_HZ 18000U
+#define ESC_DEFAULT_TEMP_LIMIT 70U // °C
+#define ESC_DEFAULT_CURRENT_LIMIT 2.0f // Amp
+#define ESC_DEFAULT_POLE_PAIRS 2U
 #define ESC_DEFAULT_STARTUP_INITIAL_AMPLITUDE_PERMILLE 200U
 #define ESC_DEFAULT_STARTUP_FINAL_AMPLITUDE_PERMILLE 1000U
 #define ESC_DEFAULT_STARTUP_INITIAL_FREQUENCY_MILLIHZ 2090U
 #define ESC_DEFAULT_STARTUP_FINAL_FREQUENCY_MILLIHZ 9280U
 #define ESC_DEFAULT_STARTUP_DURATION_MS 3000U
+#define ESC_DEFAULT_BEMF_BLANKING_US 0U
+#define ESC_MAX_BEMF_BLANKING_US 200U
 
 #define ESC_MIN_SINE_FREQUENCY_MILLIHZ 2000U
 #define ESC_MAX_SINE_FREQUENCY_MILLIHZ 10000U
@@ -73,6 +82,7 @@ typedef struct {
   uint32_t startup_initial_frequency_millihz;
   uint32_t startup_final_frequency_millihz;
   uint32_t startup_duration_ms;
+  uint16_t bemf_blanking_us;
 } ESCparams;
 
 #pragma pack(pop)
@@ -107,6 +117,7 @@ extern ConfigStatus set_startup_final_amplitude(uint16_t amplitude_permille);
 extern ConfigStatus set_startup_initial_frequency(uint32_t frequency_millihz);
 extern ConfigStatus set_startup_final_frequency(uint32_t frequency_millihz);
 extern ConfigStatus set_startup_duration(uint32_t duration_ms);
+extern ConfigStatus set_bemf_blanking_us(uint16_t blanking_us);
 
 extern uint16_t get_max_speed();
 extern uint16_t get_min_speed();
@@ -121,6 +132,7 @@ extern uint16_t get_startup_final_amplitude(void);
 extern uint32_t get_startup_initial_frequency(void);
 extern uint32_t get_startup_final_frequency(void);
 extern uint32_t get_startup_duration(void);
+extern uint16_t get_bemf_blanking_us(void);
 uint32_t        compute_crc32(ESCparams* params);
 
 #endif /* INC_HARD_CONFIG_H_ */

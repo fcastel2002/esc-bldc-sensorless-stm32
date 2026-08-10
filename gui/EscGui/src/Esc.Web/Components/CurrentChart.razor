@@ -1,0 +1,652 @@
+@using Esc.Bridge
+@using Esc.Protocol
+@using Microsoft.JSInterop
+@using System.Globalization
+@using System.Text
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<div class="current-scope-shell">
+    <div class="current-scope-header">
+        <div class="current-scope-legend" aria-label="Leyenda de la grafica">
+            <span><i class="current-legend-line iu"></i>Corriente IU</span>
+            <span><i class="current-legend-line iv"></i>Corriente IV</span>
+            <span><i class="current-legend-cursor cursor-a"></i>Cursor A</span>
+            <span><i class="current-legend-cursor cursor-b"></i>Cursor B</span>
+        </div>
+        <div class="current-scope-actions">
+            <button type="button" class="current-scope-toggle @(_follow ? "active" : null)" aria-pressed="@_follow" @onclick="ToggleFollow">
+                @(_follow ? "Siguiendo" : "Seguir")
+            </button>
+            <label>
+                Ventana
+                <select @bind="_windowSeconds" @bind:after="WindowChanged">
+                    <option value="10">10 s</option>
+                    <option value="30">30 s</option>
+                    <option value="60">60 s</option>
+                    <option value="0">Todo</option>
+                </select>
+            </label>
+            <label>
+                CSV
+                <select @bind="_exportMode">
+                    <option value="full">Buffer completo</option>
+                    <option value="selection" disabled="@(!HasInterval)">Intervalo A-B</option>
+                </select>
+            </label>
+            <button type="button" @onclick="ExportAsync" disabled="@(!CanExport)">Exportar</button>
+            <button type="button" class="current-scope-clear" @onclick="ClearAsync" disabled="@(SamplesU.Count == 0 && SamplesV.Count == 0)">Limpiar grafica</button>
+        </div>
+    </div>
+
+    <div class="current-scope-plot-frame">
+        <div class="current-scope-y-title">Corriente [mA]</div>
+        <div class="current-scope-y-scale" aria-hidden="true">
+            @foreach (AxisTick tick in _yTicks)
+            {
+                <span style="@PositionTop(tick.PositionPercent)">@tick.Label</span>
+            }
+        </div>
+        <div class="current-scope-plot"
+             @ref="_plotElement"
+             tabindex="0"
+             role="group"
+             aria-label="Grafica interactiva de corrientes IU e IV. Use click o arrastre para colocar cursores y flechas para mover el cursor activo."
+             @onkeydown="MoveActiveCursor">
+            <svg viewBox="0 0 1000 360" preserveAspectRatio="none" role="img" aria-label="Traza de corrientes IU y IV">
+                <defs>
+                    <clipPath id="current-scope-clip">
+                        <rect x="0" y="0" width="1000" height="360" />
+                    </clipPath>
+                </defs>
+                <rect x="0" y="0" width="1000" height="360" class="current-scope-background" />
+                @foreach (AxisTick tick in _xTicks)
+                {
+                    double x = tick.PositionPercent / 100 * SvgWidth;
+                    <line x1="@Invariant(x)" y1="0" x2="@Invariant(x)" y2="360" class="current-scope-grid @MajorGridClass(tick.PositionPercent)" />
+                }
+                @foreach (AxisTick tick in _yTicks)
+                {
+                    double y = tick.PositionPercent / 100 * SvgHeight;
+                    <line x1="0" y1="@Invariant(y)" x2="1000" y2="@Invariant(y)" class="current-scope-grid @MajorGridClass(tick.PositionPercent)" />
+                }
+                <g clip-path="url(#current-scope-clip)">
+                    @if (!string.IsNullOrEmpty(_polylineV))
+                    {
+                        <polyline points="@_polylineV" class="current-scope-trace iv" />
+                    }
+                    @if (!string.IsNullOrEmpty(_polylineU))
+                    {
+                        <polyline points="@_polylineU" class="current-scope-trace iu" />
+                    }
+                    @if (_cursorAIndex.HasValue && CursorX(_cursorAIndex.Value) is double cursorAX)
+                    {
+                        <line x1="@Invariant(cursorAX)" y1="0" x2="@Invariant(cursorAX)" y2="360" class="current-scope-cursor-line cursor-a" data-cursor="A" />
+                    }
+                    @if (_cursorBIndex.HasValue && CursorX(_cursorBIndex.Value) is double cursorBX)
+                    {
+                        <line x1="@Invariant(cursorBX)" y1="0" x2="@Invariant(cursorBX)" y2="360" class="current-scope-cursor-line cursor-b" data-cursor="B" />
+                    }
+                </g>
+            </svg>
+
+            @if (_pointsU.Count == 0 && _pointsV.Count == 0)
+            {
+                <div class="current-scope-empty">
+                    <strong>Sin muestras de corrientes</strong>
+                    <span>Inicie la adquisicion para construir las trazas.</span>
+                </div>
+            }
+            else
+            {
+                @if (_latestV is not null)
+                {
+                    <span class="current-scope-latest iv" style="@PointStyle(_latestV)" aria-hidden="true"></span>
+                }
+                @if (_latestU is not null)
+                {
+                    <span class="current-scope-latest iu" style="@PointStyle(_latestU)" aria-hidden="true"></span>
+                }
+            }
+
+            @if (_cursorAIndex.HasValue && CursorPercent(_cursorAIndex.Value) is double cursorAPercent)
+            {
+                <button type="button" class="current-scope-cursor-handle cursor-a" data-cursor="A" style="@PositionLeft(cursorAPercent)" tabindex="-1" aria-label="Cursor A"></button>
+            }
+            @if (_cursorBIndex.HasValue && CursorPercent(_cursorBIndex.Value) is double cursorBPercent)
+            {
+                <button type="button" class="current-scope-cursor-handle cursor-b" data-cursor="B" style="@PositionLeft(cursorBPercent)" tabindex="-1" aria-label="Cursor B"></button>
+            }
+        </div>
+        <div class="current-scope-x-scale" aria-hidden="true">
+            @foreach (AxisTick tick in _xTicks)
+            {
+                <span style="@PositionLeft(tick.PositionPercent)">@tick.Label</span>
+            }
+        </div>
+        <div class="current-scope-x-title">Tiempo desde inicio de buffer</div>
+    </div>
+
+    <div class="current-scope-measurements" aria-live="polite">
+        <button type="button" class="current-scope-readout cursor-a @ActiveCursorClass("A")" aria-pressed="@(_activeCursor == "A")" @onclick="ActivateCursorA" @onkeydown="MoveCursorA">
+            <span>Cursor A</span>
+            <strong>@CursorTimeLabel(_cursorAIndex)</strong>
+            <small>IU @CursorValueMa(_cursorAIndex, _pointsU) · IV @CursorValueMa(_cursorAIndex, _pointsV)</small>
+        </button>
+        <button type="button" class="current-scope-readout cursor-b @ActiveCursorClass("B")" aria-pressed="@(_activeCursor == "B")" @onclick="ActivateCursorB" @onkeydown="MoveCursorB">
+            <span>Cursor B</span>
+            <strong>@CursorTimeLabel(_cursorBIndex)</strong>
+            <small>IU @CursorValueMa(_cursorBIndex, _pointsU) · IV @CursorValueMa(_cursorBIndex, _pointsV)</small>
+        </button>
+        <div class="current-scope-readout">
+            <span>dT / dI</span>
+            <strong>@DeltaTimeLabel</strong>
+            <small>@DeltaCurrentLabel</small>
+        </div>
+        <div class="current-scope-readout">
+            <span>Ultimas muestras</span>
+            <strong>IU @LastValue(_pointsU) · IV @LastValue(_pointsV)</strong>
+            <small>@SnapshotCountLabel</small>
+        </div>
+    </div>
+</div>
+
+@code {
+    private const double SvgWidth = 1000;
+    private const double SvgHeight = 360;
+    private const int MaxRenderedPoints = 900;
+
+    private ElementReference _plotElement;
+    private IJSObjectReference? _module;
+    private DotNetObjectReference<CurrentChart>? _dotNetReference;
+    private IReadOnlyList<CurrentTracePoint> _pointsU = Array.Empty<CurrentTracePoint>();
+    private IReadOnlyList<CurrentTracePoint> _pointsV = Array.Empty<CurrentTracePoint>();
+    private IReadOnlyList<CurrentTracePoint> _visibleU = Array.Empty<CurrentTracePoint>();
+    private IReadOnlyList<CurrentTracePoint> _visibleV = Array.Empty<CurrentTracePoint>();
+    private IReadOnlyList<AxisTick> _xTicks = Array.Empty<AxisTick>();
+    private IReadOnlyList<AxisTick> _yTicks = Array.Empty<AxisTick>();
+    private string _polylineU = string.Empty;
+    private string _polylineV = string.Empty;
+    private string _activeCursor = "A";
+    private string _exportMode = "full";
+    private int? _cursorAIndex;
+    private int? _cursorBIndex;
+    private DateTimeOffset? _cursorATimestamp;
+    private DateTimeOffset? _cursorBTimestamp;
+    private double? _frozenEndSeconds;
+    private CurrentTracePoint? _latestU;
+    private CurrentTracePoint? _latestV;
+    private double _viewStartSeconds;
+    private double _viewEndSeconds = 1;
+    private double _yMin = -1;
+    private double _yMax = 1;
+    private int _windowSeconds = 30;
+    private bool _follow = true;
+
+    [Parameter]
+    public IReadOnlyList<TelemetrySample> SamplesU { get; set; } = Array.Empty<TelemetrySample>();
+
+    [Parameter]
+    public IReadOnlyList<TelemetrySample> SamplesV { get; set; } = Array.Empty<TelemetrySample>();
+
+    [Parameter]
+    public EventCallback ClearRequested { get; set; }
+
+    private bool HasInterval => _cursorAIndex.HasValue && _cursorBIndex.HasValue;
+    private bool CanExport => (_pointsU.Count > 0 || _pointsV.Count > 0) && (_exportMode != "selection" || HasInterval);
+    private string DeltaTimeLabel => HasInterval ? $"{Math.Abs(CursorSeconds(_cursorAIndex) - CursorSeconds(_cursorBIndex)):0.###} s" : "--";
+    private string DeltaCurrentLabel => HasInterval ? "IU/IV en cursores" : "--";
+    private string SnapshotCountLabel => $"{_pointsU.Count + _pointsV.Count} muestras · {Math.Min(_pointsU.Count, _pointsV.Count)} por canal";
+
+    protected override void OnParametersSet()
+    {
+        _pointsU = CurrentTraceAnalyzer.Normalize(SamplesU);
+        _pointsV = CurrentTraceAnalyzer.Normalize(SamplesV);
+        ReconcileCursors();
+        RebuildChart();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/speed-chart.js");
+        _dotNetReference = DotNetObjectReference.Create(this);
+        await _module.InvokeVoidAsync("attach", _plotElement, _dotNetReference);
+    }
+
+    [JSInvokable]
+    public Task SetCursorFromRatio(double ratio, string? requestedCursor)
+    {
+        if (_pointsU.Count == 0 || !double.IsFinite(ratio))
+        {
+            return Task.CompletedTask;
+        }
+
+        double targetSeconds = _viewStartSeconds + Math.Clamp(ratio, 0, 1) * (_viewEndSeconds - _viewStartSeconds);
+        CurrentTracePoint nearest = _pointsU.MinBy(point => Math.Abs(point.ElapsedSeconds - targetSeconds))!;
+        string cursor = requestedCursor is "A" or "B"
+            ? requestedCursor
+            : !_cursorAIndex.HasValue ? "A" : !_cursorBIndex.HasValue ? "B" : _activeCursor;
+
+        SetCursor(cursor, nearest.SampleIndex);
+        PauseFollow();
+        RebuildChart();
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private void SetCursor(string cursor, int index)
+    {
+        if (cursor == "B")
+        {
+            _cursorBIndex = index;
+            _cursorBTimestamp = _pointsU[index].Sample.HostTimestamp;
+            _activeCursor = "B";
+        }
+        else
+        {
+            _cursorAIndex = index;
+            _cursorATimestamp = _pointsU[index].Sample.HostTimestamp;
+            _activeCursor = "A";
+        }
+
+        if (HasInterval && _cursorAIndex > _cursorBIndex)
+        {
+            (_cursorAIndex, _cursorBIndex) = (_cursorBIndex, _cursorAIndex);
+            (_cursorATimestamp, _cursorBTimestamp) = (_cursorBTimestamp, _cursorATimestamp);
+            _activeCursor = _activeCursor == "A" ? "B" : "A";
+        }
+
+        if (HasInterval)
+        {
+            _exportMode = "selection";
+        }
+    }
+
+    private void MoveActiveCursor(KeyboardEventArgs args) => MoveCursor(_activeCursor, args);
+    private void MoveCursorA(KeyboardEventArgs args) => MoveCursor("A", args);
+    private void MoveCursorB(KeyboardEventArgs args) => MoveCursor("B", args);
+
+    private void MoveCursor(string cursor, KeyboardEventArgs args)
+    {
+        int delta = args.Key switch
+        {
+            "ArrowLeft" => -1,
+            "ArrowRight" => 1,
+            _ => 0
+        };
+        if (delta == 0 || _pointsU.Count == 0)
+        {
+            return;
+        }
+
+        _activeCursor = cursor;
+        int firstVisible = _visibleU[0].SampleIndex;
+        int lastVisible = _visibleU[^1].SampleIndex;
+        int current = cursor == "B"
+            ? _cursorBIndex ?? _visibleU[^1].SampleIndex
+            : _cursorAIndex ?? _visibleU[0].SampleIndex;
+        current = Math.Clamp(current, firstVisible, lastVisible);
+        SetCursor(cursor, Math.Clamp(current + delta, firstVisible, lastVisible));
+        PauseFollow();
+        RebuildChart();
+    }
+
+    private void ToggleFollow()
+    {
+        if (_follow)
+        {
+            PauseFollow();
+        }
+        else
+        {
+            _follow = true;
+            _frozenEndSeconds = null;
+        }
+
+        RebuildChart();
+    }
+
+    private void ActivateCursorA() => _activeCursor = "A";
+    private void ActivateCursorB() => _activeCursor = "B";
+
+    private void PauseFollow()
+    {
+        if (_follow)
+        {
+            _frozenEndSeconds = _viewEndSeconds;
+            _follow = false;
+        }
+    }
+
+    private void WindowChanged()
+    {
+        _follow = true;
+        _frozenEndSeconds = null;
+        RebuildChart();
+    }
+
+    private async Task ClearAsync()
+    {
+        ResetCursors();
+        _follow = true;
+        _frozenEndSeconds = null;
+        _exportMode = "full";
+        await ClearRequested.InvokeAsync();
+        RebuildChart();
+    }
+
+    private async Task ExportAsync()
+    {
+        if (_module is null || !CanExport)
+        {
+            return;
+        }
+
+        string csv;
+        string suffix;
+        if (_exportMode == "selection" && HasInterval)
+        {
+            double start = Math.Min(CursorSeconds(_cursorAIndex), CursorSeconds(_cursorBIndex));
+            double end = Math.Max(CursorSeconds(_cursorAIndex), CursorSeconds(_cursorBIndex));
+            csv = CurrentTraceAnalyzer.ToCsv(_pointsU, _pointsV, start, end);
+            suffix = "intervalo";
+        }
+        else
+        {
+            csv = CurrentTraceAnalyzer.ToCsv(_pointsU, _pointsV);
+            suffix = "buffer";
+        }
+
+        byte[] bytes = new UTF8Encoding(true).GetBytes(csv);
+        await using var stream = new MemoryStream(bytes);
+        using var streamReference = new DotNetStreamReference(stream);
+        string fileName = $"corrientes-{suffix}-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+        await _module.InvokeVoidAsync("downloadFileFromStream", fileName, streamReference);
+    }
+
+    private void ReconcileCursors()
+    {
+        _cursorAIndex = FindCursor(_cursorATimestamp);
+        _cursorBIndex = FindCursor(_cursorBTimestamp);
+        if (!HasIndex(_cursorAIndex))
+        {
+            _cursorATimestamp = null;
+        }
+        if (!HasIndex(_cursorBIndex))
+        {
+            _cursorBTimestamp = null;
+        }
+        if (!HasInterval && _exportMode == "selection")
+        {
+            _exportMode = "full";
+        }
+        if (_pointsU.Count == 0)
+        {
+            ResetCursors();
+        }
+    }
+
+    private bool HasIndex(int? index) => index.HasValue && index < _pointsU.Count;
+
+    private int? FindCursor(DateTimeOffset? timestamp)
+    {
+        if (!timestamp.HasValue)
+        {
+            return null;
+        }
+
+        for (var index = 0; index < _pointsU.Count; index++)
+        {
+            if (_pointsU[index].Sample.HostTimestamp == timestamp.Value)
+            {
+                return index;
+            }
+        }
+
+        return null;
+    }
+
+    private void ResetCursors()
+    {
+        _cursorAIndex = null;
+        _cursorBIndex = null;
+        _cursorATimestamp = null;
+        _cursorBTimestamp = null;
+        _activeCursor = "A";
+    }
+
+    private void RebuildChart()
+    {
+        if (_pointsU.Count == 0 && _pointsV.Count == 0)
+        {
+            _visibleU = Array.Empty<CurrentTracePoint>();
+            _visibleV = Array.Empty<CurrentTracePoint>();
+            _polylineU = string.Empty;
+            _polylineV = string.Empty;
+            _xTicks = BuildTimeTicks(0, 1);
+            _yTicks = BuildMaTicks(-1, 1);
+            _viewStartSeconds = 0;
+            _viewEndSeconds = 1;
+            SetSymmetricAxis(-1, 1);
+            _latestU = null;
+            _latestV = null;
+            return;
+        }
+
+        double latestSeconds = Math.Max(
+            _pointsU.Count > 0 ? _pointsU[^1].ElapsedSeconds : 0,
+            _pointsV.Count > 0 ? _pointsV[^1].ElapsedSeconds : 0);
+        _viewEndSeconds = _follow
+            ? latestSeconds
+            : Math.Min(_frozenEndSeconds ?? latestSeconds, latestSeconds);
+        _viewStartSeconds = _windowSeconds > 0
+            ? Math.Max(0, _viewEndSeconds - _windowSeconds)
+            : 0;
+        if (_viewEndSeconds <= _viewStartSeconds)
+        {
+            _viewEndSeconds = _viewStartSeconds + 1;
+        }
+
+        _visibleU = VisiblePoints(_pointsU);
+        _visibleV = VisiblePoints(_pointsV);
+        if (_visibleU.Count == 0 && _visibleV.Count == 0)
+        {
+            _visibleU = _pointsU.Count > 0 ? [_pointsU[^1]] : _visibleU;
+            _visibleV = _pointsV.Count > 0 ? [_pointsV[^1]] : _visibleV;
+        }
+
+        (double rawMin, double rawMax) = VisibleValueRange();
+        SetSymmetricAxis(rawMin, rawMax);
+
+        _xTicks = BuildTimeTicks(_viewStartSeconds, _viewEndSeconds);
+        _yTicks = BuildMaTicks(_yMin, _yMax);
+        _polylineU = BuildPolyline(Downsample(_visibleU));
+        _polylineV = BuildPolyline(Downsample(_visibleV));
+        _latestU = _visibleU.Count > 0 ? _visibleU[^1] : null;
+        _latestV = _visibleV.Count > 0 ? _visibleV[^1] : null;
+    }
+
+    private IReadOnlyList<CurrentTracePoint> VisiblePoints(IReadOnlyList<CurrentTracePoint> points) =>
+        points
+            .Where(point => point.ElapsedSeconds >= _viewStartSeconds && point.ElapsedSeconds <= _viewEndSeconds)
+            .ToArray();
+
+    private void SetSymmetricAxis(double rawMin, double rawMax)
+    {
+        double maxAbs = Math.Max(Math.Abs(rawMin), Math.Abs(rawMax));
+        maxAbs = Math.Max(50, maxAbs * 1.12);
+        double step = NiceStep(Math.Max(10, maxAbs) / 3.0);
+        _yMax = Math.Ceiling(maxAbs / step) * step;
+        _yMin = -_yMax;
+        if (_yMax <= _yMin)
+        {
+            _yMax = _yMin + Math.Max(step, 10);
+            _yMin = -_yMax;
+        }
+    }
+
+    private (double Min, double Max) VisibleValueRange()
+    {
+        double min = double.MaxValue;
+        double max = double.MinValue;
+        foreach (CurrentTracePoint point in _visibleU)
+        {
+            min = Math.Min(min, point.ValueMa);
+            max = Math.Max(max, point.ValueMa);
+        }
+        foreach (CurrentTracePoint point in _visibleV)
+        {
+            min = Math.Min(min, point.ValueMa);
+            max = Math.Max(max, point.ValueMa);
+        }
+
+        if (min > max)
+        {
+            return (0, 1);
+        }
+
+        double range = max - min;
+        double margin = range < 1 ? Math.Max(50, Math.Abs(max) * 0.02) : Math.Max(10, range * 0.12);
+        return (min - margin, max + margin);
+    }
+
+    private IReadOnlyList<CurrentTracePoint> Downsample(IReadOnlyList<CurrentTracePoint> points)
+    {
+        if (points.Count <= MaxRenderedPoints)
+        {
+            return points;
+        }
+
+        var reduced = new List<CurrentTracePoint>(MaxRenderedPoints) { points[0] };
+        double bucketSize = (points.Count - 2.0) / ((MaxRenderedPoints - 2) / 2.0);
+        for (double offset = 1; offset < points.Count - 1; offset += bucketSize)
+        {
+            int start = (int)Math.Floor(offset);
+            int end = Math.Min(points.Count - 1, (int)Math.Ceiling(offset + bucketSize));
+            IReadOnlyList<CurrentTracePoint> bucket = points.Skip(start).Take(end - start).ToArray();
+            if (bucket.Count == 0)
+            {
+                continue;
+            }
+
+            CurrentTracePoint min = bucket.MinBy(point => point.ValueMa)!;
+            CurrentTracePoint max = bucket.MaxBy(point => point.ValueMa)!;
+            if (min.SampleIndex <= max.SampleIndex)
+            {
+                reduced.Add(min);
+                if (max.SampleIndex != min.SampleIndex) reduced.Add(max);
+            }
+            else
+            {
+                reduced.Add(max);
+                reduced.Add(min);
+            }
+        }
+        reduced.Add(points[^1]);
+        return reduced;
+    }
+
+    private string BuildPolyline(IReadOnlyList<CurrentTracePoint> points)
+    {
+        var builder = new StringBuilder(points.Count * 16);
+        foreach (CurrentTracePoint point in points)
+        {
+            if (builder.Length > 0) builder.Append(' ');
+            builder.Append(Invariant(MapX(point.ElapsedSeconds))).Append(',').Append(Invariant(MapY(point.ValueMa)));
+        }
+        return builder.ToString();
+    }
+
+    private IReadOnlyList<AxisTick> BuildTimeTicks(double start, double end)
+    {
+        var ticks = new AxisTick[6];
+        double duration = end - start;
+        for (var index = 0; index <= 5; index++)
+        {
+            double value = start + duration * index / 5.0;
+            string label = duration < 1 ? $"{value * 1000:0} ms" : $"{value:0.#} s";
+            ticks[index] = new AxisTick(value, index * 20, label);
+        }
+        return ticks;
+    }
+
+    private IReadOnlyList<AxisTick> BuildMaTicks(double min, double max)
+    {
+        double range = Math.Max(1, max - min);
+        double step = NiceStep(range / 5.0);
+        int intervalCount = Math.Max(1, (int)Math.Round(range / step));
+        var ticks = new AxisTick[intervalCount + 1];
+        for (var index = 0; index <= intervalCount; index++)
+        {
+            double value = max - step * index;
+            ticks[index] = new AxisTick(value, (max - value) / range * 100, $"{value:0}");
+        }
+        return ticks;
+    }
+
+    private static double NiceStep(double value)
+    {
+        double exponent = Math.Floor(Math.Log10(Math.Max(value, double.Epsilon)));
+        double fraction = value / Math.Pow(10, exponent);
+        double niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
+        return niceFraction * Math.Pow(10, exponent);
+    }
+
+    private double MapX(double seconds) => (seconds - _viewStartSeconds) / (_viewEndSeconds - _viewStartSeconds) * SvgWidth;
+    private double MapY(double value) => SvgHeight - (value - _yMin) / (_yMax - _yMin) * SvgHeight;
+    private double? CursorX(int index) => index >= 0 && index < _pointsU.Count && _pointsU[index].ElapsedSeconds >= _viewStartSeconds && _pointsU[index].ElapsedSeconds <= _viewEndSeconds ? MapX(_pointsU[index].ElapsedSeconds) : null;
+    private double? CursorPercent(int index) => CursorX(index) is double x ? x / SvgWidth * 100 : null;
+    private double CursorSeconds(int? index) => index.HasValue && index < _pointsU.Count ? _pointsU[index.Value].ElapsedSeconds : 0;
+    private string CursorTimeLabel(int? index) => index.HasValue && index < _pointsU.Count ? $"{_pointsU[index.Value].ElapsedSeconds:0.###} s" : "--";
+    private string CursorValueMa(int? index, IReadOnlyList<CurrentTracePoint> points)
+    {
+        if (!index.HasValue || index >= _pointsU.Count || points.Count == 0)
+        {
+            return "--";
+        }
+
+        double targetSeconds = _pointsU[index.Value].ElapsedSeconds;
+        CurrentTracePoint nearest = points[0];
+        double nearestDistance = double.MaxValue;
+        foreach (CurrentTracePoint point in points)
+        {
+            double distance = Math.Abs(point.ElapsedSeconds - targetSeconds);
+            if (distance < nearestDistance)
+            {
+                nearest = point;
+                nearestDistance = distance;
+            }
+        }
+        return nearestDistance <= 5 ? $"{nearest.ValueMa:0} mA" : "--";
+    }
+    private string LastValue(IReadOnlyList<CurrentTracePoint> points) => points.Count > 0 ? $"{points[^1].ValueMa:0} mA" : "--";
+    private string ActiveCursorClass(string cursor) => _activeCursor == cursor ? "active" : string.Empty;
+    private static string MajorGridClass(double percent) => percent is <= 0.001 or >= 99.999 ? "major" : string.Empty;
+    private string PointStyle(CurrentTracePoint point) => $"left: {Invariant(MapX(point.ElapsedSeconds) / SvgWidth * 100)}%; top: {Invariant(MapY(point.ValueMa) / SvgHeight * 100)}%";
+    private static string PositionTop(double percent) => $"top: {percent.ToString("0.###", CultureInfo.InvariantCulture)}%";
+    private static string PositionLeft(double percent) => $"left: {percent.ToString("0.###", CultureInfo.InvariantCulture)}%";
+    private static string Invariant(double value) => value.ToString("0.###", CultureInfo.InvariantCulture);
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_module is not null)
+        {
+            try
+            {
+                await _module.InvokeVoidAsync("detach", _plotElement);
+                await _module.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+        }
+        _dotNetReference?.Dispose();
+    }
+
+    private sealed record AxisTick(double Value, double PositionPercent, string Label);
+}

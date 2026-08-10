@@ -19,13 +19,13 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim)
     uint8_t channel = 0;
     if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1 && floating_W) {
       channel = 1;
-      zero_crossing_handler(channel);
+      zero_crossing_handler(channel, HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_1));
     } else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_2 && floating_U) {
       channel = 2;
-      zero_crossing_handler(channel);
+      zero_crossing_handler(channel, HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_2));
     } else if (htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3 && floating_V) {
       channel = 3;
-      zero_crossing_handler(channel);
+      zero_crossing_handler(channel, HAL_TIM_ReadCapturedValue(htim, TIM_CHANNEL_3));
     }
     __enable_irq();
   }

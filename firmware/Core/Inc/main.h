@@ -90,10 +90,14 @@ void Error_Handler(void);
 #define U_GPIO_Port GPIOA
 #define EN_W_Pin GPIO_PIN_5
 #define EN_W_GPIO_Port GPIOA
+#define EN_U_PWM_Pin GPIO_PIN_6
+#define EN_U_PWM_GPIO_Port GPIOA
+#define EN_V_PWM_Pin GPIO_PIN_7
+#define EN_V_PWM_GPIO_Port GPIOA
+#define EN_W_PWM_Pin GPIO_PIN_0
+#define EN_W_PWM_GPIO_Port GPIOB
 #define EN_V_Pin GPIO_PIN_1
 #define EN_V_GPIO_Port GPIOB
-#define COMM_MODE_Pin GPIO_PIN_8
-#define COMM_MODE_GPIO_Port GPIOB
 #define V_Pin GPIO_PIN_10
 #define V_GPIO_Port GPIOB
 #define EN_U_Pin GPIO_PIN_13
@@ -104,6 +108,8 @@ void Error_Handler(void);
 #define IN_V_GPIO_Port GPIOA
 #define IN_W_Pin GPIO_PIN_10
 #define IN_W_GPIO_Port GPIOA
+#define COMM_MODE_Pin GPIO_PIN_8
+#define COMM_MODE_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 

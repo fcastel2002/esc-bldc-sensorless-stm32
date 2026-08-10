@@ -93,10 +93,11 @@ Defaults principales en [`set_default_esc_params()`](../firmware/Core/Src/hard_c
 - velocidad minima: 200 RPM.
 - pares de polos: 2.
 - arranque: amplitud `20% -> 100%`, frecuencia electrica `2.09 -> 9.28 Hz`, duracion 3 s.
+- blanking BEMF: 0 us, deshabilitado hasta ajustarlo experimentalmente.
 
-La persistencia esta en [`flash_config.c`](../firmware/Core/Src/flash_config.c). Usa dos paginas rotativas al final de Flash, definidas por [`FLASH_CONFIG_START`](../firmware/Core/Inc/flash_config.h#L13). [`flash_config_init()`](../firmware/Core/Src/flash_config.c) busca una pagina valida por firma y CRC; [`flash_config_save()`](../firmware/Core/Src/flash_config.c) escribe en la otra pagina para repartir desgaste. La configuracion V3 amplia el bloque con cinco parametros fisicos de arranque; bloques V1/V2 se validan con su layout original y se migran sin perder los campos existentes.
+La persistencia esta en [`flash_config.c`](../firmware/Core/Src/flash_config.c). Usa dos paginas rotativas al final de Flash, definidas por [`FLASH_CONFIG_START`](../firmware/Core/Inc/flash_config.h#L13). [`flash_config_init()`](../firmware/Core/Src/flash_config.c) busca una pagina valida por firma y CRC; [`flash_config_save()`](../firmware/Core/Src/flash_config.c) escribe en la otra pagina para repartir desgaste. La configuracion V4 agrega el blanking BEMF a los cinco parametros fisicos de arranque introducidos en V3. Los bloques V1, V2 y V3 se validan con su layout original y se migran sin perder sus campos; el blanking migrado queda en 0 us.
 
-Cuando un comando modifica parametros, las funciones `set_*` de [`hard_config.c`](../firmware/Core/Src/hard_config.c) llaman a [`flash_config_parameter_changed()`](../firmware/Core/Src/flash_config.c#L257). Si el cambio llega durante `CLOSEDLOOP` y solo afecta `PWM_FREQ`, `KP`, `KI` o `KD`, el firmware recalcula runtime al instante y mantiene el motor girando. El resto de parametros sigue entrando por `CONFIG`, que fuerza recalculo de timers/control y deja el guardado pendiente hasta `SAVE_CONFIG`.
+Cuando un comando modifica parametros, las funciones `set_*` de [`hard_config.c`](../firmware/Core/Src/hard_config.c) llaman a [`flash_config_parameter_changed()`](../firmware/Core/Src/flash_config.c#L257). Si el cambio llega durante `CLOSEDLOOP` y solo afecta `PWM_FREQ`, `KP`, `KI` o `KD`, el firmware recalcula runtime al instante y mantiene el motor girando. El blanking BEMF solo se puede modificar, resetear o guardar en `IDLE` y se convierte a ticks al iniciar la proxima corrida. El resto de parametros sigue entrando por `CONFIG`, que fuerza recalculo de timers/control y deja el guardado pendiente hasta `SAVE_CONFIG`.
 
 ## 5. Arranque del motor
 
@@ -112,7 +113,7 @@ El arranque activo esta en [`startup.c`](../firmware/Core/Src/startup.c).
 
 Cada update de TIM4 llama a [`HAL_TIM_PeriodElapsedCallback()`](../firmware/Core/Src/isr_callbacks.c), que a su vez llama a [`update_pwm_startup_foc()`](../firmware/Core/Src/startup.c). Esa funcion avanza la fase de las tablas e interpola linealmente amplitud y frecuencia segun tiempo transcurrido. Al completar la duracion configurada detiene la senoidal y pasa a six-step.
 
-El handoff detiene la senoidal, deja un duty inicial de 45%, prepara six-step y pasa a `RUNNING`.
+El handoff detiene la senoidal, deja un duty inicial de 45%, limpia capturas pendientes, arma el blanking BEMF, prepara six-step y pasa a `RUNNING`.
 
 Si se detecta `motor_stalled`, o si `RUNNING` dura mas de 4.5 s sin pasar a `READY`, [`handleState()`](../firmware/Core/Src/state_machine.c) corta el PWM durante 0.5 s y relanza [`foc_startup()`](../firmware/Core/Src/startup.c). Este timeout no depende del detector de stall; funciona como watchdog directo del enganche sensorless.
 
@@ -129,12 +130,14 @@ La conmutacion fisica esta en [`bldc_driver.c`](../firmware/Core/Src/bldc_driver
 - configura la polaridad de captura en TIM2 para detectar el proximo cruce por cero;
 - actualiza flags `floating_U`, `floating_V`, `floating_W`.
 
-La ISR entra por [`TIM2_IRQHandler()`](../firmware/Core/Src/stm32f1xx_it.c#L207), HAL llama a [`HAL_TIM_IC_CaptureCallback()`](../firmware/Core/Src/isr_callbacks.c#L12), y esta funcion solo acepta el canal cuya fase esta flotante. Si corresponde, llama a [`zero_crossing_handler()`](../firmware/Core/Src/motor_control.c#L152).
+La ISR entra por [`TIM2_IRQHandler()`](../firmware/Core/Src/stm32f1xx_it.c#L207), HAL llama a [`HAL_TIM_IC_CaptureCallback()`](../firmware/Core/Src/isr_callbacks.c#L12), y esta funcion solo acepta el canal cuya fase esta flotante. El callback conserva inmediatamente el timestamp capturado antes de llamar a [`zero_crossing_handler()`](../firmware/Core/Src/motor_control.c#L152).
 
 [`zero_crossing_handler()`](../firmware/Core/Src/motor_control.c#L152) tiene dos tareas:
 
 - conmutar al siguiente paso mediante la capa BLDC;
 - alimentar el sensado de velocidad en [`speed_sensor.c`](../firmware/Core/Src/speed_sensor.c).
+
+Despues del handoff y de cada conmutacion aceptada se guarda `TIM2->CNT`. Mientras el tiempo transcurrido sea menor que `BEMF_BLANKING_US`, las capturas se descartan antes de esas dos tareas. La resta de 16 bits tolera el overflow de TIM2 y el uso del contador actual bloquea tambien flags antiguos que HAL pueda procesar dentro de la misma interrupcion. El valor `0 us` conserva el comportamiento sin blanking.
 
 ## 7. Medicion de velocidad
 

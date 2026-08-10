@@ -165,6 +165,24 @@ public sealed class BridgeTests
     }
 
     [Fact]
+    public async Task BemfBlankingUsesGenericConfigCommand()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+
+        CommandResult result = await bridge.SetConfigAsync(ConfigParam.BemfBlankingUs, 125);
+
+        Assert.True(result.Success);
+        Assert.Equal(125, transport.ConfigValues[ConfigParam.BemfBlankingUs]);
+        int requestIndex = transport.Requests.FindIndex(
+            request => request.Opcode == CommOpcode.SetConfig &&
+                       request.Parameter == (byte)ConfigParam.BemfBlankingUs);
+        Assert.True(requestIndex >= 0);
+        Assert.Equal([0x7D, 0x00], transport.RequestPayloads[requestIndex]);
+    }
+
+    [Fact]
     public async Task GuiSetpointUsesActiveFirmwareSpeedLimits()
     {
         FakeEscTransport transport = new();

@@ -172,8 +172,8 @@ La persistencia en flash no viene del JSON. La UI muestra el boton guardar solo 
 - `BridgeSnapshot.SpeedTelemetry` trae estadisticas agregadas.
 - Los canales disponibles son velocidad, `IU`, `IV` y periodo/calidad BEMF. Las corrientes incluyen cuentas ADC, flags de validez y sector de conmutacion.
 - `BridgeSnapshot.StartupConfiguration` y `BridgeSnapshot.SineDrive` exponen configuracion y readback del nuevo modo.
-- `Bridge.SpeedSamples` expone las muestras de `speed`.
-- `SpeedChart.razor` dibuja SVG manual.
+- `Bridge.SpeedSamples` expone las muestras de `speed`; `Bridge.CurrentUSamples` y `Bridge.CurrentVSamples` exponen `current_u`/`current_v`.
+- `SpeedChart.razor` dibuja SVG manual (velocidad) y `CurrentChart.razor` dibuja IU e IV simultaneamente en el panel "Adquisicion de corrientes". Ambos reutilizan `js/speed-chart.js` para los cursores.
 
 Suposiciones actuales del chart:
 

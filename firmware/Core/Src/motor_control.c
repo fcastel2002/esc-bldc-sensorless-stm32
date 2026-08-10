@@ -54,6 +54,10 @@ volatile ControlRuntimeMode control_runtime_mode = CONTROL_RUNTIME_NORMAL;
 
 static volatile uint32_t last_zc_timestamp = 0;
 static volatile uint16_t max_limit_pwm;
+static volatile uint16_t zc_blanking_start_count = 0U;
+static volatile uint16_t zc_blanking_ticks = 0U;
+static volatile uint8_t zc_blanking_armed = 0U;
+static volatile uint32_t zc_blanking_start_tick_ms = 0U;
 // Funciones
 
 // VARIABLES PARA CONTROL PI DE VELOCIDAD
@@ -137,6 +141,13 @@ void motor_control_reset_runtime(void)
   motor_stalled = false;
   consistent_zero_crossing = 0;
   last_zc_timestamp = 0;
+  zc_blanking_start_count = 0U;
+  zc_blanking_armed = 0U;
+  zc_blanking_start_tick_ms = 0U;
+  uint32_t tim2_counter_hz = HAL_RCC_GetHCLKFreq() / (TIM2->PSC + 1U);
+  uint32_t blanking_ticks =
+      ((uint32_t)get_bemf_blanking_us() * tim2_counter_hz + 999999U) / 1000000U;
+  zc_blanking_ticks = blanking_ticks > UINT16_MAX ? UINT16_MAX : (uint16_t)blanking_ticks;
   rpm_pi_reset(&rpm_controller);
   speed_sensor_reset();
   hil_unlock(primask);
@@ -165,47 +176,66 @@ static inline bool state_allows_speed_update(void){
   return (app_state == CLOSEDLOOP);
 }
 
+static bool zc_capture_is_blanked(uint16_t capture_timestamp)
+{
+  if (zc_blanking_armed == 0U || zc_blanking_ticks == 0U) return false;
+  uint16_t current_count = (uint16_t)__HAL_TIM_GET_COUNTER(&htim2);
+  uint16_t current_elapsed = (uint16_t)(current_count - zc_blanking_start_count);
+  uint32_t elapsed_ms = HAL_GetTick() - zc_blanking_start_tick_ms;
+  if (current_elapsed < zc_blanking_ticks && elapsed_ms <= 1U) return true;
+
+  zc_blanking_armed = 0U;
+  if (elapsed_ms > 1U) return false;
+  return (uint16_t)(capture_timestamp - zc_blanking_start_count) < zc_blanking_ticks;
+}
+
+void motor_control_arm_zc_blanking(void)
+{
+  zc_blanking_start_count = (uint16_t)__HAL_TIM_GET_COUNTER(&htim2);
+  zc_blanking_start_tick_ms = HAL_GetTick();
+  zc_blanking_armed = zc_blanking_ticks != 0U ? 1U : 0U;
+}
+
 static void commutate(bool update_timestamp){
   if(!state_allows_commutation()) return;
   if(update_timestamp) last_zc_timestamp = HAL_GetTick();
   bldc_commutate();
+  motor_control_arm_zc_blanking();
 }
-void zero_crossing_handler(uint8_t fase)
+void zero_crossing_handler(uint8_t phase, uint16_t capture_timestamp)
 {
-  static uint8_t speed_calc_counter = 0;
   if (hil_runtime_mode_selected()) {
     return;
   }
+  if (state_allows_commutation() && zc_capture_is_blanked(capture_timestamp)) return;
 
-  switch (fase) {
+  switch (phase) {
   case 1: // Fase W
   
     commutate(true);
 
     // Procesar medición de velocidad para fase W
     if (state_allows_speed_measurement()) {
-      speed_sensor_handle_W_measurement();
+      speed_sensor_handle_W_measurement(capture_timestamp);
     }
     if(state_allows_speed_update()) speed_sensor_handle_consensus();
     break;
 
-  case 2: // Fase V
-    commutate(false);
-
-    // Procesar medición de velocidad para fase V
-    if (state_allows_speed_measurement()) {
-      uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_2);
-      speed_sensor_process_phase_measurement(1, current_timestamp); // Fase V = índice 1
-    }
-    break;
-
-  case 3: // Fase U
+  case 2: // Fase U
     commutate(false);
 
     // Procesar medición de velocidad para fase U
     if (state_allows_speed_measurement()) {
-      uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_3);
-      speed_sensor_process_phase_measurement(2, current_timestamp); // Fase U = índice 2
+      speed_sensor_process_phase_measurement(2, capture_timestamp); // Fase U = índice 2
+    }
+    break;
+
+  case 3: // Fase V
+    commutate(false);
+
+    // Procesar medición de velocidad para fase V
+    if (state_allows_speed_measurement()) {
+      speed_sensor_process_phase_measurement(1, capture_timestamp); // Fase V = índice 1
     }
     break;
   }

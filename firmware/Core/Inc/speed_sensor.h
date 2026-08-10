@@ -11,7 +11,7 @@
 
 //sensado de velocidad
 #define SPEED_TOLERANCE_PCT 25
-#define ZCP_BUFFER_SIZE 4
+#define ZCP_BUFFER_SIZE 2
 #define PHASE_COUNT 3
 #define SPEED_CONSENSUS_THRESHOLD 15 // % de tolerancia entre fases
 #include <stdint.h>
@@ -40,7 +40,7 @@ extern uint16_t speed_sensor_get_speed_period(void);
 extern uint8_t speed_sensor_get_bemf_quality_flags(void);
 extern bool speed_sensor_is_ready(void);
 extern void speed_sensor_reset(void);
-extern void speed_sensor_handle_W_measurement(void);
+extern void speed_sensor_handle_W_measurement(uint16_t current_timestamp);
 extern void speed_sensor_handle_consensus(void);
 extern uint16_t speed_sensor_get_speed_range(void);
 extern void speed_sensor_process_phase_measurement(uint8_t phase_idx, uint16_t current_timestamp);

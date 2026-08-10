@@ -307,9 +307,8 @@ uint16_t filtro_media_movil_zc(uint16_t measurement)
   return (uint16_t)new_speed;
 }
 
-void speed_sensor_handle_W_measurement(void)
+void speed_sensor_handle_W_measurement(uint16_t current_timestamp)
 {
-    uint16_t current_timestamp = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
     speed_sensor_process_phase_measurement(0, current_timestamp); // Fase W = índice 0
 
     if (last_W_timestamp != 0) {

@@ -35,6 +35,19 @@
     "defaultValue": 2
   },
   {
+    "id": "bemf_blanking_us",
+    "label": "Blanking BEMF",
+    "kind": "number",
+    "command": "set_config",
+    "param": "BemfBlankingUs",
+    "min": 0,
+    "max": 200,
+    "step": 5,
+    "unit": "us",
+    "defaultValue": 0,
+    "requiresIdle": true
+  },
+  {
     "id": "kp",
     "label": "KP",
     "kind": "number",
