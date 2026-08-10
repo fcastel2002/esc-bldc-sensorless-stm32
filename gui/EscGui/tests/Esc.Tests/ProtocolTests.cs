@@ -183,6 +183,17 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public void BemfBlankingUsesAssignedParameterAndUInt16Microseconds()
+    {
+        byte[] payload = EscProtocol.ConfigPayload(ConfigParam.BemfBlankingUs, 0x1234);
+
+        Assert.Equal(0x12, (byte)ConfigParam.BemfBlankingUs);
+        Assert.Equal([0x34, 0x12], payload);
+        Assert.Equal((ushort)0x1234, Assert.IsType<ushort>(
+            EscProtocol.DecodeConfigValue(ConfigParam.BemfBlankingUs, payload)));
+    }
+
+    [Fact]
     public void DecodeValidationReferenceReadsStructuralControllerValues()
     {
         byte[] payload = new byte[20];

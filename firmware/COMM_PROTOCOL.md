@@ -140,6 +140,7 @@ than infer support from payload length alone.
 | `0x0F` | `STARTUP_INITIAL_FREQUENCY` | `uint32` electrical mHz | yes, `2000..10000` |
 | `0x10` | `STARTUP_FINAL_FREQUENCY` | `uint32` electrical mHz | yes, `2000..10000` |
 | `0x11` | `STARTUP_DURATION` | `uint32 ms` | yes, `500..10000` |
+| `0x12` | `BEMF_BLANKING_US` | `uint16 us` | yes, `0..200`; `0` disables blanking |
 | `0xFF` | `ALL` | reset/log only | yes for `RESET_CONFIG`, `LOG_START`, `LOG_STOP` |
 
 For gains, value `100` means `1.00`. Algorithm 2 computes RPM error and a
@@ -147,9 +148,10 @@ canonical PWM output referenced to ARR=2000 using Q16.16 state and standard
 trapezoidal integration. The canonical output is scaled once to active ARR.
 `SET_CONFIG` and `RESET_CONFIG` update active RAM and mark pending changes but
 do not write flash. A v1 flash configuration preserves non-gain fields and
-resets only gains to v2 defaults (`KP=0.28`, `KI=1.00`, `KD=0`). V1 and V2
-flash blocks are validated with their original size and CRC, migrated to V3,
-and receive startup defaults of `20% -> 100%`, `2.09 Hz -> 9.28 Hz`, and `3 s`.
+resets only gains to v2 defaults (`KP=0.28`, `KI=1.00`, `KD=0`). V1, V2, and
+V3 flash blocks are validated with their original size and CRC and migrated to
+V4. V1/V2 receive startup defaults of `20% -> 100%`, `2.09 Hz -> 9.28 Hz`, and
+`3 s`; every legacy version receives the compatible blanking default of `0 us`.
 
 When `app_state == CLOSEDLOOP`, changes to `PWM_FREQ`, `KP_RPM`, `KI_RPM`, and
 zero `KD_RPM` apply immediately. KD remains blocked until a fresh-sample RPM
@@ -160,6 +162,17 @@ The five startup parameters are runtime-only until `SAVE_CONFIG` is sent. They
 may be set, reset, or saved only in `IDLE` and are consumed by the next `RUN`.
 The startup generator interpolates amplitude and electrical frequency linearly
 over the configured duration before handing off to six-step operation.
+
+`BEMF_BLANKING_US` follows the same explicit-save and `IDLE`-only update rule.
+At the next `RUN`, firmware converts microseconds to TIM2 ticks by rounding up;
+TIM2 runs at 180 kHz, so the effective resolution is about `5.56 us`. After the
+SPWM handoff and every accepted six-step commutation, input captures inside the
+configured interval are ignored. Rejected captures do not commutate, refresh
+stall timing, or update speed-consensus buffers. PWM operation is unchanged.
+`RESET_CONFIG ALL` and `SAVE_CONFIG ALL` are also restricted to `IDLE` because
+the full configuration contains parameters that cannot change while running.
+All forms of `SAVE_CONFIG` require `IDLE` because a named save still writes the
+entire active configuration block.
 
 ## Continuous three-phase sine drive
 

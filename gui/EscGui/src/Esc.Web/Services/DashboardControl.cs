@@ -12,4 +12,5 @@ public sealed record DashboardControl
     public double Step { get; init; } = 1;
     public string Unit { get; init; } = string.Empty;
     public double DefaultValue { get; init; }
+    public bool RequiresIdle { get; init; }
 }

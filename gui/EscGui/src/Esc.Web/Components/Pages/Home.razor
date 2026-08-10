@@ -137,7 +137,7 @@
                                 <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">Aplicar</button>
                                 @if (CanPersistControl(control))
                                 {
-                                    <button class="icon-button save-button" @onclick="() => SaveControlAsync(control)" disabled="@ControlDisabled(control)" title="Guardar en flash" aria-label="Guardar @control.Label en flash">
+                                    <button class="icon-button save-button" @onclick="() => SaveControlAsync(control)" disabled="@SaveControlDisabled(control)" title="Guardar en flash" aria-label="Guardar @control.Label en flash">
                                         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                                             <path d="M5 3h12l2 2v16H5V3zm2 2v5h9V5H7zm1 11v3h8v-3H8zm8-11v4h1V6l-1-1z" />
                                         </svg>
@@ -157,7 +157,7 @@
                                 <button @onclick="() => ApplyControlAsync(control)" disabled="@ControlDisabled(control)">Aplicar</button>
                                 @if (CanPersistControl(control))
                                 {
-                                    <button class="icon-button save-button" @onclick="() => SaveControlAsync(control)" disabled="@ControlDisabled(control)" title="Guardar en flash" aria-label="Guardar @control.Label en flash">
+                                    <button class="icon-button save-button" @onclick="() => SaveControlAsync(control)" disabled="@SaveControlDisabled(control)" title="Guardar en flash" aria-label="Guardar @control.Label en flash">
                                         <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                                             <path d="M5 3h12l2 2v16H5V3zm2 2v5h9V5H7zm1 11v3h8v-3H8zm8-11v4h1V6l-1-1z" />
                                         </svg>
@@ -293,6 +293,23 @@
         </div>
     </section>
 
+    <section class="panel current-panel collapsible-panel @(IsPanelCollapsed(PanelCurrents) ? "is-collapsed" : null)">
+        <div class="panel-title">
+            <h2>Adquisicion de corrientes</h2>
+            <div class="panel-heading-actions">
+                <span>IU @Snapshot.CurrentUTelemetry.SampleCount / IV @Snapshot.CurrentVTelemetry.SampleCount muestras</span>
+                <button type="button" class="panel-toggle" aria-expanded="@(!IsPanelCollapsed(PanelCurrents))" aria-controls="current-acquisition-body" aria-label='@PanelToggleLabel(PanelCurrents, "Adquisicion de corrientes")' @onclick="() => TogglePanelAsync(PanelCurrents)">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+                </button>
+            </div>
+        </div>
+        <div id="current-acquisition-body" class="panel-body" hidden="@IsPanelCollapsed(PanelCurrents)">
+            <CurrentChart SamplesU="_currentUSamples"
+                          SamplesV="_currentVSamples"
+                          ClearRequested="ClearCurrentTelemetry" />
+        </div>
+    </section>
+
 </main>
 
 @code {
@@ -303,12 +320,15 @@
     private const string PanelParameters = "parameter-adjustment";
     private const string PanelSineDrive = "sine-drive";
     private const string PanelTelemetry = "speed-acquisition";
+    private const string PanelCurrents = "current-acquisition";
     private static readonly string[] KnownPanels =
-        [PanelStatus, PanelPower, PanelParameters, PanelSineDrive, PanelTelemetry];
+        [PanelStatus, PanelPower, PanelParameters, PanelSineDrive, PanelTelemetry, PanelCurrents];
 
     private BridgeSnapshot Snapshot { get; set; } = default!;
     private IReadOnlyList<DashboardControl> _controls = Array.Empty<DashboardControl>();
     private IReadOnlyList<TelemetrySample> _speedSamples = Array.Empty<TelemetrySample>();
+    private IReadOnlyList<TelemetrySample> _currentUSamples = Array.Empty<TelemetrySample>();
+    private IReadOnlyList<TelemetrySample> _currentVSamples = Array.Empty<TelemetrySample>();
     private readonly Dictionary<string, double> _controlValues = new(StringComparer.OrdinalIgnoreCase);
     private string? _selectedDevicePath;
     private ushort _logRateMs = 500;
@@ -437,6 +457,8 @@
             Snapshot = Bridge.Snapshot;
             SynchronizeSineDraftFromSnapshot();
             _speedSamples = Bridge.SpeedSamples;
+            _currentUSamples = Bridge.CurrentUSamples;
+            _currentVSamples = Bridge.CurrentVSamples;
             PickDefaultDevice();
             StateHasChanged();
         });
@@ -585,6 +607,16 @@
         Snapshot = Bridge.Snapshot;
         _speedSamples = Bridge.SpeedSamples;
         _lastCommandResult = "Grafica de velocidad limpiada; la adquisicion continua activa.";
+    }
+
+    private void ClearCurrentTelemetry()
+    {
+        Bridge.ClearTelemetry(LogParam.CurrentU);
+        Bridge.ClearTelemetry(LogParam.CurrentV);
+        Snapshot = Bridge.Snapshot;
+        _currentUSamples = Bridge.CurrentUSamples;
+        _currentVSamples = Bridge.CurrentVSamples;
+        _lastCommandResult = "Grafica de corrientes limpiada; la adquisicion continua activa.";
     }
 
     private async Task ApplyControlAsync(DashboardControl control) => await BusyExecAsync(async () =>
@@ -922,6 +954,11 @@
             return true;
         }
 
+        if (control.RequiresIdle && Snapshot.Status?.AppState != 0)
+        {
+            return true;
+        }
+
         if (IsSpeedSetpoint(control) && Snapshot.ActiveSpeedLimits is { } limits && limits.MinRpm > limits.MaxRpm)
         {
             return true;
@@ -934,6 +971,9 @@
     {
         return control.Command is "set_config" or "reset_config";
     }
+
+    private bool SaveControlDisabled(DashboardControl control) =>
+        ControlDisabled(control) || Snapshot.Status?.AppState != 0;
 
     private static bool IsSpeedSetpoint(DashboardControl control) => control.Command == "set_speed_rpm";
 

@@ -241,13 +241,20 @@ void update_pwm_startup_foc(void)
   if (progress_permille < 1000U) return;
 
   HAL_TIM_Base_Stop_IT(&htim4);
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
   bldc_set_pwm((uint16_t)(max_pwm * 0.45f)); // 45% duty cycle inicial
   bldc_disable_power_stage();
   PWM_STOP();
   PWM_INIT();
+  __HAL_TIM_CLEAR_FLAG(&htim2,
+                       TIM_FLAG_CC1 | TIM_FLAG_CC2 | TIM_FLAG_CC3 |
+                           TIM_FLAG_CC1OF | TIM_FLAG_CC2OF | TIM_FLAG_CC3OF);
+  motor_control_arm_zc_blanking();
   floating_U = true;
   floating_V = true;
   floating_W = true;
   app_state = RUNNING;
   phase_counter = 0U;
+  if (primask == 0U) __enable_irq();
 }

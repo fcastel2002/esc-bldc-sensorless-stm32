@@ -212,6 +212,16 @@ static bool is_startup_param(uint8_t param)
          param <= COMM_PARAM_STARTUP_DURATION;
 }
 
+static bool is_idle_only_param(uint8_t param)
+{
+  return is_startup_param(param) || param == COMM_PARAM_BEMF_BLANKING_US;
+}
+
+static bool config_write_requires_idle(uint8_t param)
+{
+  return is_idle_only_param(param) || param == COMM_PARAM_ALL;
+}
+
 __attribute__((optimize("Oz"))) static uint16_t
 serialize_hil_outputs(uint8_t* payload_out)
 {
@@ -237,7 +247,7 @@ serialize_hil_outputs(uint8_t* payload_out)
 
 __attribute__((optimize("Oz"))) static void apply_config_change(uint8_t param)
 {
-  if (is_startup_param(param)) return;
+  if (is_idle_only_param(param)) return;
 
   if (app_state == CLOSEDLOOP) {
     if (param == COMM_PARAM_KP_RPM || param == COMM_PARAM_KI_RPM || param == COMM_PARAM_KD_RPM) {
@@ -326,6 +336,10 @@ static uint8_t get_config(uint8_t param, uint8_t* payload, uint16_t* payload_len
     write_u32_le(payload, get_startup_duration());
     *payload_len = 4;
     return COMM_STATUS_OK;
+  case COMM_PARAM_BEMF_BLANKING_US:
+    write_u16_le(payload, get_bemf_blanking_us());
+    *payload_len = 2;
+    return COMM_STATUS_OK;
   case COMM_PARAM_CURRENT_LIMIT:
   case COMM_PARAM_TEMP_LIMIT:
   case COMM_PARAM_KP:
@@ -339,7 +353,7 @@ static uint8_t get_config(uint8_t param, uint8_t* payload, uint16_t* payload_len
 
 static uint8_t set_config(uint8_t param, const uint8_t* payload, uint16_t payload_len)
 {
-  if (is_startup_param(param) && app_state != IDLE) return COMM_STATUS_INVALID_STATE;
+  if (config_write_requires_idle(param) && app_state != IDLE) return COMM_STATUS_INVALID_STATE;
   ConfigStatus result = CONFIG_UNKNOWN;
 
   switch (param) {
@@ -391,6 +405,10 @@ static uint8_t set_config(uint8_t param, const uint8_t* payload, uint16_t payloa
     if (payload_len != 4U) return COMM_STATUS_BAD_LENGTH;
     result = set_startup_duration(read_u32_le(payload));
     break;
+  case COMM_PARAM_BEMF_BLANKING_US:
+    if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
+    result = set_bemf_blanking_us(read_u16_le(payload));
+    break;
   case COMM_PARAM_CURRENT_LIMIT:
   case COMM_PARAM_TEMP_LIMIT:
   case COMM_PARAM_KP:
@@ -411,7 +429,7 @@ static uint8_t set_config(uint8_t param, const uint8_t* payload, uint16_t payloa
 
 static uint8_t save_config(uint8_t param)
 {
-  if (is_startup_param(param) && app_state != IDLE) return COMM_STATUS_INVALID_STATE;
+  if (app_state != IDLE) return COMM_STATUS_INVALID_STATE;
   switch (param) {
   case COMM_PARAM_PWM_FREQ:
   case COMM_PARAM_POLE_PAIRS:
@@ -425,6 +443,7 @@ static uint8_t save_config(uint8_t param)
   case COMM_PARAM_STARTUP_INITIAL_FREQUENCY:
   case COMM_PARAM_STARTUP_FINAL_FREQUENCY:
   case COMM_PARAM_STARTUP_DURATION:
+  case COMM_PARAM_BEMF_BLANKING_US:
   case COMM_PARAM_ALL:
     return status_from_flash(flash_config_save());
   case COMM_PARAM_CURRENT_LIMIT:
@@ -437,7 +456,7 @@ static uint8_t save_config(uint8_t param)
 
 static uint8_t reset_config(uint8_t param)
 {
-  if (is_startup_param(param) && app_state != IDLE) return COMM_STATUS_INVALID_STATE;
+  if (config_write_requires_idle(param) && app_state != IDLE) return COMM_STATUS_INVALID_STATE;
   switch (param) {
   case COMM_PARAM_ALL:
     set_default_esc_params();
@@ -493,6 +512,10 @@ static uint8_t reset_config(uint8_t param)
     break;
   case COMM_PARAM_STARTUP_DURATION:
     current_esc_params.startup_duration_ms = ESC_DEFAULT_STARTUP_DURATION_MS;
+    flash_config_parameter_changed();
+    break;
+  case COMM_PARAM_BEMF_BLANKING_US:
+    current_esc_params.bemf_blanking_us = ESC_DEFAULT_BEMF_BLANKING_US;
     flash_config_parameter_changed();
     break;
   case COMM_PARAM_CURRENT_LIMIT:

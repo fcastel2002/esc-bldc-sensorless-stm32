@@ -17,17 +17,57 @@ public sealed class HomeControlTests
     }
 
     [Fact]
+    public void BemfBlankingControlRequiresConnectedIdleStateAndUsesGenericConfig()
+    {
+        string homeMarkup = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Home.razor"));
+        string controlsJson = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "controls.json"));
+        using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(controlsJson);
+        System.Text.Json.JsonElement control = document.RootElement.EnumerateArray().Single(
+            item => item.TryGetProperty("param", out System.Text.Json.JsonElement parameter) &&
+                    parameter.GetString() == "BemfBlankingUs");
+
+        Assert.Equal("Blanking BEMF", control.GetProperty("label").GetString());
+        Assert.Equal("number", control.GetProperty("kind").GetString());
+        Assert.Equal("set_config", control.GetProperty("command").GetString());
+        Assert.Equal(0, control.GetProperty("min").GetDouble());
+        Assert.Equal(200, control.GetProperty("max").GetDouble());
+        Assert.Equal(5, control.GetProperty("step").GetDouble());
+        Assert.Equal("us", control.GetProperty("unit").GetString());
+        Assert.Equal(0, control.GetProperty("defaultValue").GetDouble());
+        Assert.True(control.GetProperty("requiresIdle").GetBoolean());
+        Assert.Contains(
+            "if (control.RequiresIdle && Snapshot.Status?.AppState != 0)",
+            homeMarkup,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "control.Command is not (\"log_speed_start\" or \"log_speed_stop\") && Snapshot.Mode != ControlMode.GuiControl",
+            homeMarkup,
+            StringComparison.Ordinal);
+        Assert.Contains("Bridge.SetConfigAsync(parameter, value)", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains("disabled=\"@SaveControlDisabled(control)\"", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains(
+            "ControlDisabled(control) || Snapshot.Status?.AppState != 0",
+            homeMarkup,
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void DashboardPanelsAreAccessiblePersistentAndKeepChartMounted()
     {
         string homeMarkup = File.ReadAllText(
             Path.Combine(AppContext.BaseDirectory, "TestAssets", "Home.razor"));
 
-        Assert.Equal(5, Count(homeMarkup, "class=\"panel-toggle\""));
+        Assert.Equal(6, Count(homeMarkup, "class=\"panel-toggle\""));
         Assert.Contains("aria-expanded=", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("aria-controls=", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("hidden=\"@IsPanelCollapsed(PanelTelemetry)\"", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("<SpeedChart", homeMarkup, StringComparison.Ordinal);
         Assert.DoesNotContain("@if (!IsPanelCollapsed(PanelTelemetry))", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains("hidden=\"@IsPanelCollapsed(PanelCurrents)\"", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains("<CurrentChart", homeMarkup, StringComparison.Ordinal);
+        Assert.DoesNotContain("@if (!IsPanelCollapsed(PanelCurrents))", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("localStorage.setItem", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("esc.dashboard.panels.v1", homeMarkup, StringComparison.Ordinal);
     }

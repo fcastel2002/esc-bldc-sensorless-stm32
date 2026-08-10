@@ -111,6 +111,23 @@ Esta ventana puede ser menor que la suma de:
 
 Las muestras inválidas deben detectarse y descartarse. Para telemetría pueden filtrarse varios ciclos; para un observador rápido puede ser necesario limitar duty, cambiar topología o usar sensores de fase.
 
+## Blanking BEMF postconmutación
+
+El firmware permite configurar `BEMF_BLANKING_US` entre 0 y 200 us. El valor se
+convierte por redondeo hacia arriba a ticks de TIM2, que opera a 180 kHz
+(`5.56 us/tick`). Durante ese intervalo posterior al handoff y a cada
+conmutación six-step se ignoran los flancos de los comparadores BEMF.
+
+El blanking no detiene el PWM ni cambia los estados de potencia. Solo impide que
+el transitorio de conmutación, la recuperación de diodos o la extinción de la
+corriente de la fase saliente provoquen otra conmutación o contaminen la
+medición de velocidad. Un evento descartado tampoco actualiza el watchdog de
+stall.
+
+`0 us` deshabilita el mecanismo. El valor final debe ajustarse con osciloscopio:
+debe superar el transitorio observado, pero terminar con margen antes del cruce
+por cero real a la máxima velocidad eléctrica prevista.
+
 ## Estimar BEMF desde corrientes
 
 El modelo eléctrico es:

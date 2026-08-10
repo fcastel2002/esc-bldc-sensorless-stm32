@@ -15,7 +15,7 @@ static volatile uint16_t pwm_freq_arr      = 0;
 static volatile uint16_t current_limit_adc = 0;
 static volatile uint16_t max_speed_arr     = 0;
 
-static const uint16_t ESC_max_pwm_freq = 24000; // hz
+static const uint16_t ESC_max_pwm_freq = 36000; // hz
 static const uint16_t ESC_min_pwm_freq = 5000;
 static const float    ESC_max_current  = 3;     // amp
 static const uint16_t ESC_max_speed    = 12000; // rpm
@@ -30,16 +30,16 @@ ESCparams        current_esc_params    = {0};
 
 void             set_default_esc_params()
 {
-  current_esc_params.signature     = ESC_PARAMS_SIGNATURE_V3;
-  current_esc_params.pwm_freq_hz   = 18000;
-  current_esc_params.current_limit = 10;
-  current_esc_params.temp_limit    = 70;
+  current_esc_params.signature     = ESC_PARAMS_SIGNATURE_V4;
+  current_esc_params.pwm_freq_hz   = ESC_DEFAULT_PWM_FREQ_HZ;
+  current_esc_params.current_limit = ESC_DEFAULT_CURRENT_LIMIT;
+  current_esc_params.temp_limit    = ESC_DEFAULT_TEMP_LIMIT;
   current_esc_params.speed_kp      = ESC_DEFAULT_KP_RPM;
   current_esc_params.speed_ki      = ESC_DEFAULT_KI_RPM;
   current_esc_params.speed_kd      = ESC_DEFAULT_KD_RPM;
-  current_esc_params.speed_max_rpm = 5400;
-  current_esc_params.speed_min_rpm = 200; // Default minimum speed
-  current_esc_params.pole_pairs    = 2; // Default pole pairs
+  current_esc_params.speed_max_rpm = ESC_DEFAULT_MAX_SPEED_RPM;
+  current_esc_params.speed_min_rpm = ESC_DEFAULT_MIN_SPEED_RPM;
+  current_esc_params.pole_pairs    = ESC_DEFAULT_POLE_PAIRS;
   current_esc_params.startup_initial_amplitude_permille =
       ESC_DEFAULT_STARTUP_INITIAL_AMPLITUDE_PERMILLE;
   current_esc_params.startup_final_amplitude_permille =
@@ -49,6 +49,7 @@ void             set_default_esc_params()
   current_esc_params.startup_final_frequency_millihz =
       ESC_DEFAULT_STARTUP_FINAL_FREQUENCY_MILLIHZ;
   current_esc_params.startup_duration_ms = ESC_DEFAULT_STARTUP_DURATION_MS;
+  current_esc_params.bemf_blanking_us = ESC_DEFAULT_BEMF_BLANKING_US;
 
   current_esc_params.crc32 = compute_crc32(&current_esc_params);
 }
@@ -275,6 +276,14 @@ ConfigStatus set_startup_duration(uint32_t duration_ms)
   return CONFIG_OK;
 }
 
+ConfigStatus set_bemf_blanking_us(uint16_t blanking_us)
+{
+  if (blanking_us > ESC_MAX_BEMF_BLANKING_US) return CONFIG_ERROR_OVERLIMIT;
+  current_esc_params.bemf_blanking_us = blanking_us;
+  flash_config_parameter_changed();
+  return CONFIG_OK;
+}
+
 uint16_t get_startup_initial_amplitude(void)
 {
   return current_esc_params.startup_initial_amplitude_permille;
@@ -298,4 +307,9 @@ uint32_t get_startup_final_frequency(void)
 uint32_t get_startup_duration(void)
 {
   return current_esc_params.startup_duration_ms;
+}
+
+uint16_t get_bemf_blanking_us(void)
+{
+  return current_esc_params.bemf_blanking_us;
 }

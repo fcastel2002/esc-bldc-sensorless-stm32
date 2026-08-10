@@ -35,6 +35,9 @@
     <None Include="..\..\src\Esc.Web\Components\Pages\Home.razor"
           Link="TestAssets\Home.razor"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\Esc.Web\wwwroot\controls.json"
+          Link="TestAssets\controls.json"
+          CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\src\Esc.Web\Components\Pages\Startup.razor"
           Link="TestAssets\Startup.razor"
           CopyToOutputDirectory="PreserveNewest" />

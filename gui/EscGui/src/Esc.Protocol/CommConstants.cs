@@ -109,6 +109,7 @@ public enum ConfigParam : byte
     StartupInitialFrequency = 0x0F,
     StartupFinalFrequency = 0x10,
     StartupDuration = 0x11,
+    BemfBlankingUs = 0x12,
     All = 0xFF,
 }
 

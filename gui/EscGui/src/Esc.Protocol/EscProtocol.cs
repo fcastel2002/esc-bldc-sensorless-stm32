@@ -123,7 +123,8 @@ public static class EscProtocol
         EnsureFinite(value, nameof(value));
         return parameter switch
         {
-            ConfigParam.PwmFreq or ConfigParam.MaxSpeed or ConfigParam.MinSpeed => UInt16Payload((int)value),
+            ConfigParam.PwmFreq or ConfigParam.MaxSpeed or ConfigParam.MinSpeed or ConfigParam.BemfBlankingUs
+                => UInt16Payload((int)value),
             ConfigParam.PolePairs => new[] { checked((byte)value) },
             ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm => Int16CentiPayload(value),
             ConfigParam.StartupInitialAmplitude or ConfigParam.StartupFinalAmplitude
@@ -312,7 +313,8 @@ public static class EscProtocol
         return parameter switch
         {
             ConfigParam.PolePairs when payload.Length >= 1 => payload[0],
-            ConfigParam.PwmFreq or ConfigParam.MaxSpeed or ConfigParam.MinSpeed when payload.Length >= 2
+            ConfigParam.PwmFreq or ConfigParam.MaxSpeed or ConfigParam.MinSpeed or ConfigParam.BemfBlankingUs
+                when payload.Length >= 2
                 => BinaryPrimitives.ReadUInt16LittleEndian(payload[..2]),
             ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm when payload.Length >= 2
                 => BinaryPrimitives.ReadInt16LittleEndian(payload[..2]) / 100.0,
