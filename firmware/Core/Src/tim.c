@@ -329,15 +329,15 @@ void HAL_TIM_Base_MspInit(TIM_HandleTypeDef* tim_baseHandle)
     PA1     ------> TIM2_CH2
     PB10     ------> TIM2_CH3
     */
-    GPIO_InitStruct.Pin = W_Pin|U_Pin;
+    GPIO_InitStruct.Pin = W_Pin|V_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-    GPIO_InitStruct.Pin = V_Pin;
+    GPIO_InitStruct.Pin = U_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
-    HAL_GPIO_Init(V_GPIO_Port, &GPIO_InitStruct);
+    HAL_GPIO_Init(U_GPIO_Port, &GPIO_InitStruct);
 
     __HAL_AFIO_REMAP_TIM2_PARTIAL_2();
 
@@ -460,9 +460,9 @@ void HAL_TIM_Base_MspDeInit(TIM_HandleTypeDef* tim_baseHandle)
     PA1     ------> TIM2_CH2
     PB10     ------> TIM2_CH3
     */
-    HAL_GPIO_DeInit(GPIOA, W_Pin|U_Pin);
+    HAL_GPIO_DeInit(GPIOA, W_Pin|V_Pin);
 
-    HAL_GPIO_DeInit(V_GPIO_Port, V_Pin);
+    HAL_GPIO_DeInit(U_GPIO_Port, U_Pin);
 
     /* TIM2 interrupt Deinit */
     HAL_NVIC_DisableIRQ(TIM2_IRQn);

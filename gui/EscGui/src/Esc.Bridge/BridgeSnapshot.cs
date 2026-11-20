@@ -27,6 +27,8 @@ public sealed record BridgeSnapshot(
     ActiveSpeedLimits? ActiveSpeedLimits,
     StartupConfiguration? StartupConfiguration,
     SineDriveStatus SineDrive,
+    StepTestStatus StepTest,
+    FreewheelStatus Freewheel,
     DateTimeOffset? ValidationReferenceCapturedAt,
     string? ValidationReferenceError);
 
@@ -52,6 +54,19 @@ public sealed record SineDriveStatus(
     SineDriveSettings? Requested,
     SineDriveSettings? Applied,
     DateTimeOffset? LastAppliedAt);
+
+public sealed record StepTestStatus(
+    bool Active,
+    StepTestSettings? Requested,
+    StepTestSettings? Applied,
+    DateTimeOffset? LastAppliedAt);
+
+public sealed record FreewheelStatus(
+    bool Active,
+    ZcDiagReport? Report,
+    ZcChannelMap? ActiveMap,
+    ZcAutoDetectResult? LastAutoDetect,
+    DateTimeOffset? LastUpdatedAt);
 
 public sealed record TelemetryStats(
     int SampleCount,

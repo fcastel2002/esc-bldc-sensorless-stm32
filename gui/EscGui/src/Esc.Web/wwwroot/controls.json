@@ -55,7 +55,7 @@
     "param": "KpRpm",
     "min": 0,
     "max": 10,
-    "step": 0.01,
+    "step": 0.2,
     "unit": "cnt@2000/rpm",
     "defaultValue": 0.28
   },
@@ -67,7 +67,7 @@
     "param": "KiRpm",
     "min": 0,
     "max": 10,
-    "step": 0.01,
+    "step": 0.2,
     "unit": "cnt@2000/(rpm s)",
     "defaultValue": 1.0
   },

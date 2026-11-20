@@ -51,6 +51,18 @@ public static class BridgeEndpointMapper
             await bridge.SetSpeedRpmAsync(request.Rpm, cancellationToken));
         group.MapPost("/sine-drive", async (SineDriveRequest request, EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.SetSineDriveAsync(request.ElectricalFrequencyHz, request.AmplitudePercent, cancellationToken));
+        group.MapPost("/step-test", async (StepTestSettings request, EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.SetStepTestAsync(request, cancellationToken));
+        group.MapPost("/freewheel/start", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.StartFreewheelAsync(cancellationToken));
+        group.MapPost("/freewheel/stop", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.StopFreewheelAsync(cancellationToken));
+        group.MapPost("/zc-diag/auto-detect", async (ZcAutoDetectRequest? request, EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.RunZcAutoDetectAsync(request?.DutyPercent ?? CommConstants.DefaultZcAutoDetectDutyPercent, cancellationToken));
+        group.MapGet("/zc-map", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.GetZcMapAsync(cancellationToken));
+        group.MapPost("/zc-map", async (ZcChannelMap map, EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.SetZcMapAsync(map, cancellationToken));
 
         group.MapGet("/config/{parameter}", async (string parameter, EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.GetConfigAsync(ParseConfigParam(parameter), cancellationToken));
@@ -166,6 +178,7 @@ public static class BridgeEndpointMapper
             "KD" or "KD_RPM" => ConfigParam.KdRpm,
             "MAX_SPEED" => ConfigParam.MaxSpeed,
             "MIN_SPEED" => ConfigParam.MinSpeed,
+            "ZC_MAP" => ConfigParam.ZcMap,
             "ALL" => ConfigParam.All,
             _ => throw new BadHttpRequestException($"Unknown config parameter '{parameter}'.")
         };
@@ -191,6 +204,7 @@ public static class BridgeEndpointMapper
     public sealed record ModeRequest(ControlMode Mode);
     public sealed record SetSpeedRequest(int Rpm);
     public sealed record SineDriveRequest(double ElectricalFrequencyHz, double AmplitudePercent);
+    public sealed record ZcAutoDetectRequest(double? DutyPercent);
     public sealed record SetConfigRequest(double Value);
     public sealed record LogRateRequest(ushort RateMs);
     public sealed record HilInputRequest(

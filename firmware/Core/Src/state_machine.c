@@ -54,6 +54,7 @@ __attribute__((optimize("Oz"))) App_States_t handleState(void)
   }
 
   sine_drive_check_watchdog();
+  step_test_check_watchdog();
 
   if (cmd_received_ack && (app_state == IDLE || app_state == RUNNING || app_state == CLOSEDLOOP)) {
     if (process_speed_command()) {
@@ -98,6 +99,8 @@ __attribute__((optimize("Oz"))) App_States_t handleState(void)
   case FOC_STARTUP:
     break;
   case SINE_DRIVE:
+  case STEP_TEST:
+  case FREEWHEEL:
     break;
   case RUNNING:
     if (consistent_zero_crossing) {

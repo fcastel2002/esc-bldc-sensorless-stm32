@@ -28,7 +28,9 @@ typedef enum {
   STOPPED,
   HARD_ERROR,
   FINISH,
-  SINE_DRIVE
+  SINE_DRIVE,
+  STEP_TEST,
+  FREEWHEEL
 
 } App_States_t;
 

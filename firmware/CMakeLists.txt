@@ -62,6 +62,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/vel_routines.c
     Core/Src/speed_sensor.c
     Core/Src/bldc_driver.c
+    Core/Src/zc_diag.c
     Core/Src/utilities.c
     Core/Src/usb_device.c
     Core/Src/usbd_conf.c

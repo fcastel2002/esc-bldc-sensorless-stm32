@@ -28,6 +28,7 @@ extern bool floating_V;
 
 extern void bldc_init(void);
 extern void bldc_set_pwm(uint16_t new_pwm);
+extern void bldc_apply_step(int8_t step, uint16_t pwm);
 extern void bldc_commutate();
 extern void bldc_stop(void);
 extern void bldc_disable_power_stage(void);

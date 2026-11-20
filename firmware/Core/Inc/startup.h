@@ -34,6 +34,10 @@ extern bool sine_drive_start_or_update(uint32_t frequency_millihz,
 extern void sine_drive_stop(void);
 extern void sine_drive_check_watchdog(void);
 extern bool sine_drive_is_active(void);
+extern bool step_test_apply(uint8_t step, uint16_t duty_permille);
+extern void step_test_stop(void);
+extern void step_test_check_watchdog(void);
+extern bool step_test_is_active(void);
 
 extern uint16_t sin_table_U[SIN_TABLE_SIZE];
 extern uint16_t sin_table_V[SIN_TABLE_SIZE];

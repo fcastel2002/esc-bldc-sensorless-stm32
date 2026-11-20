@@ -30,7 +30,8 @@ ESCparams        current_esc_params    = {0};
 
 void             set_default_esc_params()
 {
-  current_esc_params.signature     = ESC_PARAMS_SIGNATURE_V4;
+  memset(&current_esc_params, 0, sizeof(current_esc_params));
+  current_esc_params.signature     = ESC_PARAMS_SIGNATURE_V5;
   current_esc_params.pwm_freq_hz   = ESC_DEFAULT_PWM_FREQ_HZ;
   current_esc_params.current_limit = ESC_DEFAULT_CURRENT_LIMIT;
   current_esc_params.temp_limit    = ESC_DEFAULT_TEMP_LIMIT;
@@ -50,6 +51,10 @@ void             set_default_esc_params()
       ESC_DEFAULT_STARTUP_FINAL_FREQUENCY_MILLIHZ;
   current_esc_params.startup_duration_ms = ESC_DEFAULT_STARTUP_DURATION_MS;
   current_esc_params.bemf_blanking_us = ESC_DEFAULT_BEMF_BLANKING_US;
+  current_esc_params.zc_channel_u = ESC_DEFAULT_ZC_CHANNEL_U;
+  current_esc_params.zc_channel_v = ESC_DEFAULT_ZC_CHANNEL_V;
+  current_esc_params.zc_channel_w = ESC_DEFAULT_ZC_CHANNEL_W;
+  current_esc_params.zc_reserved = 0U;
 
   current_esc_params.crc32 = compute_crc32(&current_esc_params);
 }
@@ -312,4 +317,74 @@ uint32_t get_startup_duration(void)
 uint16_t get_bemf_blanking_us(void)
 {
   return current_esc_params.bemf_blanking_us;
+}
+
+bool zc_channel_map_is_valid(uint8_t ch_u, uint8_t ch_v, uint8_t ch_w)
+{
+  return ch_u < 3U && ch_v < 3U && ch_w < 3U &&
+         ch_u != ch_v && ch_u != ch_w && ch_v != ch_w;
+}
+
+ConfigStatus set_zc_channel_map(uint8_t ch_u, uint8_t ch_v, uint8_t ch_w)
+{
+  if (!zc_channel_map_is_valid(ch_u, ch_v, ch_w)) {
+    return CONFIG_ERROR_OVERLIMIT;
+  }
+  current_esc_params.zc_channel_u = ch_u;
+  current_esc_params.zc_channel_v = ch_v;
+  current_esc_params.zc_channel_w = ch_w;
+  flash_config_parameter_changed();
+  return CONFIG_OK;
+}
+
+void get_zc_channel_map(uint8_t* ch_u, uint8_t* ch_v, uint8_t* ch_w)
+{
+  uint8_t u = current_esc_params.zc_channel_u;
+  uint8_t v = current_esc_params.zc_channel_v;
+  uint8_t w = current_esc_params.zc_channel_w;
+  if (!zc_channel_map_is_valid(u, v, w)) {
+    u = ESC_DEFAULT_ZC_CHANNEL_U;
+    v = ESC_DEFAULT_ZC_CHANNEL_V;
+    w = ESC_DEFAULT_ZC_CHANNEL_W;
+  }
+  if (ch_u != NULL) *ch_u = u;
+  if (ch_v != NULL) *ch_v = v;
+  if (ch_w != NULL) *ch_w = w;
+}
+
+static uint8_t zc_phase_to_hw_index(uint8_t phase)
+{
+  uint8_t u = ESC_DEFAULT_ZC_CHANNEL_U;
+  uint8_t v = ESC_DEFAULT_ZC_CHANNEL_V;
+  uint8_t w = ESC_DEFAULT_ZC_CHANNEL_W;
+  get_zc_channel_map(&u, &v, &w);
+  switch (phase) {
+  case PHASE_U:
+    return u;
+  case PHASE_V:
+    return v;
+  case PHASE_W:
+  default:
+    return w;
+  }
+}
+
+uint32_t zc_phase_to_tim_channel(uint8_t phase)
+{
+  static const uint32_t tim_channels[3] = {
+      TIM_CHANNEL_1,
+      TIM_CHANNEL_2,
+      TIM_CHANNEL_3,
+  };
+  return tim_channels[zc_phase_to_hw_index(phase)];
+}
+
+uint32_t zc_phase_to_active_channel(uint8_t phase)
+{
+  static const uint32_t active_channels[3] = {
+      HAL_TIM_ACTIVE_CHANNEL_1,
+      HAL_TIM_ACTIVE_CHANNEL_2,
+      HAL_TIM_ACTIVE_CHANNEL_3,
+  };
+  return active_channels[zc_phase_to_hw_index(phase)];
 }

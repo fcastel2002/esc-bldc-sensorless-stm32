@@ -91,10 +91,11 @@ to send `HIL_STOP` and restore the captured gains, pole pairs, setpoint, and
 bridge mode. PWM frequency and structural timing are never modified by the
 validation. A restoration failure is persisted with the run.
 
-## GUI and API
+## API
 
-- `/runs`: import a MAT, set tolerance/deadlines, list, edit metadata, and delete past runs.
-- `/runs/{id}`: execute, inspect, or delete a persisted run.
+The `/runs` and `/runs/{id}` GUI pages were removed from the dashboard; runs are
+managed through the HTTP API, which is unchanged.
+
 - `GET /api/validation/runs`
 - `GET /api/validation/runs/{id}`
 - `POST /api/validation/import`

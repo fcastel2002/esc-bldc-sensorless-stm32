@@ -1,5 +1,6 @@
 #include "bldc_driver.h"
 #include "current_sense.h"
+#include "hard_config.h"
 
 // MANEJO DE CONMUTACION
 // Variables
@@ -47,7 +48,7 @@ static void commutate(int8_t step)
 
   case POS_UV:
     PWM_STOP();
-    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, TIM_CHANNEL_1, TIM_INPUTCHANNELPOLARITY_FALLING);
+    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, zc_phase_to_tim_channel(PHASE_W), TIM_INPUTCHANNELPOLARITY_FALLING);
     floating_W = true;
     floating_V = false;
     floating_U = false;
@@ -60,7 +61,7 @@ static void commutate(int8_t step)
     break;
   case POS_UW:
     PWM_STOP();
-    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, TIM_CHANNEL_3, TIM_INPUTCHANNELPOLARITY_RISING);
+    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, zc_phase_to_tim_channel(PHASE_V), TIM_INPUTCHANNELPOLARITY_RISING);
     floating_W = false;
     floating_U = false;
     floating_V = true;
@@ -72,7 +73,7 @@ static void commutate(int8_t step)
     break;
   case POS_VW:
     PWM_STOP();
-    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, TIM_CHANNEL_2, TIM_INPUTCHANNELPOLARITY_FALLING);
+    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, zc_phase_to_tim_channel(PHASE_U), TIM_INPUTCHANNELPOLARITY_FALLING);
 
     floating_W = false;
     floating_V = false;
@@ -87,7 +88,7 @@ static void commutate(int8_t step)
     break;
   case POS_VU:
     PWM_STOP();
-    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, TIM_CHANNEL_1, TIM_INPUTCHANNELPOLARITY_RISING);
+    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, zc_phase_to_tim_channel(PHASE_W), TIM_INPUTCHANNELPOLARITY_RISING);
 
     floating_W = true;
     floating_V = false;
@@ -100,7 +101,7 @@ static void commutate(int8_t step)
     break;
   case POS_WU:
     PWM_STOP();
-    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, TIM_CHANNEL_3, TIM_INPUTCHANNELPOLARITY_FALLING);
+    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, zc_phase_to_tim_channel(PHASE_V), TIM_INPUTCHANNELPOLARITY_FALLING);
 
     floating_W = false;
     floating_U = false;
@@ -113,7 +114,7 @@ static void commutate(int8_t step)
     break;
   case POS_WV:
     PWM_STOP();
-    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, TIM_CHANNEL_2, TIM_INPUTCHANNELPOLARITY_RISING);
+    __HAL_TIM_SET_CAPTUREPOLARITY(&htim2, zc_phase_to_tim_channel(PHASE_U), TIM_INPUTCHANNELPOLARITY_RISING);
 
     floating_W = false;
     floating_V = false;
@@ -158,6 +159,23 @@ void bldc_commutate() {
 void bldc_set_pwm(uint16_t new_pwm) {
   g_pwm_val = (uint16_t)new_pwm;
   current_sense_update_pwm_window(g_pwm_val);
+}
+
+/**
+ * @brief Aplica un paso fijo de conmutacion (POS_UV..POS_WV) con el PWM indicado.
+ *
+ * Usado por la prueba de pasos de depuracion: reutiliza la misma secuencia de
+ * EN/compare que la conmutacion six-step, sin avanzar el paso.
+ */
+void bldc_apply_step(int8_t step, uint16_t pwm)
+{
+  if (step < 0 || step >= NUM_POS) return;
+  uint32_t primask = __get_PRIMASK();
+  __disable_irq();
+  bldc_set_pwm(pwm);
+  commutation_step = step;
+  commutate(step);
+  if (primask == 0U) __enable_irq();
 }
 
 uint16_t bldc_get_pwm(void) {

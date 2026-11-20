@@ -14,6 +14,7 @@
 #define ESC_PARAMS_SIGNATURE_V2 0x32504345U
 #define ESC_PARAMS_SIGNATURE_V3 0x33504345U
 #define ESC_PARAMS_SIGNATURE_V4 0x34504345U
+#define ESC_PARAMS_SIGNATURE_V5 0x35504345U
 #define ESC_DEFAULT_KP_RPM 1.00f
 #define ESC_DEFAULT_KI_RPM 1.00f
 #define ESC_DEFAULT_KD_RPM 0.00f
@@ -30,10 +31,17 @@
 #define ESC_DEFAULT_STARTUP_DURATION_MS 3000U
 #define ESC_DEFAULT_BEMF_BLANKING_US 0U
 #define ESC_MAX_BEMF_BLANKING_US 200U
+#define ESC_DEFAULT_ZC_CHANNEL_U 2U
+#define ESC_DEFAULT_ZC_CHANNEL_V 1U
+#define ESC_DEFAULT_ZC_CHANNEL_W 0U
+#define ESC_MIN_ZC_AUTO_DETECT_DUTY_PERMILLE 50U
+#define ESC_MAX_ZC_AUTO_DETECT_DUTY_PERMILLE 250U
+#define ESC_DEFAULT_ZC_AUTO_DETECT_DUTY_PERMILLE 150U
 
 #define ESC_MIN_SINE_FREQUENCY_MILLIHZ 2000U
 #define ESC_MAX_SINE_FREQUENCY_MILLIHZ 10000U
 #define ESC_MAX_SINE_AMPLITUDE_PERMILLE 1000U
+#define ESC_MAX_STEP_TEST_DUTY_PERMILLE 300U
 #define ESC_MIN_STARTUP_DURATION_MS 500U
 #define ESC_MAX_STARTUP_DURATION_MS 10000U
 /*
@@ -83,6 +91,10 @@ typedef struct {
   uint32_t startup_final_frequency_millihz;
   uint32_t startup_duration_ms;
   uint16_t bemf_blanking_us;
+  uint8_t  zc_channel_u;
+  uint8_t  zc_channel_v;
+  uint8_t  zc_channel_w;
+  uint8_t  zc_reserved;
 } ESCparams;
 
 #pragma pack(pop)
@@ -118,6 +130,7 @@ extern ConfigStatus set_startup_initial_frequency(uint32_t frequency_millihz);
 extern ConfigStatus set_startup_final_frequency(uint32_t frequency_millihz);
 extern ConfigStatus set_startup_duration(uint32_t duration_ms);
 extern ConfigStatus set_bemf_blanking_us(uint16_t blanking_us);
+extern ConfigStatus set_zc_channel_map(uint8_t ch_u, uint8_t ch_v, uint8_t ch_w);
 
 extern uint16_t get_max_speed();
 extern uint16_t get_min_speed();
@@ -133,6 +146,10 @@ extern uint32_t get_startup_initial_frequency(void);
 extern uint32_t get_startup_final_frequency(void);
 extern uint32_t get_startup_duration(void);
 extern uint16_t get_bemf_blanking_us(void);
+extern bool     zc_channel_map_is_valid(uint8_t ch_u, uint8_t ch_v, uint8_t ch_w);
+extern void     get_zc_channel_map(uint8_t* ch_u, uint8_t* ch_v, uint8_t* ch_w);
+extern uint32_t zc_phase_to_tim_channel(uint8_t phase);
+extern uint32_t zc_phase_to_active_channel(uint8_t phase);
 uint32_t        compute_crc32(ESCparams* params);
 
 #endif /* INC_HARD_CONFIG_H_ */

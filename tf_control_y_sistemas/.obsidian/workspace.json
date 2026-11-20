@@ -11,14 +11,12 @@
             "id": "30e6adba9e0644f1",
             "type": "leaf",
             "state": {
-              "type": "markdown",
+              "type": "image",
               "state": {
-                "file": "Plan/04 - Ruta incremental recomendada.md",
-                "mode": "source",
-                "source": false
+                "file": "Camino recorrido/DSOBMP0003.bmp"
               },
-              "icon": "lucide-file",
-              "title": "04 - Ruta incremental recomendada"
+              "icon": "lucide-image",
+              "title": "DSOBMP0003"
             }
           }
         ]
@@ -188,11 +186,23 @@
       "bases:Crear nueva base": false
     }
   },
-  "active": "30e6adba9e0644f1",
+  "active": "2069db0e1aafed23",
   "lastOpenFiles": [
+    "Camino recorrido/Walkthrough del ESC Bridge en C.md",
+    "Camino recorrido/Obtención de parametros del motor.md",
+    "Camino recorrido/DSOBMP0003.bmp",
+    "Alternativas/02 - Alternativas comparadas.md",
+    "Imagenes Osciloscopio/DSOBMP0011.bmp",
+    "Camino recorrido",
+    "Imagenes Osciloscopio/DSOBMP0010.bmp",
+    "Imagenes Osciloscopio/DSOBMP0008.bmp",
+    "Plan/04 - Ruta incremental recomendada.md",
+    "Plan/05 - Plan experimental.md",
+    "BaseConocimiento/dsp.md",
+    "BaseConocimiento/l298.pdf",
+    "BaseConocimiento/NOTES.md",
     "Sensado/03 - Sensado de corriente y sincronización del ADC.md",
     "00 - Inicio.md",
-    "Alternativas/02 - Alternativas comparadas.md",
     "01 - Problema y criterio de suficiencia.md"
   ]
 }

@@ -41,6 +41,12 @@
     <None Include="..\..\src\Esc.Web\Components\Pages\Startup.razor"
           Link="TestAssets\Startup.razor"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\Esc.Web\Components\Pages\Debug.razor"
+          Link="TestAssets\Debug.razor"
+          CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\Esc.Web\Components\Layout\MainLayout.razor"
+          Link="TestAssets\MainLayout.razor"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

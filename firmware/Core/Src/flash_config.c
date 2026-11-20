@@ -60,6 +60,36 @@ typedef struct {
   uint32_t    crc32;
 } FlashStorageBlockV3;
 
+#pragma pack(push, 4)
+typedef struct {
+  uint32_t signature;
+  uint16_t pwm_freq_hz;
+  uint8_t  brake_type;
+  float    current_limit;
+  uint16_t temp_limit;
+  float    speed_kp;
+  float    speed_ki;
+  float    speed_kd;
+  uint16_t speed_max_rpm;
+  uint16_t speed_min_rpm;
+  uint32_t crc32;
+  uint8_t  pole_pairs;
+  uint16_t startup_initial_amplitude_permille;
+  uint16_t startup_final_amplitude_permille;
+  uint32_t startup_initial_frequency_millihz;
+  uint32_t startup_final_frequency_millihz;
+  uint32_t startup_duration_ms;
+  uint16_t bemf_blanking_us;
+} ESCparamsV4;
+#pragma pack(pop)
+
+typedef struct {
+  uint32_t    signature;
+  uint32_t    write_counter;
+  ESCparamsV4 config;
+  uint32_t    crc32;
+} FlashStorageBlockV4;
+
 typedef struct {
   uint32_t    signature;
   uint32_t    write_counter;
@@ -71,8 +101,10 @@ _Static_assert(sizeof(ESCparamsV2) == 40U, "Unexpected legacy ESC config size");
 _Static_assert(sizeof(FlashStorageBlockV2) == 52U, "Unexpected legacy flash block size");
 _Static_assert(sizeof(ESCparamsV3) == 56U, "Unexpected V3 ESC config size");
 _Static_assert(sizeof(FlashStorageBlockV3) == 68U, "Unexpected V3 flash block size");
-_Static_assert(sizeof(ESCparams) == 60U, "Unexpected V4 ESC config size");
-_Static_assert(sizeof(FlashStorageBlock) == 72U, "Unexpected V4 flash block size");
+_Static_assert(sizeof(ESCparamsV4) == 60U, "Unexpected V4 ESC config size");
+_Static_assert(sizeof(FlashStorageBlockV4) == 72U, "Unexpected V4 flash block size");
+_Static_assert(sizeof(ESCparams) == 64U, "Unexpected V5 ESC config size");
+_Static_assert(sizeof(FlashStorageBlock) == 76U, "Unexpected V5 flash block size");
 
 static ESCparams       flash_cached_config;
 static uint8_t         flash_initialized = 0;
@@ -83,6 +115,7 @@ static uint8_t         is_saving         = 0;
 static uint8_t         loaded_legacy     = 0;
 static FlashResultCode erase_flash_page(uint32_t page_addr);
 static uint32_t        calculate_block_crc(FlashStorageBlock* block);
+static uint32_t        calculate_v4_block_crc(FlashStorageBlockV4* block);
 static uint32_t        calculate_v3_block_crc(FlashStorageBlockV3* block);
 static uint32_t        calculate_legacy_block_crc(FlashStorageBlockV2* block);
 static FlashResultCode write_flash_block(uint32_t addr, FlashStorageBlock* block);
@@ -125,6 +158,14 @@ static uint32_t calculate_v3_block_crc(FlashStorageBlockV3* block)
   return HAL_CRC_Calculate(&hcrc, buffer, sizeof(buffer) / sizeof(buffer[0]));
 }
 
+static uint32_t calculate_v4_block_crc(FlashStorageBlockV4* block)
+{
+  uint32_t buffer[sizeof(FlashStorageBlockV4) / 4U];
+  memcpy(buffer, block, sizeof(FlashStorageBlockV4));
+  ((FlashStorageBlockV4*)buffer)->crc32 = 0U;
+  return HAL_CRC_Calculate(&hcrc, buffer, sizeof(buffer) / sizeof(buffer[0]));
+}
+
 static void migrate_legacy_config(const ESCparamsV2* legacy, ESCparams* migrated)
 {
   set_default_esc_params();
@@ -141,7 +182,7 @@ static void migrate_legacy_config(const ESCparamsV2* legacy, ESCparams* migrated
     migrated->speed_ki = legacy->speed_ki;
     migrated->speed_kd = legacy->speed_kd;
   }
-  migrated->signature = ESC_PARAMS_SIGNATURE_V4;
+  migrated->signature = ESC_PARAMS_SIGNATURE_V5;
   migrated->crc32 = compute_crc32(migrated);
 }
 
@@ -168,7 +209,35 @@ static void migrate_v3_config(const ESCparamsV3* legacy, ESCparams* migrated)
   migrated->startup_final_frequency_millihz =
       legacy->startup_final_frequency_millihz;
   migrated->startup_duration_ms = legacy->startup_duration_ms;
-  migrated->signature = ESC_PARAMS_SIGNATURE_V4;
+  migrated->signature = ESC_PARAMS_SIGNATURE_V5;
+  migrated->crc32 = compute_crc32(migrated);
+}
+
+static void migrate_v4_config(const ESCparamsV4* legacy, ESCparams* migrated)
+{
+  set_default_esc_params();
+  *migrated = current_esc_params;
+  migrated->pwm_freq_hz = legacy->pwm_freq_hz;
+  migrated->brake_type = legacy->brake_type;
+  migrated->current_limit = legacy->current_limit;
+  migrated->temp_limit = legacy->temp_limit;
+  migrated->speed_kp = legacy->speed_kp;
+  migrated->speed_ki = legacy->speed_ki;
+  migrated->speed_kd = legacy->speed_kd;
+  migrated->speed_max_rpm = legacy->speed_max_rpm;
+  migrated->speed_min_rpm = legacy->speed_min_rpm;
+  migrated->pole_pairs = legacy->pole_pairs;
+  migrated->startup_initial_amplitude_permille =
+      legacy->startup_initial_amplitude_permille;
+  migrated->startup_final_amplitude_permille =
+      legacy->startup_final_amplitude_permille;
+  migrated->startup_initial_frequency_millihz =
+      legacy->startup_initial_frequency_millihz;
+  migrated->startup_final_frequency_millihz =
+      legacy->startup_final_frequency_millihz;
+  migrated->startup_duration_ms = legacy->startup_duration_ms;
+  migrated->bemf_blanking_us = legacy->bemf_blanking_us;
+  migrated->signature = ESC_PARAMS_SIGNATURE_V5;
   migrated->crc32 = compute_crc32(migrated);
 }
 
@@ -178,13 +247,29 @@ static uint8_t read_page(uint32_t page_addr, ESCparams* config, uint32_t* counte
   if (page->signature != FLASH_CONFIG_SIGNATURE) return 0U;
 
   uint32_t config_signature = page->config.signature;
-  if (config_signature == ESC_PARAMS_SIGNATURE_V4) {
+  if (config_signature == ESC_PARAMS_SIGNATURE_V5) {
     FlashStorageBlock copy;
     memcpy(&copy, page, sizeof(copy));
     if (calculate_block_crc(&copy) != page->crc32) return 0U;
     memcpy(config, &page->config, sizeof(*config));
+    if (!zc_channel_map_is_valid(config->zc_channel_u, config->zc_channel_v, config->zc_channel_w)) {
+      config->zc_channel_u = ESC_DEFAULT_ZC_CHANNEL_U;
+      config->zc_channel_v = ESC_DEFAULT_ZC_CHANNEL_V;
+      config->zc_channel_w = ESC_DEFAULT_ZC_CHANNEL_W;
+    }
     *counter = page->write_counter;
     *legacy = 0U;
+    return 1U;
+  }
+
+  if (config_signature == ESC_PARAMS_SIGNATURE_V4) {
+    const FlashStorageBlockV4* legacy_page = (const FlashStorageBlockV4*)page_addr;
+    FlashStorageBlockV4 copy;
+    memcpy(&copy, legacy_page, sizeof(copy));
+    if (calculate_v4_block_crc(&copy) != legacy_page->crc32) return 0U;
+    migrate_v4_config(&legacy_page->config, config);
+    *counter = legacy_page->write_counter;
+    *legacy = 1U;
     return 1U;
   }
 
@@ -300,7 +385,7 @@ FlashResultCode flash_config_init(void)
   if (result == FLASH_RESULT_OK) {
 
     memcpy(&current_esc_params, &flash_cached_config, sizeof(ESCparams));
-    if (current_esc_params.signature != ESC_PARAMS_SIGNATURE_V4) {
+    if (current_esc_params.signature != ESC_PARAMS_SIGNATURE_V5) {
       set_default_esc_params();
       pending_changes = 1;
     }

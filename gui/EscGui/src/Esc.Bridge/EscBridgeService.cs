@@ -7,6 +7,9 @@ namespace Esc.Bridge;
 public sealed class EscBridgeService
 {
     private const int MaxHilTraceEntries = 80;
+    private const byte SineDriveAppState = 10;
+    private const byte StepTestAppState = 11;
+    private const byte FreewheelAppState = 12;
 
     private readonly IEscDeviceEnumerator _deviceEnumerator;
     private readonly IEscTransport _transport;
@@ -36,6 +39,13 @@ public sealed class EscBridgeService
     private SineDriveSettings? _requestedSineDrive;
     private SineDriveSettings? _appliedSineDrive;
     private DateTimeOffset? _sineDriveLastAppliedAt;
+    private StepTestSettings? _requestedStepTest;
+    private StepTestSettings? _appliedStepTest;
+    private DateTimeOffset? _stepTestLastAppliedAt;
+    private ZcDiagReport? _freewheelReport;
+    private ZcChannelMap? _activeZcMap;
+    private ZcAutoDetectResult? _lastZcAutoDetect;
+    private DateTimeOffset? _freewheelLastUpdatedAt;
     private DateTimeOffset? _validationReferenceCapturedAt;
     private string? _validationReferenceError;
 
@@ -102,7 +112,7 @@ public sealed class EscBridgeService
                 _lastError = "Dispositivo HID desconectado.";
                 _status = null;
                 _currentDevice = null;
-                ClearSineDrive();
+                ClearManualOutputs();
                 ClearValidationReference();
             }
             else if (!_transport.IsOpen && devices.Count > 0 && _state is DeviceConnectionState.NotDetected or DeviceConnectionState.Disconnected)
@@ -117,7 +127,7 @@ public sealed class EscBridgeService
                 _lastError = null;
                 _currentDevice = null;
                 _status = null;
-                ClearSineDrive();
+                ClearManualOutputs();
                 ClearValidationReference();
             }
         }
@@ -192,13 +202,13 @@ public sealed class EscBridgeService
         await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (HasRequestedSineDrive() && _transport.IsOpen)
+            if (HasRequestedManualOutput() && _transport.IsOpen)
             {
                 await StopSineDriveCoreAsync(false, false, cancellationToken).ConfigureAwait(false);
             }
             lock (_stateGate)
             {
-                ClearSineDrive();
+                ClearManualOutputs();
             }
             await _transport.CloseAsync(cancellationToken).ConfigureAwait(false);
             lock (_stateGate)
@@ -224,7 +234,7 @@ public sealed class EscBridgeService
         await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (mode != ControlMode.GuiControl && HasRequestedSineDrive())
+            if (mode != ControlMode.GuiControl && HasRequestedManualOutput())
             {
                 CommandResult stop = await StopSineDriveCoreAsync(
                     false, true, cancellationToken).ConfigureAwait(false);
@@ -283,6 +293,7 @@ public sealed class EscBridgeService
         lock (_stateGate)
         {
             _requestedSineDrive = null;
+            _requestedStepTest = null;
         }
         Notify();
         try
@@ -475,6 +486,399 @@ public sealed class EscBridgeService
         finally
         {
             _controlGate.Release();
+        }
+    }
+
+    public async Task<CommandResult> SetStepTestAsync(
+        StepTestSettings settings,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        int emergencyGeneration = Volatile.Read(ref _emergencyStopGeneration);
+        if (IsEmergencyStopPending()) return CommandResult.Failed("ESTOP en curso.");
+        await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!AllowsGuiControl())
+            {
+                return CommandResult.Failed("Control bloqueado por el modo actual.");
+            }
+
+            byte[] payload;
+            try
+            {
+                payload = EscProtocol.StepTestPayload(settings);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return CommandResult.Failed(
+                    $"El paso debe ser UV..WV y el duty estar entre 0 y {CommConstants.MaxStepTestDutyPercent:0} %.");
+            }
+
+            EscFrame response = await SendRequestAsync(
+                CommOpcode.StepTest, (byte)StepTestCommand.Apply, payload, cancellationToken).ConfigureAwait(false);
+            if (IsEmergencyStopPending() ||
+                emergencyGeneration != Volatile.Read(ref _emergencyStopGeneration))
+            {
+                return CommandResult.Failed("ESTOP en curso; la salida sera detenida.");
+            }
+            CommandResult result = CommandResult.FromStatus(response.Status);
+            if (!result.Success)
+            {
+                await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+                return result;
+            }
+
+            StepTestSettings applied = EscProtocol.DecodeStepTest(response);
+            lock (_stateGate)
+            {
+                _requestedStepTest = settings;
+                _appliedStepTest = applied;
+                _stepTestLastAppliedAt = DateTimeOffset.UtcNow;
+            }
+            await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+            return CommandResult.Ok($"Paso {DescribeStepTest(applied)} energizado.");
+        }
+        catch (OperationCanceledException) when (IsEmergencyStopPending())
+        {
+            return CommandResult.Failed("Comando interrumpido por ESTOP.");
+        }
+        catch (Exception ex)
+        {
+            SetError(DeviceConnectionState.Error, ex.Message);
+            return CommandResult.Failed(ex.Message);
+        }
+        finally
+        {
+            _controlGate.Release();
+        }
+    }
+
+    public async Task MaintainStepTestAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_transport.IsOpen) return;
+
+        if (!await _controlGate.WaitAsync(0, cancellationToken).ConfigureAwait(false)) return;
+
+        try
+        {
+            await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                StepTestSettings? requested;
+                lock (_stateGate)
+                {
+                    requested = _mode == ControlMode.GuiControl ? _requestedStepTest : null;
+                }
+                if (requested is null) return;
+
+                EscFrame response = await SendRequestCoreAsync(
+                    CommOpcode.StepTest,
+                    (byte)StepTestCommand.KeepAlive,
+                    EscProtocol.StepTestPayload(requested),
+                    cancellationToken,
+                    responseDeadlineMs: 300).ConfigureAwait(false);
+                if (response.Status != CommStatus.Ok)
+                {
+                    lock (_stateGate)
+                    {
+                        ClearStepTest();
+                    }
+                    Notify();
+                    return;
+                }
+
+                StepTestSettings applied = EscProtocol.DecodeStepTest(response);
+                lock (_stateGate)
+                {
+                    _appliedStepTest = applied;
+                    _stepTestLastAppliedAt = DateTimeOffset.UtcNow;
+                }
+            }
+            finally
+            {
+                _ioLock.Release();
+            }
+        }
+        finally
+        {
+            _controlGate.Release();
+        }
+    }
+
+    private static string DescribeStepTest(StepTestSettings settings)
+    {
+        string step = settings.Step.ToString();
+        return string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"{step} ({step[0]} PWM {settings.DutyPercent:0.#} %, {step[1]} LOW)");
+    }
+
+    public async Task<CommandResult> StartFreewheelAsync(CancellationToken cancellationToken = default)
+    {
+        if (IsEmergencyStopPending()) return CommandResult.Failed("ESTOP en curso.");
+        await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!AllowsGuiControl())
+            {
+                return CommandResult.Failed("Control bloqueado por el modo actual.");
+            }
+
+            EscFrame response = await SendRequestAsync(
+                CommOpcode.ZcDiag, (byte)ZcDiagCommand.Start, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+            CommandResult result = CommandResult.FromStatus(response.Status);
+            if (!result.Success)
+            {
+                await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+                return result;
+            }
+
+            ZcDiagReport report = EscProtocol.DecodeZcDiagReport(response);
+            lock (_stateGate)
+            {
+                _freewheelReport = report;
+                _activeZcMap = report.ActiveMap;
+                _freewheelLastUpdatedAt = DateTimeOffset.UtcNow;
+            }
+            await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+            return CommandResult.Ok("Modo Freewheel activo (potencia apagada). Gira el rotor a mano.");
+        }
+        catch (Exception ex)
+        {
+            SetError(DeviceConnectionState.Error, ex.Message);
+            return CommandResult.Failed(ex.Message);
+        }
+        finally
+        {
+            _controlGate.Release();
+        }
+    }
+
+    public async Task<CommandResult> StopFreewheelAsync(CancellationToken cancellationToken = default)
+    {
+        if (IsEmergencyStopPending()) return CommandResult.Failed("ESTOP en curso.");
+        await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!AllowsGuiControl())
+            {
+                return CommandResult.Failed("Control bloqueado por el modo actual.");
+            }
+
+            EscFrame response = await SendRequestAsync(
+                CommOpcode.ZcDiag, (byte)ZcDiagCommand.Stop, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+            CommandResult result = CommandResult.FromStatus(response.Status);
+            if (result.Success)
+            {
+                lock (_stateGate)
+                {
+                    if (_freewheelReport is not null)
+                    {
+                        _freewheelReport = _freewheelReport with { Active = false };
+                        _freewheelLastUpdatedAt = DateTimeOffset.UtcNow;
+                    }
+                }
+            }
+            await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+            return result.Success ? CommandResult.Ok("Modo Freewheel detenido.") : result;
+        }
+        catch (Exception ex)
+        {
+            SetError(DeviceConnectionState.Error, ex.Message);
+            return CommandResult.Failed(ex.Message);
+        }
+        finally
+        {
+            _controlGate.Release();
+        }
+    }
+
+    public async Task PollFreewheelAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_transport.IsOpen) return;
+
+        bool active;
+        lock (_stateGate)
+        {
+            active = _status?.AppState == FreewheelAppState;
+        }
+        if (!active) return;
+
+        if (!await _controlGate.WaitAsync(0, cancellationToken).ConfigureAwait(false)) return;
+        try
+        {
+            await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                lock (_stateGate)
+                {
+                    if (_status?.AppState != FreewheelAppState) return;
+                }
+
+                EscFrame response = await SendRequestCoreAsync(
+                    CommOpcode.ZcDiag,
+                    (byte)ZcDiagCommand.GetReport,
+                    Array.Empty<byte>(),
+                    cancellationToken,
+                    responseDeadlineMs: 300).ConfigureAwait(false);
+                if (response.Status != CommStatus.Ok) return;
+
+                ZcDiagReport report = EscProtocol.DecodeZcDiagReport(response);
+                lock (_stateGate)
+                {
+                    _freewheelReport = report;
+                    _activeZcMap = report.ActiveMap;
+                    _freewheelLastUpdatedAt = DateTimeOffset.UtcNow;
+                }
+                Notify();
+            }
+            finally
+            {
+                _ioLock.Release();
+            }
+        }
+        finally
+        {
+            _controlGate.Release();
+        }
+    }
+
+    public async Task<CommandResult> RunZcAutoDetectAsync(
+        double dutyPercent = CommConstants.DefaultZcAutoDetectDutyPercent,
+        CancellationToken cancellationToken = default)
+    {
+        if (IsEmergencyStopPending()) return CommandResult.Failed("ESTOP en curso.");
+        await _controlGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (!AllowsGuiControl())
+            {
+                return CommandResult.Failed("Control bloqueado por el modo actual.");
+            }
+
+            byte[] payload;
+            try
+            {
+                payload = EscProtocol.ZcAutoDetectPayload(dutyPercent);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return CommandResult.Failed(
+                    $"El duty de autodeteccion debe estar entre {CommConstants.MinZcAutoDetectDutyPercent:0} y {CommConstants.MaxZcAutoDetectDutyPercent:0} %.");
+            }
+
+            EscFrame response = await SendRequestAsync(
+                CommOpcode.ZcDiag, (byte)ZcDiagCommand.AutoDetect, payload, cancellationToken).ConfigureAwait(false);
+            CommandResult result = CommandResult.FromStatus(response.Status);
+            if (!result.Success)
+            {
+                await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+                return result;
+            }
+
+            ZcAutoDetectResult detected = EscProtocol.DecodeZcAutoDetect(response);
+            lock (_stateGate)
+            {
+                _lastZcAutoDetect = detected;
+                _activeZcMap = detected.ActiveMap;
+                _freewheelLastUpdatedAt = DateTimeOffset.UtcNow;
+            }
+            await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+
+            return detected.Status switch
+            {
+                ZcAutoDetectStatus.Ok when detected.MatchesActiveMap =>
+                    CommandResult.Ok($"Mapeo ZC confirmado: {detected.DetectedMap!.FormatSummary()}."),
+                ZcAutoDetectStatus.Ok =>
+                    CommandResult.Ok($"Mapeo ZC detectado: {detected.DetectedMap!.FormatSummary()} (difiere del activo; podes aplicarlo por software)."),
+                ZcAutoDetectStatus.OkInverted =>
+                    CommandResult.Ok($"Mapeo detectado con polaridad invertida: {detected.DetectedMap!.FormatSummary()}. Revisar comparadores."),
+                ZcAutoDetectStatus.NoSignal =>
+                    CommandResult.Failed("Sin señal en los comparadores ZC (verificar Vbus / neutro virtual)."),
+                _ =>
+                    CommandResult.Failed("Lectura ambigua al sondear las fases (verificar cableado o subir levemente el duty).")
+            };
+        }
+        catch (Exception ex)
+        {
+            SetError(DeviceConnectionState.Error, ex.Message);
+            return CommandResult.Failed(ex.Message);
+        }
+        finally
+        {
+            _controlGate.Release();
+        }
+    }
+
+    public async Task<ZcChannelMap?> GetZcMapAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_transport.IsOpen) return null;
+
+        try
+        {
+            EscFrame response = await SendRequestAsync(
+                CommOpcode.GetConfig, (byte)ConfigParam.ZcMap, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+            if (response.Status != CommStatus.Ok || response.Payload.Length != 3)
+            {
+                return null;
+            }
+
+            ZcChannelMap map = EscProtocol.DecodeZcMap(response.Payload);
+            lock (_stateGate)
+            {
+                _activeZcMap = map;
+            }
+            Notify();
+            return map;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "GetZcMapAsync failed.");
+            return null;
+        }
+    }
+
+    public async Task<CommandResult> SetZcMapAsync(ZcChannelMap map, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        if (!AllowsGuiControl())
+        {
+            return CommandResult.Failed("Control bloqueado por el modo actual.");
+        }
+        if (!map.IsValid)
+        {
+            return CommandResult.Failed("Cada fase (U, V, W) debe apuntar a un pin ZC distinto (PA0, PA1, PB10).");
+        }
+
+        try
+        {
+            EscFrame response = await SendRequestAsync(
+                CommOpcode.SetConfig, (byte)ConfigParam.ZcMap, EscProtocol.ZcMapPayload(map), cancellationToken).ConfigureAwait(false);
+            CommandResult result = CommandResult.FromStatus(response.Status);
+            if (result.Success)
+            {
+                lock (_stateGate)
+                {
+                    _activeZcMap = map;
+                    if (_freewheelReport is not null)
+                    {
+                        _freewheelReport = _freewheelReport with { ActiveMap = map };
+                    }
+                    if (_lastZcAutoDetect is not null)
+                    {
+                        _lastZcAutoDetect = _lastZcAutoDetect with { ActiveMap = map };
+                    }
+                }
+                Notify();
+                return CommandResult.Ok($"Mapeo ZC aplicado en RAM: {map.FormatSummary()}. Guarda en Flash para persistirlo.");
+            }
+            return result;
+        }
+        catch (Exception ex)
+        {
+            SetError(DeviceConnectionState.Error, ex.Message);
+            return CommandResult.Failed(ex.Message);
         }
     }
 
@@ -918,7 +1322,7 @@ public sealed class EscBridgeService
             lock (_stateGate)
             {
                 _status = status;
-                SynchronizeSineDrive(status);
+                SynchronizeManualOutputs(status);
                 _lastError = null;
                 _state = DeviceConnectionState.Connected;
             }
@@ -994,7 +1398,7 @@ public sealed class EscBridgeService
 
         lock (_stateGate)
         {
-            ClearSineDrive();
+            ClearManualOutputs();
             if (_status is not null)
             {
                 _status = _status with
@@ -1098,7 +1502,7 @@ public sealed class EscBridgeService
             lock (_stateGate)
             {
                 _status = status;
-                SynchronizeSineDrive(status);
+                SynchronizeManualOutputs(status);
             }
         }
         catch (Exception ex)
@@ -1398,10 +1802,21 @@ public sealed class EscBridgeService
             _activeSpeedLimits,
             _startupConfiguration,
             new SineDriveStatus(
-                _status?.AppState == 10,
+                _status?.AppState == SineDriveAppState,
                 _requestedSineDrive,
                 _appliedSineDrive,
                 _sineDriveLastAppliedAt),
+            new StepTestStatus(
+                _status?.AppState == StepTestAppState,
+                _requestedStepTest,
+                _appliedStepTest,
+                _stepTestLastAppliedAt),
+            new FreewheelStatus(
+                _status?.AppState == FreewheelAppState,
+                _freewheelReport,
+                _activeZcMap,
+                _lastZcAutoDetect,
+                _freewheelLastUpdatedAt),
             _validationReferenceCapturedAt,
             _validationReferenceError);
     }
@@ -1422,16 +1837,30 @@ public sealed class EscBridgeService
         _activeControllerConfig = null;
         _activeSpeedLimits = null;
         _startupConfiguration = null;
+        _freewheelReport = null;
+        _activeZcMap = null;
+        _lastZcAutoDetect = null;
+        _freewheelLastUpdatedAt = null;
         _validationReferenceCapturedAt = null;
         _validationReferenceError = null;
     }
 
-    private void SynchronizeSineDrive(EscStatus status)
+    private void SynchronizeManualOutputs(EscStatus status)
     {
-        if (status.AppState != 10)
+        if (status.AppState != SineDriveAppState)
         {
             ClearSineDrive();
         }
+        if (status.AppState != StepTestAppState)
+        {
+            ClearStepTest();
+        }
+    }
+
+    private void ClearManualOutputs()
+    {
+        ClearSineDrive();
+        ClearStepTest();
     }
 
     private void ClearSineDrive()
@@ -1441,11 +1870,18 @@ public sealed class EscBridgeService
         _sineDriveLastAppliedAt = null;
     }
 
-    private bool HasRequestedSineDrive()
+    private void ClearStepTest()
+    {
+        _requestedStepTest = null;
+        _appliedStepTest = null;
+        _stepTestLastAppliedAt = null;
+    }
+
+    private bool HasRequestedManualOutput()
     {
         lock (_stateGate)
         {
-            return _requestedSineDrive is not null;
+            return _requestedSineDrive is not null || _requestedStepTest is not null;
         }
     }
 

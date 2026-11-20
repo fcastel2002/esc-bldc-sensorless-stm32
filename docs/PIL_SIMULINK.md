@@ -166,7 +166,7 @@ config = struct("targetRpm", 1000, "runId", uint32(1));
 [vector, manifest, vectorPath] = export_hil_validation_vector(motor_rpm, config);
 ```
 
-El MAT generado se importa desde `/runs`. La GUI gestiona la configuracion temporal del MCU, el replay, la correlacion por `run_id` y `source_sequence`, las tolerancias y la persistencia de resultados.
+El MAT generado se importa con `POST /api/validation/import` (la pagina `/runs` de la GUI fue retirada). El bridge gestiona la configuracion temporal del MCU, el replay, la correlacion por `run_id` y `source_sequence`, las tolerancias y la persistencia de resultados.
 
 Para `sim_motor`, la exportacion completa se ejecuta con:
 

@@ -8,12 +8,18 @@
 #ifndef INC_BASIC_CONFIG_H_
 #define INC_BASIC_CONFIG_H_
 
-#define IN_U TIM_CHANNEL_1
-#define IN_V TIM_CHANNEL_2
-#define IN_W TIM_CHANNEL_3
-#define EN_U (1U << 13) // pa4
-#define EN_V (1U << 1)  // PB1
-#define EN_W (1U << 5)  // PA5
+#define IN_U TIM_CHANNEL_2 // PA9
+#define IN_V TIM_CHANNEL_1 // PA8
+#define IN_W TIM_CHANNEL_3 // PA10
+#define EN_U (1U << 1)     // PB1
+#define EN_V (1U << 13)    // PB13
+#define EN_W (1U << 5)     // PA5
+#define ZC_W_TIM_CHANNEL    TIM_CHANNEL_1            // PA0
+#define ZC_U_TIM_CHANNEL    TIM_CHANNEL_3            // PB10
+#define ZC_V_TIM_CHANNEL    TIM_CHANNEL_2            // PA1
+#define ZC_W_ACTIVE_CHANNEL HAL_TIM_ACTIVE_CHANNEL_1 // PA0
+#define ZC_U_ACTIVE_CHANNEL HAL_TIM_ACTIVE_CHANNEL_3 // PB10
+#define ZC_V_ACTIVE_CHANNEL HAL_TIM_ACTIVE_CHANNEL_2 // PA1
 
 // PWM CONFIG //
 #define ARR_TIM3 3000 // FREQ PWM 1799 -> 20kHz

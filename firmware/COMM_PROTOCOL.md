@@ -74,6 +74,8 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 | `0x43` | `HIL_GET_OUTPUTS` | ignored | empty | HIL output payload below |
 | `0x44` | `HIL_STEP` | ignored | exact 18-byte deterministic-step payload below | exact 48-byte deterministic-step response below |
 | `0x50` | `SINE_DRIVE` | `0=APPLY`, `1=KEEPALIVE` | `uint32 frequency_mHz`, `uint16 amplitude_permille` | accepted/quantized values in the same 6-byte shape |
+| `0x51` | `STEP_TEST` | `0=APPLY`, `1=KEEPALIVE` | `uint8 step`, `uint16 duty_permille` | same 3-byte shape |
+| `0x52` | `ZC_DIAG` | `0=START`, `1=STOP`, `2=GET_REPORT`, `3=AUTO_DETECT` | empty (or optional `uint16 duty_permille` for `AUTO_DETECT`) | 32-byte freewheel report, empty (`STOP`), or 16-byte auto-detect matrix |
 
 `RUN` is valid only while `app_state == IDLE`. In every other state it returns
 `INVALID_STATE` without changing the application state, PWM outputs, or timer
@@ -91,8 +93,10 @@ configuration.
 | 6..7 | `uint16` | measured speed RPM |
 | 8..9 | `uint16` | `max_pwm` |
 
-`app_state=10` identifies the continuous open-loop `SINE_DRIVE` state. Existing
-state values `0..9` retain their previous numeric assignments.
+`app_state=10` identifies the continuous open-loop `SINE_DRIVE` state,
+`app_state=11` the commutation-step debug `STEP_TEST` state, and `app_state=12`
+the passive zero-crossing diagnostic `FREEWHEEL` state. Existing state values
+`0..9` retain their previous numeric assignments.
 
 ### `GET_VALIDATION_REFERENCE` response payload
 
@@ -141,6 +145,7 @@ than infer support from payload length alone.
 | `0x10` | `STARTUP_FINAL_FREQUENCY` | `uint32` electrical mHz | yes, `2000..10000` |
 | `0x11` | `STARTUP_DURATION` | `uint32 ms` | yes, `500..10000` |
 | `0x12` | `BEMF_BLANKING_US` | `uint16 us` | yes, `0..200`; `0` disables blanking |
+| `0x13` | `ZC_MAP` | `uint8[3]` (`ch_u, ch_v, ch_w`) | yes, permutation of `{0=PA0, 1=PA1, 2=PB10}`; default `[2, 1, 0]` |
 | `0xFF` | `ALL` | reset/log only | yes for `RESET_CONFIG`, `LOG_START`, `LOG_STOP` |
 
 For gains, value `100` means `1.00`. Algorithm 2 computes RPM error and a
@@ -190,13 +195,59 @@ update both values. `KEEPALIVE` is accepted only while already in `SINE_DRIVE`,
 so a late host packet cannot restart the power stage after watchdog expiry. Both
 forms renew the lease and echo the actual quantized electrical frequency and
 accepted amplitude. While active, only `PING`, `GET_STATUS`, `SINE_DRIVE`,
-`STOP`, and `ESTOP` are accepted.
+`STEP_TEST`, `LOG_START`, `LOG_STOP`, `LOG_RATE`, `STOP`, and `ESTOP` are
+accepted.
 
 The host must renew `SINE_DRIVE` before the 1500 ms firmware watchdog expires.
 The local bridge renews it on a dedicated 350 ms loop. `STOP`, `ESTOP`, watchdog expiry, or a
 lost connection stop TIM4, clear all PWM compares, disable all three power-stage
 enables, and return to `IDLE`. Conventional BEMF commutation is disabled because
 all three phases are actively modulated.
+
+## Commutation step debug drive
+
+`STEP_TEST` (`0x51`) holds one fixed six-step commutation step for hardware
+debugging. It reuses the same EN/compare sequence as normal commutation
+(`bldc_apply_step` -> `commutate`): one phase PWM, one phase low, one floating.
+
+| Offset | Type | Meaning |
+| --- | --- | --- |
+| 0 | `uint8` | step: `0=UV`, `1=UW`, `2=VW`, `3=VU`, `4=WU`, `5=WV` (first letter PWM, second LOW) |
+| 1..2 | `uint16` | duty in permille, `0..300` |
+
+The response echoes the same 3 bytes. Param `0=APPLY` is accepted from `IDLE`
+(enters `app_state=11 STEP_TEST`) or from `STEP_TEST`; param `1=KEEPALIVE`
+only while already in `STEP_TEST`. A step above `5` returns `UNKNOWN_PARAM`
+and a duty above `300` permille returns `OVERLIMIT`. The 1500 ms watchdog,
+command allow-list and `STOP`/`ESTOP` behavior match `SINE_DRIVE`; the bridge
+renews the lease on its 350 ms loop. Zero-crossing captures never commutate
+outside `RUNNING`/`CLOSEDLOOP`, so the step stays fixed. Current telemetry
+is flagged valid for the shunt phase (U or V) that is low in the held step.
+
+## Freewheel zero-crossing diagnostic & software remapping
+
+`ZC_DIAG` (`0x52`) provides passive freewheel diagnostics and active low-duty
+ZC-to-power phase auto-detection:
+
+- `param=0 (START)`: disables the power stage (`EN_U=EN_V=EN_W=0`, `PWM_STOP`),
+  enters `app_state=12 FREEWHEEL`, arms dual-edge capture on `TIM2` CH1/CH2/CH3
+  (`PA0`/`PA1`/`PB10`), resets counters, and returns the 32-byte diagnostic report.
+- `param=1 (STOP)`: exits `FREEWHEEL` to `IDLE` and restores `TIM2` polarity.
+- `param=2 (GET_REPORT)`: returns the 32-byte diagnostic report (live pins, seen
+  3-bit states, health flags, per-channel edge counts, forward/reverse/invalid
+  step counts, glitches, estimated RPM, 60° step ticks & asymmetry %, active ZC
+  map, and last 6 captured edges).
+- `param=3 (AUTO_DETECT)`: accepted only in `IDLE`. Optional `uint16 duty_permille`
+  (`50..250`, default `150` = `15%`). Probes U, V, W sequentially (~15 ms each)
+  with all enables HIGH, samples the 3 ZC comparators synchronized inside the
+  `PWM ON` window, disables the power stage immediately, and returns 16 bytes:
+  `result_code` (`0=OK`, `1=OK_INVERTED`, `2=NO_SIGNAL`, `3=AMBIGUOUS`),
+  `detected_map[3]`, `active_map[3]`, and row-major `high_pct[9]`.
+
+`ZC_MAP` (`0x13`) stores the software permutation `[ch_u, ch_v, ch_w]` in RAM
+(allowed in `IDLE` or `FREEWHEEL`) and persists in Flash `ESCparams` V5 on
+explicit `SAVE_CONFIG` (in `IDLE`). Legacy V1..V4 flash blocks migrate cleanly
+to V5 with default `[2, 1, 0]` (`U=PB10`, `V=PA1`, `W=PA0`).
 
 ## Logging and telemetry
 
@@ -206,8 +257,8 @@ Log params:
 | --- | --- |
 | `0x01` | `SPEED` |
 | `0x02` | `TEMP` |
-| `0x03` | `CURRENT_U` (`PA3`, L298 `SENSE_A`) |
-| `0x04` | `CURRENT_V` (`PA4`, L298 `SENSE_B`) |
+| `0x03` | `CURRENT_U` (`PA3`, ADC1_IN3; hardware actualmente desconectado) |
+| `0x04` | `CURRENT_V` (`PA4`, ADC2_IN4; hardware actualmente desconectado) |
 | `0x05` | `BEMF_PERIOD` (periodo filtrado de capturas `TIM2`) |
 | `0xFF` | `ALL` |
 
@@ -232,10 +283,12 @@ Firmware actual emite una extension de 6 bytes, manteniendo intactos los primero
 | 14 | `int8` | sector de conmutacion activo |
 
 `CURRENT_U` y `CURRENT_V` usan conversiones inyectadas simultaneas de ADC1/ADC2,
-disparadas internamente por `TIM1_CH4`. La escala nominal usa `VDDA=3.3 V` y
-shunts de `0.47 ohm`: aproximadamente `1.714 mA` por cuenta ADC. Una muestra de
-corriente solo es valida cuando la fase correspondiente conduce por low-side y
-la ventana PWM tiene margen suficiente respecto de ambos flancos.
+disparadas internamente por `TIM1_CH4`. La escala nominal en firmware asume
+`VDDA=3.3 V` y shunts de `0.47 ohm` (~`1.714 mA` por cuenta ADC). **Estado
+actual del hardware:** el sensado de corriente no esta conectado en la placa
+actual (se descarto usar `SENSE_A`/`SENSE_B` del L298; pendiente etapa dedicada
+con acondicionamiento/op-amp por fase), por lo que estas lecturas no representan
+corriente real hasta incorporar el hardware nuevo.
 
 `BEMF_PERIOD` no representa una tension analogica. Expone el periodo y calidad
 de la ruta existente LM339/TIM2; la conmutacion sensorless sigue usando esa ruta.

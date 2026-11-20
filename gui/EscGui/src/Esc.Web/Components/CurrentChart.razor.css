@@ -1,11 +1,11 @@
 .current-scope-shell {
-  --current-iu: #c2400e;
-  --current-iv: #0f7d5c;
-  --current-bg: #ffffff;
-  --current-grid: #e5e9ec;
-  --current-grid-major: #c3ccd2;
-  --current-cursor-a: #b66a00;
-  --current-cursor-b: #7a3fa0;
+  --current-iu: #ff8a4c;
+  --current-iv: #3ccf8e;
+  --current-bg: var(--plot-bg);
+  --current-grid: var(--plot-grid);
+  --current-grid-major: var(--plot-grid-major);
+  --current-cursor-a: #f0b44c;
+  --current-cursor-b: #b48cff;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 2px;
@@ -20,7 +20,7 @@
   gap: 14px;
   border-bottom: 1px solid var(--line-dim);
   padding: 10px 12px;
-  background: #f1f3f4;
+  background: var(--surface-2);
 }
 
 .current-scope-legend,
@@ -117,7 +117,7 @@
 
 .current-scope-y-title,
 .current-scope-x-title {
-  color: #5d6870;
+  color: var(--plot-axis-text);
   font-family: "Segoe UI", Arial, sans-serif;
   font-size: 0.68rem;
   font-weight: 600;
@@ -138,7 +138,7 @@
   position: relative;
   grid-column: 2;
   grid-row: 1;
-  color: #59666f;
+  color: var(--plot-axis-text);
   font-size: 0.72rem;
   font-variant-numeric: tabular-nums;
 }
@@ -220,7 +220,7 @@
   position: absolute;
   width: 9px;
   height: 9px;
-  border: 2px solid #ffffff;
+  border: 2px solid var(--plot-bg);
   border-radius: 50%;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
   transform: translate(-50%, -50%);
@@ -287,7 +287,7 @@
   position: relative;
   grid-column: 3;
   grid-row: 2;
-  color: #59666f;
+  color: var(--plot-axis-text);
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
 }
@@ -317,7 +317,7 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   border-top: 1px solid var(--line-dim);
-  background: #f1f3f4;
+  background: var(--surface-2);
 }
 
 .current-scope-readout {
@@ -337,7 +337,7 @@
 }
 
 button.current-scope-readout:hover:not(:disabled) {
-  background: #e9f3f8;
+  background: var(--surface-3);
   box-shadow: none;
   transform: none;
 }

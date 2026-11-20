@@ -26,6 +26,7 @@ uint16_t sin_table_W[SIN_TABLE_SIZE] = {0};
 static uint16_t phase_counter = 0;
 static uint32_t startup_start_tick = 0;
 static uint32_t sine_drive_last_command_tick = 0;
+static uint32_t step_test_last_command_tick = 0;
 static SineDriveSettings manual_settings = {0};
 
 static void generate_sine_tables(uint8_t selected_direction)
@@ -211,6 +212,51 @@ void sine_drive_check_watchdog(void)
 bool sine_drive_is_active(void)
 {
   return app_state == SINE_DRIVE;
+}
+
+bool step_test_apply(uint8_t step, uint16_t duty_permille)
+{
+  if (step >= NUM_POS || duty_permille > ESC_MAX_STEP_TEST_DUTY_PERMILLE ||
+      control_runtime_mode != CONTROL_RUNTIME_NORMAL ||
+      hil_session_state != 0U ||
+      (app_state != IDLE && app_state != STEP_TEST)) {
+    return false;
+  }
+
+  if (app_state == IDLE) {
+    motor_control_reset_runtime();
+    PWM_STOP();
+    PWM_INIT();
+    app_state = STEP_TEST;
+  }
+
+  // Fuera de RUNNING/CLOSEDLOOP el handler de cruce por cero no conmuta,
+  // asi que el paso queda fijo hasta la proxima orden.
+  bldc_apply_step((int8_t)step, (uint16_t)((TIM1->ARR * duty_permille) / 1000U));
+  step_test_last_command_tick = HAL_GetTick();
+  return true;
+}
+
+void step_test_stop(void)
+{
+  PWM_STOP();
+  bldc_set_pwm(0U);
+  bldc_disable_power_stage();
+}
+
+void step_test_check_watchdog(void)
+{
+  if (app_state == STEP_TEST &&
+      (uint32_t)(HAL_GetTick() - step_test_last_command_tick) > SINE_DRIVE_WATCHDOG_MS) {
+    step_test_stop();
+    motor_control_reset_runtime();
+    app_state = IDLE;
+  }
+}
+
+bool step_test_is_active(void)
+{
+  return app_state == STEP_TEST;
 }
 
 void update_pwm_startup_foc(void)

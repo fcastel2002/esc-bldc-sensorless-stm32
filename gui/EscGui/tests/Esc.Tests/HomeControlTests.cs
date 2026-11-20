@@ -59,7 +59,7 @@ public sealed class HomeControlTests
         string homeMarkup = File.ReadAllText(
             Path.Combine(AppContext.BaseDirectory, "TestAssets", "Home.razor"));
 
-        Assert.Equal(6, Count(homeMarkup, "class=\"panel-toggle\""));
+        Assert.Equal(5, Count(homeMarkup, "class=\"panel-toggle\""));
         Assert.Contains("aria-expanded=", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("aria-controls=", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("hidden=\"@IsPanelCollapsed(PanelTelemetry)\"", homeMarkup, StringComparison.Ordinal);
@@ -73,46 +73,75 @@ public sealed class HomeControlTests
     }
 
     [Fact]
-    public void DashboardKeepsEmergencyStopOutsideCollapsiblePowerPanel()
+    public void EmergencyStopLivesInTheGlobalHeaderForEveryPage()
     {
-        string homeMarkup = File.ReadAllText(
-            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Home.razor"));
-        int topbarEstop = homeMarkup.IndexOf("class=\"topbar-estop\"", StringComparison.Ordinal);
-        int powerPanel = homeMarkup.IndexOf("power-command-body", StringComparison.Ordinal);
+        string layoutMarkup = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "MainLayout.razor"));
+        int estop = layoutMarkup.IndexOf("class=\"topbar-estop\"", StringComparison.Ordinal);
+        int body = layoutMarkup.IndexOf("@Body", StringComparison.Ordinal);
 
-        Assert.True(topbarEstop >= 0 && topbarEstop < powerPanel);
-        Assert.Contains("disabled=\"@(_estopBusy || !CanEmergencyStop)\"", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("aria-live=\"polite\"", homeMarkup, StringComparison.Ordinal);
+        Assert.True(estop >= 0 && estop < body);
+        Assert.Contains("disabled=\"@(_estopBusy || !CanEmergencyStop)\"", layoutMarkup, StringComparison.Ordinal);
+        Assert.Contains("aria-live=\"polite\"", layoutMarkup, StringComparison.Ordinal);
+        Assert.DoesNotContain("V@reference", layoutMarkup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void GainControlsStepByTwoTenths()
+    {
+        string controlsJson = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "controls.json"));
+        using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(controlsJson);
+
+        foreach (string param in new[] { "KpRpm", "KiRpm" })
+        {
+            System.Text.Json.JsonElement control = document.RootElement.EnumerateArray().Single(
+                item => item.TryGetProperty("param", out System.Text.Json.JsonElement parameter) &&
+                        parameter.GetString() == param);
+            Assert.Equal(0.2, control.GetProperty("step").GetDouble());
+        }
     }
 
     [Fact]
     public void SineDraftIsNotOverwrittenByPeriodicSnapshots()
     {
-        string homeMarkup = File.ReadAllText(
-            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Home.razor"));
+        string debugMarkup = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Debug.razor"));
 
         Assert.DoesNotContain(
             "Snapshot = Bridge.Snapshot;\n            LoadSineValuesFromSnapshot();",
-            homeMarkup,
+            debugMarkup,
             StringComparison.Ordinal);
-        Assert.Contains("requested == _lastSineRequestedSeen || _sineDraftDirty", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("SynchronizeSineDraftFromSnapshot(force: true)", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains("requested == _lastSineRequestedSeen || _sineDraftDirty", debugMarkup, StringComparison.Ordinal);
+        Assert.Contains("SynchronizeSineDraftFromSnapshot(force: true)", debugMarkup, StringComparison.Ordinal);
     }
 
     [Fact]
     public void SineInteractionModesUseExpectedAutomaticEventsAndPersistence()
     {
-        string homeMarkup = File.ReadAllText(
-            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Home.razor"));
+        string debugMarkup = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Debug.razor"));
 
-        Assert.Contains(">MANUAL</button>", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains(">DINAMICO</button>", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("esc.dashboard.sine-mode.v1", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("@oninput=\"UpdateSineFrequency\"", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("@oninput=\"UpdateSineAmplitudeDraft\"", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("@onchange=\"CommitSineAmplitude\"", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("Bridge.UpdateSineDriveAsync", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("_pendingDynamicSine", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains(">MANUAL</button>", debugMarkup, StringComparison.Ordinal);
+        Assert.Contains(">DINAMICO</button>", debugMarkup, StringComparison.Ordinal);
+        Assert.Contains("esc.dashboard.sine-mode.v1", debugMarkup, StringComparison.Ordinal);
+        Assert.Contains("@oninput=\"UpdateSineFrequency\"", debugMarkup, StringComparison.Ordinal);
+        Assert.Contains("@oninput=\"UpdateSineAmplitudeDraft\"", debugMarkup, StringComparison.Ordinal);
+        Assert.Contains("@onchange=\"CommitSineAmplitude\"", debugMarkup, StringComparison.Ordinal);
+        Assert.Contains("Bridge.UpdateSineDriveAsync", debugMarkup, StringComparison.Ordinal);
+        Assert.Contains("_pendingDynamicSine", debugMarkup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void DebugPageDrivesEachPhaseThroughTheBridge()
+    {
+        string debugMarkup = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "Debug.razor"));
+
+        Assert.Contains("@page \"/debug\"", debugMarkup, StringComparison.Ordinal);
+        Assert.Contains("Bridge.SetStepTestAsync", debugMarkup, StringComparison.Ordinal);
+        Assert.Contains("CommConstants.MaxStepTestDutyPercent", debugMarkup, StringComparison.Ordinal);
+        Assert.DoesNotContain("HidSharpEscTransport", debugMarkup, StringComparison.Ordinal);
     }
 
     [Fact]
