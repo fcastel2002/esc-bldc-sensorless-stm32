@@ -11,7 +11,6 @@
             <h1>Configuracion de arranque</h1>
         </div>
         <div class="topbar-actions">
-            <button class="startup-estop" @onclick="EmergencyStopAsync" disabled="@(_estopBusy || !_snapshot.TransportOpen)">ESTOP</button>
             <button @onclick="RefreshAsync" disabled="@(_isBusy || !IsConnected)">Leer desde MCU</button>
             <div class="connection-state @(_snapshot.State.ToString().ToLowerInvariant())">
                 <span>Estado</span>
@@ -72,7 +71,6 @@
     private readonly HashSet<ConfigParam> _dirty = [];
     private BridgeSnapshot _snapshot = default!;
     private bool _isBusy;
-    private bool _estopBusy;
     private bool _disposed;
     private string _result = "Lee la configuracion activa o edita un parametro.";
 
@@ -134,22 +132,6 @@
         CommandResult result = await Bridge.SaveConfigAsync(control.Parameter);
         _result = result.Success ? "Configuracion activa persistida en flash." : result.Message;
     });
-
-    private async Task EmergencyStopAsync()
-    {
-        if (_estopBusy || !_snapshot.TransportOpen) return;
-        _estopBusy = true;
-        try
-        {
-            CommandResult result = await Bridge.EmergencyStopAsync();
-            _result = result.Message;
-            _snapshot = Bridge.Snapshot;
-        }
-        finally
-        {
-            _estopBusy = false;
-        }
-    }
 
     private void UpdateValue(StartupControl control, ChangeEventArgs args)
     {

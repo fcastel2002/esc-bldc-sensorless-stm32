@@ -3,6 +3,10 @@
 .idea/
 .vscode/
 .codex/
+.claude/
+
+# OS / CAD lock files
+~$*
 
 # Logs
 *.log
@@ -42,6 +46,10 @@ TestResults/
 # Simulink and auxiliary generated outputs
 slprj/
 out/
+*.slxc
+
+# Large reference book PDFs (keep .md)
+tf_control_y_sistemas/Libros/*.pdf
 
 # LaTeX generated files
 *.aux

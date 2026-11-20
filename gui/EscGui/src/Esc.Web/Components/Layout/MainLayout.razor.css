@@ -1,6 +1,6 @@
 #blazor-error-ui {
-    background: #3d161a;
-    border-top: 1px solid #ff5b62;
+    background: #3a161b;
+    border-top: 1px solid var(--red);
     color: #ffe3e4;
     bottom: 0;
     box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
@@ -14,18 +14,24 @@
 }
 
 #blazor-error-ui .reload {
-    color: #7ddcff;
+    color: var(--accent);
+}
+
+#blazor-error-ui .dismiss {
+    cursor: pointer;
+    position: absolute;
+    right: 0.75rem;
+    top: 0.5rem;
 }
 
 .led-connected {
     background: var(--green);
-    box-shadow: 0 0 0 0 rgba(72, 213, 144, 0.48);
-    animation: led-pulse 2.4s ease-out infinite;
+    box-shadow: 0 0 0 3px var(--green-wash);
 }
 
 .led-detected {
     background: var(--amber);
-    box-shadow: 0 0 0 0 rgba(245, 185, 66, 0.35);
+    box-shadow: 0 0 0 3px var(--amber-wash);
 }
 
 .led-connecting {
@@ -35,21 +41,14 @@
 
 .led-error {
     background: var(--red);
-    box-shadow: 0 0 0 0 rgba(255, 98, 105, 0.35);
+    box-shadow: 0 0 0 3px var(--red-wash);
 }
 
 .led-notdetected {
-    background: #435a68;
+    background: var(--text-faint);
 }
 
 @keyframes led-blink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
 }
-
-    #blazor-error-ui .dismiss {
-        cursor: pointer;
-        position: absolute;
-        right: 0.75rem;
-        top: 0.5rem;
-    }

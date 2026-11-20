@@ -1,0 +1,4 @@
+La frecuencia util de la señal f_N quedará como una variable a determinar, porque no corresponde ni a la velocidad, ni a la freq de PWM, evidentemente si podemos plantear límites, desde ya, será menor a la freq de conmutación, ya que se pretende como se dijo que esta sea dinámica resuelta, no deberían influir las conmutaciones en la dinámica eléctrica.
+
+No hay presentes regimenes de carga sumamente variables ni cambios de velocidad agresivos, desde ya porque el método de sensado no lo permite.
+Por el momento, creo que suponer una dinámica de como mucho 300 Hz. teniendo en cuenta que el controlador PI muestrea a 2 ms (500 Hz), suponer que la dinámica eléctrica es casi la mitad de lenta es correcto?

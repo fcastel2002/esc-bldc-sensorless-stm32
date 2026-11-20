@@ -8,6 +8,7 @@
 #include "speed_sensor.h"
 #include "startup.h"
 #include "state_machine.h"
+#include "zc_diag.h"
 
 #include <string.h>
 
@@ -43,12 +44,14 @@ enum {
   REQUEST_HIL_GET_OUTPUTS,
   REQUEST_HIL_STEP,
   REQUEST_SINE_DRIVE,
+  REQUEST_STEP_TEST,
+  REQUEST_ZC_DIAG,
 };
 
 static inline __attribute__((always_inline)) uint8_t request_dispatch(uint8_t opcode)
 {
   static const uint8_t dispatch_base[] = {0U, 3U, 8U, 13U, 16U, 21U};
-  static const uint8_t maximum_low_nibble[] = {2U, 4U, 4U, 2U, 4U, 0U};
+  static const uint8_t maximum_low_nibble[] = {2U, 4U, 4U, 2U, 4U, 2U};
   uint8_t group = opcode >> 4;
   uint8_t low_nibble = opcode & 0x0FU;
   if (group > 5U || low_nibble > maximum_low_nibble[group]) return 0U;
@@ -203,7 +206,33 @@ static uint8_t status_from_flash(FlashResultCode status)
 static bool stop_state_allows_command(void)
 {
   return app_state == IDLE || app_state == FOC_STARTUP || app_state == RUNNING ||
-         app_state == CLOSEDLOOP || app_state == SINE_DRIVE;
+         app_state == CLOSEDLOOP || app_state == SINE_DRIVE || app_state == STEP_TEST ||
+         app_state == FREEWHEEL;
+}
+
+static bool manual_output_allows_opcode(uint8_t opcode)
+{
+  return opcode == COMM_OPCODE_PING || opcode == COMM_OPCODE_GET_STATUS ||
+         opcode == COMM_OPCODE_STOP || opcode == COMM_OPCODE_ESTOP ||
+         opcode == COMM_OPCODE_SINE_DRIVE || opcode == COMM_OPCODE_STEP_TEST ||
+         (opcode >= COMM_OPCODE_LOG_START && opcode <= COMM_OPCODE_LOG_RATE);
+}
+
+static bool freewheel_allows_opcode(uint8_t opcode, uint8_t param)
+{
+  return opcode == COMM_OPCODE_PING || opcode == COMM_OPCODE_GET_STATUS ||
+         opcode == COMM_OPCODE_STOP || opcode == COMM_OPCODE_ESTOP ||
+         opcode == COMM_OPCODE_GET_CONFIG || opcode == COMM_OPCODE_ZC_DIAG ||
+         ((opcode == COMM_OPCODE_SET_CONFIG || opcode == COMM_OPCODE_RESET_CONFIG) &&
+          param == COMM_PARAM_ZC_MAP) ||
+         (opcode >= COMM_OPCODE_LOG_START && opcode <= COMM_OPCODE_LOG_RATE);
+}
+
+static void stop_manual_outputs(void)
+{
+  if (sine_drive_is_active()) sine_drive_stop();
+  if (step_test_is_active()) step_test_stop();
+  if (zc_diag_is_freewheel_active()) zc_diag_freewheel_stop();
 }
 
 static bool is_startup_param(uint8_t param)
@@ -214,12 +243,36 @@ static bool is_startup_param(uint8_t param)
 
 static bool is_idle_only_param(uint8_t param)
 {
-  return is_startup_param(param) || param == COMM_PARAM_BEMF_BLANKING_US;
+  return is_startup_param(param) || param == COMM_PARAM_BEMF_BLANKING_US ||
+         param == COMM_PARAM_ZC_MAP;
 }
 
 static bool config_write_requires_idle(uint8_t param)
 {
   return is_idle_only_param(param) || param == COMM_PARAM_ALL;
+}
+
+static uint16_t serialize_zc_diag_report(const ZcDiagReport* report, uint8_t* payload_out)
+{
+  payload_out[0] = report->active;
+  payload_out[1] = report->live_pins;
+  payload_out[2] = report->seen_states_mask;
+  payload_out[3] = report->health_flags;
+  write_u16_le(&payload_out[4], report->edges[0]);
+  write_u16_le(&payload_out[6], report->edges[1]);
+  write_u16_le(&payload_out[8], report->edges[2]);
+  write_u16_le(&payload_out[10], report->forward_steps);
+  write_u16_le(&payload_out[12], report->reverse_steps);
+  write_u16_le(&payload_out[14], report->invalid_steps);
+  write_u16_le(&payload_out[16], report->glitch_count);
+  write_u16_le(&payload_out[18], report->estimated_rpm);
+  write_u16_le(&payload_out[20], report->avg_step_ticks);
+  payload_out[22] = report->step_asymmetry_pct;
+  payload_out[23] = report->active_map[0];
+  payload_out[24] = report->active_map[1];
+  payload_out[25] = report->active_map[2];
+  memcpy(&payload_out[26], report->recent_events, 6U);
+  return 32U;
 }
 
 __attribute__((optimize("Oz"))) static uint16_t
@@ -340,6 +393,10 @@ static uint8_t get_config(uint8_t param, uint8_t* payload, uint16_t* payload_len
     write_u16_le(payload, get_bemf_blanking_us());
     *payload_len = 2;
     return COMM_STATUS_OK;
+  case COMM_PARAM_ZC_MAP:
+    get_zc_channel_map(&payload[0], &payload[1], &payload[2]);
+    *payload_len = 3;
+    return COMM_STATUS_OK;
   case COMM_PARAM_CURRENT_LIMIT:
   case COMM_PARAM_TEMP_LIMIT:
   case COMM_PARAM_KP:
@@ -353,7 +410,10 @@ static uint8_t get_config(uint8_t param, uint8_t* payload, uint16_t* payload_len
 
 static uint8_t set_config(uint8_t param, const uint8_t* payload, uint16_t payload_len)
 {
-  if (config_write_requires_idle(param) && app_state != IDLE) return COMM_STATUS_INVALID_STATE;
+  bool allow_in_freewheel = (param == COMM_PARAM_ZC_MAP && app_state == FREEWHEEL);
+  if (config_write_requires_idle(param) && app_state != IDLE && !allow_in_freewheel) {
+    return COMM_STATUS_INVALID_STATE;
+  }
   ConfigStatus result = CONFIG_UNKNOWN;
 
   switch (param) {
@@ -409,6 +469,10 @@ static uint8_t set_config(uint8_t param, const uint8_t* payload, uint16_t payloa
     if (payload_len != 2U) return COMM_STATUS_BAD_LENGTH;
     result = set_bemf_blanking_us(read_u16_le(payload));
     break;
+  case COMM_PARAM_ZC_MAP:
+    if (payload_len != 3U) return COMM_STATUS_BAD_LENGTH;
+    result = set_zc_channel_map(payload[0], payload[1], payload[2]);
+    break;
   case COMM_PARAM_CURRENT_LIMIT:
   case COMM_PARAM_TEMP_LIMIT:
   case COMM_PARAM_KP:
@@ -444,6 +508,7 @@ static uint8_t save_config(uint8_t param)
   case COMM_PARAM_STARTUP_FINAL_FREQUENCY:
   case COMM_PARAM_STARTUP_DURATION:
   case COMM_PARAM_BEMF_BLANKING_US:
+  case COMM_PARAM_ZC_MAP:
   case COMM_PARAM_ALL:
     return status_from_flash(flash_config_save());
   case COMM_PARAM_CURRENT_LIMIT:
@@ -456,7 +521,10 @@ static uint8_t save_config(uint8_t param)
 
 static uint8_t reset_config(uint8_t param)
 {
-  if (config_write_requires_idle(param) && app_state != IDLE) return COMM_STATUS_INVALID_STATE;
+  bool allow_in_freewheel = (param == COMM_PARAM_ZC_MAP && app_state == FREEWHEEL);
+  if (config_write_requires_idle(param) && app_state != IDLE && !allow_in_freewheel) {
+    return COMM_STATUS_INVALID_STATE;
+  }
   switch (param) {
   case COMM_PARAM_ALL:
     set_default_esc_params();
@@ -518,6 +586,12 @@ static uint8_t reset_config(uint8_t param)
     current_esc_params.bemf_blanking_us = ESC_DEFAULT_BEMF_BLANKING_US;
     flash_config_parameter_changed();
     break;
+  case COMM_PARAM_ZC_MAP:
+    current_esc_params.zc_channel_u = ESC_DEFAULT_ZC_CHANNEL_U;
+    current_esc_params.zc_channel_v = ESC_DEFAULT_ZC_CHANNEL_V;
+    current_esc_params.zc_channel_w = ESC_DEFAULT_ZC_CHANNEL_W;
+    flash_config_parameter_changed();
+    break;
   case COMM_PARAM_CURRENT_LIMIT:
   case COMM_PARAM_TEMP_LIMIT:
   case COMM_PARAM_KP:
@@ -574,9 +648,12 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     return COMM_STATUS_INVALID_STATE;
   }
 
-  if (app_state == SINE_DRIVE && opcode != COMM_OPCODE_PING &&
-      opcode != COMM_OPCODE_GET_STATUS && opcode != COMM_OPCODE_STOP &&
-      opcode != COMM_OPCODE_ESTOP && opcode != COMM_OPCODE_SINE_DRIVE) {
+  if ((app_state == SINE_DRIVE || app_state == STEP_TEST) &&
+      !manual_output_allows_opcode(opcode)) {
+    return COMM_STATUS_INVALID_STATE;
+  }
+
+  if (app_state == FREEWHEEL && !freewheel_allows_opcode(opcode, param)) {
     return COMM_STATUS_INVALID_STATE;
   }
 
@@ -615,14 +692,14 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
   case REQUEST_STOP:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
     if (!stop_state_allows_command()) return COMM_STATUS_INVALID_STATE;
-    if (sine_drive_is_active()) sine_drive_stop();
+    stop_manual_outputs();
     stop_motor(0);
     app_state = IDLE;
     return COMM_STATUS_OK;
 
   case REQUEST_ESTOP:
     if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
-    if (sine_drive_is_active()) sine_drive_stop();
+    stop_manual_outputs();
     stop_motor(1);
     app_state = IDLE;
     return COMM_STATUS_OK;
@@ -818,6 +895,78 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     write_u16_le(&payload_out[4], applied.amplitude_permille);
     *payload_out_len = 6U;
     return COMM_STATUS_OK;
+  }
+
+  case REQUEST_STEP_TEST: {
+    if (payload_len != 3U) return COMM_STATUS_BAD_LENGTH;
+    if (param != COMM_STEP_TEST_PARAM_APPLY && param != COMM_STEP_TEST_PARAM_KEEPALIVE) {
+      return COMM_STATUS_UNKNOWN_PARAM;
+    }
+    if (param == COMM_STEP_TEST_PARAM_KEEPALIVE && app_state != STEP_TEST) {
+      return COMM_STATUS_INVALID_STATE;
+    }
+    uint8_t step = payload[0];
+    uint16_t duty_permille = read_u16_le(&payload[1]);
+    if (step >= NUM_POS) return COMM_STATUS_UNKNOWN_PARAM;
+    if (duty_permille > ESC_MAX_STEP_TEST_DUTY_PERMILLE) return COMM_STATUS_OVERLIMIT;
+    if (!step_test_apply(step, duty_permille)) return COMM_STATUS_INVALID_STATE;
+
+    payload_out[0] = step;
+    write_u16_le(&payload_out[1], duty_permille);
+    *payload_out_len = 3U;
+    return COMM_STATUS_OK;
+  }
+
+  case REQUEST_ZC_DIAG: {
+    switch (param) {
+    case COMM_ZC_DIAG_PARAM_START: {
+      if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
+      if (!zc_diag_freewheel_start()) return COMM_STATUS_INVALID_STATE;
+      ZcDiagReport report;
+      zc_diag_get_report(&report);
+      *payload_out_len = serialize_zc_diag_report(&report, payload_out);
+      return COMM_STATUS_OK;
+    }
+    case COMM_ZC_DIAG_PARAM_STOP:
+      if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
+      if (app_state != FREEWHEEL && app_state != IDLE) return COMM_STATUS_INVALID_STATE;
+      zc_diag_freewheel_stop();
+      return COMM_STATUS_OK;
+    case COMM_ZC_DIAG_PARAM_GET_REPORT: {
+      if (payload_len != 0U) return COMM_STATUS_BAD_LENGTH;
+      ZcDiagReport report;
+      zc_diag_get_report(&report);
+      *payload_out_len = serialize_zc_diag_report(&report, payload_out);
+      return COMM_STATUS_OK;
+    }
+    case COMM_ZC_DIAG_PARAM_AUTO_DETECT: {
+      uint16_t duty_permille = ESC_DEFAULT_ZC_AUTO_DETECT_DUTY_PERMILLE;
+      if (payload_len == 2U) {
+        duty_permille = read_u16_le(payload);
+        if (duty_permille < ESC_MIN_ZC_AUTO_DETECT_DUTY_PERMILLE) {
+          return COMM_STATUS_UNDERLIMIT;
+        }
+        if (duty_permille > ESC_MAX_ZC_AUTO_DETECT_DUTY_PERMILLE) {
+          return COMM_STATUS_OVERLIMIT;
+        }
+      } else if (payload_len != 0U) {
+        return COMM_STATUS_BAD_LENGTH;
+      }
+      if (app_state != IDLE) return COMM_STATUS_INVALID_STATE;
+      ZcAutoDetectResult result;
+      if (!zc_diag_auto_detect(duty_permille, &result)) {
+        return COMM_STATUS_INVALID_STATE;
+      }
+      payload_out[0] = result.result_code;
+      memcpy(&payload_out[1], result.detected_map, 3U);
+      memcpy(&payload_out[4], result.active_map, 3U);
+      memcpy(&payload_out[7], result.high_pct, 9U);
+      *payload_out_len = 16U;
+      return COMM_STATUS_OK;
+    }
+    default:
+      return COMM_STATUS_UNKNOWN_PARAM;
+    }
   }
 
   default:

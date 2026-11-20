@@ -17,6 +17,7 @@
 - Focus bridge tests: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj --filter "FullyQualifiedName~BridgeTests"`
 - Focus app shell tests: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj --filter "FullyQualifiedName~AppShellTests"`
 - Publish Windows GUI exe from repo root: `powershell -ExecutionPolicy Bypass -File .\gui\EscGui\publish-gui-win-x64.ps1`
+- Before publishing, stop any running `Esc.Web` process without asking (the published `Esc.Web.dll` is locked while the app runs and the publish fails with `MSB3021`): `Get-Process -Name "Esc.Web" -ErrorAction SilentlyContinue | Stop-Process -Force`
 
 ## Stack
 

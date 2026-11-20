@@ -1,6 +1,7 @@
-﻿@inherits LayoutComponentBase
+@inherits LayoutComponentBase
 @implements IDisposable
 @inject EscBridgeService Bridge
+@inject IJSRuntime JS
 
 <div class="app-shell">
     <aside class="app-rail">
@@ -8,61 +9,107 @@
             <span class="brand-mark">ESC</span>
             <span class="brand-copy">
                 <strong>ESC Control</strong>
-                <span>STM32 / BLDC</span>
+                <span>STM32F103 · BLDC</span>
             </span>
         </a>
 
         <nav class="primary-nav" aria-label="Navegacion principal">
             <NavLink href="/" Match="NavLinkMatch.All">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 3h6v8H3zM11 3h6v5h-6zM11 10h6v7h-6zM3 13h6v4H3z" /></svg>
                 <span>Dashboard</span>
             </NavLink>
-            <NavLink href="/runs">
-                <span>Validaciones</span>
+            <NavLink href="/debug">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2v3M4.5 4.5l2 2M15.5 4.5l-2 2M6 9h8v5a4 4 0 0 1-8 0zM2 11h4M14 11h4M3 17l3-2M17 17l-3-2" /></svg>
+                <span>Debug</span>
             </NavLink>
             <NavLink href="/startup">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 8 9l3 3 6-8M13 4h4v4" /></svg>
                 <span>Arranque</span>
             </NavLink>
             <NavLink href="/pil">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h9" /></svg>
                 <span>PIL Monitor</span>
             </NavLink>
         </nav>
 
-        <div class="rail-lower">
-            <section class="rail-config" aria-label="Configuracion activa del ESC">
-                <div class="rail-config-title">
-                    <span>CONFIG MCU</span>
-                    <button @onclick="RefreshReferenceAsync" disabled="@(_refreshing || _snapshot.State != DeviceConnectionState.Connected)" title="Actualizar configuracion">REF</button>
-                </div>
-                @if (_snapshot.ValidationReference is { } reference)
-                {
-                    <div class="rail-config-grid">
-                        <span>KP/KI/KD</span><strong>@GainText</strong>
-                        <span>CONTROL</span><strong>PI RPM V@reference.AlgorithmVersion</strong>
-                        <span>POLOS</span><strong>@(_snapshot.ActiveControllerConfig?.PolePairs.ToString() ?? "-")</strong>
-                        <span>PWM</span><strong>@reference.PwmFrequencyHz Hz</strong>
-                        <span>ARR</span><strong>@reference.PwmArrCounts</strong>
-                        <span>TIMER RPM</span><strong>@reference.SpeedTimerHz Hz</strong>
-                        <span>PERIODO</span><strong>@reference.SpeedMaxPeriodTicks-@reference.SpeedMinPeriodTicks</strong>
-                        <span>DT</span><strong>@reference.ControllerDtSeconds.ToString("0.000") s</strong>
-                    </div>
-                }
-                else
-                {
-                    <p>@ReferenceState</p>
-                }
-            </section>
-            <div class="rail-footer">
-                <span class="status-led @_ledClass" aria-hidden="true"></span>
-                <span>@_ledLabel</span>
+        <section class="rail-config" aria-label="Configuracion activa del ESC">
+            <div class="rail-config-title">
+                <span>Config MCU</span>
+                <button type="button" class="ghost" @onclick="RefreshReferenceAsync" disabled="@(_refreshing || !IsConnected)" title="Leer configuracion del MCU">Leer</button>
             </div>
-        </div>
+            @if (_snapshot.ValidationReference is { } reference)
+            {
+                <dl class="rail-config-grid">
+                    <dt>KP · KI · KD</dt><dd>@GainText</dd>
+                    <dt>Control</dt><dd>@($"PI RPM v{reference.AlgorithmVersion}")</dd>
+                    <dt>Pares polos</dt><dd>@(_snapshot.ActiveControllerConfig?.PolePairs.ToString() ?? "-")</dd>
+                    <dt>PWM</dt><dd>@KiloHertz(reference.PwmFrequencyHz)</dd>
+                    <dt>ARR</dt><dd>@reference.PwmArrCounts</dd>
+                    <dt>Timer RPM</dt><dd>@KiloHertz(reference.SpeedTimerHz)</dd>
+                    <dt>Periodo</dt><dd>@reference.SpeedMaxPeriodTicks–@reference.SpeedMinPeriodTicks</dd>
+                    <dt>dt</dt><dd>@Invariant(reference.ControllerDtSeconds, "0.000") s</dd>
+                </dl>
+            }
+            else
+            {
+                <p>@ReferenceState</p>
+            }
+        </section>
     </aside>
 
     <div class="app-workspace">
         <header class="workspace-header">
-            <span>Sistema de control y adquisición</span>
-            <span>ESC BLDC · STM32F103</span>
+            <div class="connection-bar">
+                <span class="status-led @_ledClass" aria-hidden="true"></span>
+                <span class="connection-label">@_ledLabel</span>
+                <select aria-label="Dispositivo HID" @bind="_selectedDevicePath" disabled="@(_busy || !_snapshot.Devices.Any() || IsConnected)">
+                    @if (!_snapshot.Devices.Any())
+                    {
+                        <option value="">0x3232:0xEC32 no detectado</option>
+                    }
+                    else
+                    {
+                        @foreach (var device in _snapshot.Devices)
+                        {
+                            <option value="@device.DevicePath">@DeviceLabel(device)</option>
+                        }
+                    }
+                </select>
+                <button type="button" class="icon-button ghost" @onclick="RefreshDevicesAsync" disabled="@_busy" title="Buscar dispositivos" aria-label="Buscar dispositivos">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M16 10a6 6 0 1 1-1.8-4.3M16 3v4h-4" /></svg>
+                </button>
+                @if (IsConnected)
+                {
+                    <button type="button" @onclick="DisconnectAsync" disabled="@_busy">Desconectar</button>
+                }
+                else
+                {
+                    <button type="button" class="primary" @onclick="ConnectAsync" disabled="@(_busy || !_snapshot.Devices.Any())">Conectar</button>
+                }
+            </div>
+
+            <div class="header-actions">
+                <label class="mode-select" title="@ModeHint">
+                    <span>Modo</span>
+                    <select value="@_snapshot.Mode" @onchange="SetModeAsync" disabled="@_busy">
+                        <option value="@ControlMode.GuiControl">GUI control</option>
+                        <option value="@ControlMode.SimulinkControl">Simulink control</option>
+                        <option value="@ControlMode.MonitorOnly">Solo monitoreo</option>
+                    </select>
+                </label>
+                <button type="button" class="topbar-estop" @onclick="EmergencyStopAsync" disabled="@(_estopBusy || !CanEmergencyStop)">ESTOP</button>
+            </div>
         </header>
+
+        @if (!string.IsNullOrWhiteSpace(_snapshot.LastError))
+        {
+            <div class="alert" role="alert">@_snapshot.LastError</div>
+        }
+        @if (!string.IsNullOrWhiteSpace(_layoutMessage))
+        {
+            <p class="layout-feedback" role="status" aria-live="polite">@_layoutMessage</p>
+        }
+
         <div class="page-content">
             @Body
         </div>
@@ -76,23 +123,39 @@
 </div>
 
 @code {
+    private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
+
     private string _ledClass = "led-notdetected";
     private string _ledLabel = "SIN CONEXION";
     private BridgeSnapshot _snapshot = default!;
+    private string? _selectedDevicePath;
+    private string? _layoutMessage;
     private bool _refreshing;
+    private bool _busy;
+    private bool _estopBusy;
     private bool _disposed;
 
+    private bool IsConnected => _snapshot.State == DeviceConnectionState.Connected;
+    private bool CanEmergencyStop => _snapshot.TransportOpen;
     private string GainText => _snapshot.ActiveControllerConfig is { } config
-        ? $"{config.Kp:0.00}/{config.Ki:0.00}/{config.Kd:0.00}"
-        : "-/-/-";
-    private string ReferenceState => _snapshot.State == DeviceConnectionState.Connected
-        ? (_snapshot.ValidationReferenceError is null ? "SIN LEER" : "LECTURA FALLIDA")
-        : "DESCONECTADO";
+        ? $"{Invariant(config.Kp, "0.00")} · {Invariant(config.Ki, "0.00")} · {Invariant(config.Kd, "0.00")}"
+        : "-";
+    private string ReferenceState => IsConnected
+        ? (_snapshot.ValidationReferenceError is null ? "Sin leer" : "Lectura fallida")
+        : "Desconectado";
+    private string ModeHint => _snapshot.Mode switch
+    {
+        ControlMode.GuiControl => "La GUI puede enviar comandos al ESC.",
+        ControlMode.SimulinkControl => "Comandos reservados para Simulink salvo ESTOP.",
+        ControlMode.MonitorOnly => "Solo adquisicion y monitoreo.",
+        _ => string.Empty
+    };
 
     protected override void OnInitialized()
     {
         _snapshot = Bridge.Snapshot;
         UpdateLed(_snapshot.State);
+        PickDefaultDevice();
     }
 
     protected override void OnAfterRender(bool firstRender)
@@ -116,8 +179,58 @@
 
             _snapshot = Bridge.Snapshot;
             UpdateLed(_snapshot.State);
+            PickDefaultDevice();
             StateHasChanged();
         });
+    }
+
+    private async Task RefreshDevicesAsync() => await BusyAsync(async () =>
+    {
+        await Bridge.ScanAsync();
+        _layoutMessage = null;
+    });
+
+    private async Task ConnectAsync() => await BusyAsync(async () =>
+    {
+        CommandResult result = await Bridge.ConnectAsync(_selectedDevicePath);
+        _layoutMessage = result.Success ? null : result.Message;
+    });
+
+    private async Task DisconnectAsync() => await BusyAsync(async () =>
+    {
+        await Bridge.DisconnectAsync();
+        _layoutMessage = null;
+    });
+
+    private async Task SetModeAsync(ChangeEventArgs args) => await BusyAsync(async () =>
+    {
+        if (!Enum.TryParse(args.Value?.ToString(), out ControlMode mode))
+        {
+            return;
+        }
+
+        if (!await JS.InvokeAsync<bool>("confirm", $"Cambiar modo a {mode}?"))
+        {
+            return;
+        }
+
+        CommandResult result = await Bridge.SetModeAsync(mode);
+        _layoutMessage = result.Success ? null : result.Message;
+    });
+
+    private async Task EmergencyStopAsync()
+    {
+        if (_estopBusy || !CanEmergencyStop) return;
+        _estopBusy = true;
+        try
+        {
+            CommandResult result = await Bridge.EmergencyStopAsync();
+            _layoutMessage = result.Message;
+        }
+        finally
+        {
+            _estopBusy = false;
+        }
     }
 
     private async Task RefreshReferenceAsync()
@@ -137,18 +250,59 @@
         }
     }
 
+    private async Task BusyAsync(Func<Task> operation)
+    {
+        if (_busy) return;
+        _busy = true;
+        try
+        {
+            await operation();
+        }
+        finally
+        {
+            _busy = false;
+            _snapshot = Bridge.Snapshot;
+        }
+    }
+
+    private void PickDefaultDevice()
+    {
+        if (_snapshot.Devices.Count == 0)
+        {
+            _selectedDevicePath = null;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_selectedDevicePath) ||
+            _snapshot.Devices.All(device => !string.Equals(device.DevicePath, _selectedDevicePath, StringComparison.Ordinal)))
+        {
+            _selectedDevicePath = (_snapshot.CurrentDevice ?? _snapshot.Devices[0]).DevicePath;
+        }
+    }
+
     private void UpdateLed(DeviceConnectionState state)
     {
         (_ledClass, _ledLabel) = state switch
         {
-            DeviceConnectionState.Connected => ("led-connected", "CONECTADO"),
-            DeviceConnectionState.Detected => ("led-detected", "DETECTADO"),
-            DeviceConnectionState.Connecting => ("led-connecting", "CONECTANDO"),
-            DeviceConnectionState.Error => ("led-error", "ERROR"),
-            DeviceConnectionState.Disconnected => ("led-error", "DESCONECTADO"),
-            _ => ("led-notdetected", "SIN CONEXION")
+            DeviceConnectionState.Connected => ("led-connected", "Conectado"),
+            DeviceConnectionState.Detected => ("led-detected", "Detectado"),
+            DeviceConnectionState.Connecting => ("led-connecting", "Conectando"),
+            DeviceConnectionState.Error => ("led-error", "Error"),
+            DeviceConnectionState.Disconnected => ("led-error", "Desconectado"),
+            _ => ("led-notdetected", "Sin dispositivo")
         };
     }
+
+    private static string DeviceLabel(HidDeviceDescriptor device)
+    {
+        string serial = string.IsNullOrWhiteSpace(device.SerialNumber) ? "sin serial" : device.SerialNumber;
+        return $"{device.DisplayName} · {serial}";
+    }
+
+    private static string Invariant(double value, string format) => value.ToString(format, Inv);
+
+    private static string KiloHertz(double hertz) =>
+        hertz >= 1000 ? $"{Invariant(hertz / 1000.0, "0.#")} kHz" : $"{Invariant(hertz, "0")} Hz";
 
     public void Dispose()
     {

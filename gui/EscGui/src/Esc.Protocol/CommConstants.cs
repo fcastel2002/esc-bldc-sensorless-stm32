@@ -18,6 +18,10 @@ public static class CommConstants
     public const double MinSineFrequencyHz = 2.0;
     public const double MaxSineFrequencyHz = 10.0;
     public const double MaxSineAmplitudePercent = 100.0;
+    public const double MaxStepTestDutyPercent = 30.0;
+    public const double MinZcAutoDetectDutyPercent = 5.0;
+    public const double MaxZcAutoDetectDutyPercent = 25.0;
+    public const double DefaultZcAutoDetectDutyPercent = 15.0;
     public const double MinStartupDurationSeconds = 0.5;
     public const double MaxStartupDurationSeconds = 10.0;
 }
@@ -53,6 +57,8 @@ public enum CommOpcode : byte
     HilGetOutputs = 0x43,
     HilStep = 0x44,
     SineDrive = 0x50,
+    StepTest = 0x51,
+    ZcDiag = 0x52,
 }
 
 public enum CommStatus : byte
@@ -90,6 +96,53 @@ public enum SineDriveCommand : byte
     KeepAlive = 1,
 }
 
+public enum StepTestCommand : byte
+{
+    Apply = 0,
+    KeepAlive = 1,
+}
+
+public enum ZcDiagCommand : byte
+{
+    Start = 0,
+    Stop = 1,
+    GetReport = 2,
+    AutoDetect = 3,
+}
+
+public enum ZcAutoDetectStatus : byte
+{
+    Ok = 0,
+    OkInverted = 1,
+    NoSignal = 2,
+    Ambiguous = 3,
+}
+
+[Flags]
+public enum ZcHealthFlags : byte
+{
+    None = 0,
+    HasMotion = 1 << 0,
+    SequenceValid = 1 << 1,
+    DirectionForward = 1 << 2,
+    DirectionReverse = 1 << 3,
+    Channel0Dead = 1 << 4,
+    Channel1Dead = 1 << 5,
+    Channel2Dead = 1 << 6,
+    NoiseOrInvalid = 1 << 7,
+}
+
+/// <summary>Mismo orden que POS_UV..POS_WV en firmware (basic_config.h).</summary>
+public enum CommutationStep : byte
+{
+    UV = 0,
+    UW = 1,
+    VW = 2,
+    VU = 3,
+    WU = 4,
+    WV = 5,
+}
+
 public enum ConfigParam : byte
 {
     PwmFreq = 0x01,
@@ -110,6 +163,7 @@ public enum ConfigParam : byte
     StartupFinalFrequency = 0x10,
     StartupDuration = 0x11,
     BemfBlankingUs = 0x12,
+    ZcMap = 0x13,
     All = 0xFF,
 }
 

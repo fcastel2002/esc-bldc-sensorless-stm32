@@ -27,7 +27,7 @@
 - RPM PI v2 stores gains as floats but executes Q16.16; `KP_RPM/KI_RPM` payloads use `int16` hundredths. KD is fixed at zero.
 - In `CLOSEDLOOP`, `PWM_FREQ`, `KP`, `KI`, and `KD` apply hot. Other config changes use the deferred `CONFIG` path.
 - `KD` acts on measured-speed derivative, not error derivative.
-- `CURRENT_LIMIT` and `TEMP_LIMIT` remain `NOT_IMPLEMENTED`. `CURRENT_U`/`CURRENT_V` telemetry comes from synchronized low-side shunts; temperature telemetry remains a placeholder.
+- `CURRENT_LIMIT` and `TEMP_LIMIT` remain `NOT_IMPLEMENTED`. `CURRENT_U`/`CURRENT_V` telemetry (`PA3`/`PA4`, ADC1/ADC2 injected) exists in firmware, **but hardware current sensing is currently not connected/populated** (L298 `SENSE_A`/`SENSE_B` was dropped; planned replacement uses dedicated per-phase conditioning with op-amp); do not rely on current readings until the new sensing hardware is built. Temperature telemetry remains a placeholder.
 - `foc_startup()` is historical naming: it is open-loop sinusoidal/SPWM startup, not field-oriented control and not a current loop.
 
 ## Critical Files

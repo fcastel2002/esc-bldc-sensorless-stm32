@@ -179,6 +179,140 @@ public static class EscProtocol
             BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(4, 2)) / 10.0);
     }
 
+    public static byte[] StepTestPayload(StepTestSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (!Enum.IsDefined(settings.Step))
+        {
+            throw new ArgumentOutOfRangeException(nameof(settings), settings.Step, "Unknown commutation step.");
+        }
+        EnsureFinite(settings.DutyPercent, nameof(settings));
+        if (settings.DutyPercent is < 0 or > CommConstants.MaxStepTestDutyPercent)
+        {
+            throw new ArgumentOutOfRangeException(nameof(settings), settings.DutyPercent, "Duty out of range.");
+        }
+
+        var payload = new byte[3];
+        payload[0] = (byte)settings.Step;
+        BinaryPrimitives.WriteUInt16LittleEndian(
+            payload.AsSpan(1, 2), checked((ushort)Math.Round(settings.DutyPercent * 10.0)));
+        return payload;
+    }
+
+    public static StepTestSettings DecodeStepTest(EscFrame frame)
+    {
+        EnsureOkResponse(frame, CommOpcode.StepTest);
+        if (frame.Payload.Length != 3)
+        {
+            throw new EscProtocolException(
+                $"STEP_TEST response payload must be exactly 3 bytes, received {frame.Payload.Length}.");
+        }
+
+        return new StepTestSettings(
+            (CommutationStep)frame.Payload[0],
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(1, 2)) / 10.0);
+    }
+
+    public static byte[] ZcMapPayload(ZcChannelMap map)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        if (!map.IsValid)
+        {
+            throw new ArgumentOutOfRangeException(nameof(map), "ZC channel map must be a permutation of {0, 1, 2}.");
+        }
+
+        return [map.ChannelU, map.ChannelV, map.ChannelW];
+    }
+
+    public static ZcChannelMap DecodeZcMap(ReadOnlySpan<byte> payload)
+    {
+        if (payload.Length != 3)
+        {
+            throw new EscProtocolException($"ZC_MAP payload must be exactly 3 bytes, received {payload.Length}.");
+        }
+
+        var map = new ZcChannelMap(payload[0], payload[1], payload[2]);
+        if (!map.IsValid)
+        {
+            throw new EscProtocolException($"Invalid ZC_MAP permutation: [{payload[0]}, {payload[1]}, {payload[2]}].");
+        }
+
+        return map;
+    }
+
+    public static byte[] ZcAutoDetectPayload(double dutyPercent)
+    {
+        EnsureFinite(dutyPercent, nameof(dutyPercent));
+        if (dutyPercent is < CommConstants.MinZcAutoDetectDutyPercent or > CommConstants.MaxZcAutoDetectDutyPercent)
+        {
+            throw new ArgumentOutOfRangeException(nameof(dutyPercent), dutyPercent, "Auto-detect duty out of range.");
+        }
+
+        return UInt16Payload(checked((int)Math.Round(dutyPercent * 10.0)));
+    }
+
+    public static ZcDiagReport DecodeZcDiagReport(EscFrame frame)
+    {
+        EnsureOkResponse(frame, CommOpcode.ZcDiag);
+        if (frame.Payload.Length != 32)
+        {
+            throw new EscProtocolException(
+                $"ZC_DIAG report payload must be exactly 32 bytes, received {frame.Payload.Length}.");
+        }
+
+        ReadOnlySpan<byte> p = frame.Payload;
+        var activeMap = new ZcChannelMap(p[23], p[24], p[25]);
+        var recent = new List<ZcRecentEvent>(6);
+        for (int i = 0; i < 6; i++)
+        {
+            byte raw = p[26 + i];
+            if ((raw & 0x80) != 0)
+            {
+                recent.Add(new ZcRecentEvent((byte)(raw & 0x03), (raw & 0x04) != 0));
+            }
+        }
+
+        return new ZcDiagReport(
+            Active: p[0] != 0,
+            LivePinsMask: p[1],
+            SeenStatesMask: p[2],
+            HealthFlags: (ZcHealthFlags)p[3],
+            EdgesCh0: BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(4, 2)),
+            EdgesCh1: BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(6, 2)),
+            EdgesCh2: BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(8, 2)),
+            ForwardSteps: BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(10, 2)),
+            ReverseSteps: BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(12, 2)),
+            InvalidSteps: BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(14, 2)),
+            GlitchCount: BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(16, 2)),
+            EstimatedRpm: BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(18, 2)),
+            AvgStepTicks: BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(20, 2)),
+            StepAsymmetryPct: p[22],
+            ActiveMap: activeMap.IsValid ? activeMap : ZcChannelMap.Default,
+            RecentEvents: recent);
+    }
+
+    public static ZcAutoDetectResult DecodeZcAutoDetect(EscFrame frame)
+    {
+        EnsureOkResponse(frame, CommOpcode.ZcDiag);
+        if (frame.Payload.Length != 16)
+        {
+            throw new EscProtocolException(
+                $"ZC_DIAG auto-detect payload must be exactly 16 bytes, received {frame.Payload.Length}.");
+        }
+
+        ReadOnlySpan<byte> p = frame.Payload;
+        var status = (ZcAutoDetectStatus)p[0];
+        var candidate = new ZcChannelMap(p[1], p[2], p[3]);
+        var active = new ZcChannelMap(p[4], p[5], p[6]);
+        byte[] matrix = p.Slice(7, 9).ToArray();
+
+        return new ZcAutoDetectResult(
+            status,
+            candidate.IsValid ? candidate : null,
+            active.IsValid ? active : ZcChannelMap.Default,
+            matrix);
+    }
+
     public static byte[] ControlModePayload(ControlRuntimeMode mode)
     {
         return [(byte)mode];
@@ -324,6 +458,8 @@ public static class EscProtocol
                 => BinaryPrimitives.ReadUInt32LittleEndian(payload[..4]) / 1000.0,
             ConfigParam.StartupDuration when payload.Length >= 4
                 => BinaryPrimitives.ReadUInt32LittleEndian(payload[..4]) / 1000.0,
+            ConfigParam.ZcMap when payload.Length == 3
+                => DecodeZcMap(payload),
             _ => payload.ToArray()
         };
     }
@@ -480,6 +616,8 @@ public static class EscProtocol
             8 => "HARD_ERROR",
             9 => "FINISH",
             10 => "SINE_DRIVE",
+            11 => "STEP_TEST",
+            12 => "FREEWHEEL",
             _ => $"STATE_{value}"
         };
     }

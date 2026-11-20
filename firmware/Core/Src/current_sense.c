@@ -98,7 +98,7 @@ void current_sense_handle_conversion(void)
   uint16_t raw_u = (uint16_t)HAL_ADCEx_InjectedGetValue(&hadc1, ADC_INJECTED_RANK_1);
   uint16_t raw_v = (uint16_t)HAL_ADCEx_InjectedGetValue(&hadc2, ADC_INJECTED_RANK_1);
   int8_t step = bldc_get_commutation_step();
-  bool running = app_state == RUNNING || app_state == CLOSEDLOOP;
+  bool running = app_state == RUNNING || app_state == CLOSEDLOOP || app_state == STEP_TEST;
   uint16_t arr = (uint16_t)TIM1->ARR;
   bool window_valid = sample_compare >= CURRENT_EDGE_MARGIN_COUNTS &&
                       arr > CURRENT_EDGE_MARGIN_COUNTS &&

@@ -98,19 +98,19 @@ Consecuencia: si un cambio afecta estado observable, casi seguro debe terminar a
 
 - `App.razor` monta `Routes` y `ReconnectModal`.
 - `Routes.razor` usa `MainLayout` y enruta a paginas Razor.
-- Las paginas operativas principales son `Components/Pages/Home.razor`, `Startup.razor`, las validaciones y el monitor PIL.
+- Las paginas operativas principales son `Components/Pages/Home.razor` (Dashboard), `Debug.razor`, `Startup.razor` y el monitor PIL. Las paginas de validaciones (`/runs`) se quitaron de la GUI; la API `/api/validation/*` sigue disponible.
+- `MainLayout.razor` es comun a todas las paginas y concentra conexion HID, selector de modo, `ESTOP` global y la tarjeta `CONFIG MCU`.
+- El tema es oscuro y sus tokens viven en `wwwroot/industrial.css` (`--bg`, `--surface*`, `--accent`, `--plot-*`, mas alias legacy `--line`, `--cyan`, ... usados por los graficos).
 - `Home.razor`:
   - inyecta `EscBridgeService` y `ModularControlProvider`.
-  - se suscribe a `Bridge.SnapshotChanged`.
-  - renderiza:
-    - conexion HID
-    - modo de control
-    - estado del ESC
-    - comandos RUN/STOP/ESTOP
-    - controles modulares desde `controls.json`
-    - telemetria de velocidad
-    - lazo abierto sinusoidal trifasico
+  - se suscribe a `Bridge.SnapshotChanged` y lee la config activa al detectar una conexion nueva.
+  - renderiza en dos columnas:
+    - principal: velocidad (`SpeedChart`) y corrientes/BEMF (`CurrentChart`)
+    - lateral: RUN/STOP + consigna, estado del ESC, controles modulares de `controls.json` con botones -/+ que usan `step`
     - paneles minimizables con preferencias en `localStorage`
+- `Debug.razor`:
+  - paso de conmutacion fijo (`STEP_TEST`): selector de los 6 pasos six-step (UV..WV: primera fase PWM, segunda a GND, tercera flotante) con duty 0-30 %. El firmware reutiliza `commutate()` via `bldc_apply_step()`.
+  - lazo abierto sinusoidal trifasico (movido desde el Dashboard).
 - `Startup.razor` muestra los cinco parametros fisicos de la rampa de arranque y separa Aplicar en RAM de Guardar en flash.
 
 ## 7. Worker de fondo
@@ -147,6 +147,7 @@ Detalles importantes:
 - El panel ofrece `Manual`, que conserva un borrador hasta pulsar Aplicar, y `Dinamico`, que usa `UpdateSineDriveAsync()` con `KEEPALIVE` y sin `GET_STATUS` adicional para enviar frecuencia en cada input valido y amplitud al soltar el slider. Al usar `KEEPALIVE`, una edicion dinamica nunca puede iniciar desde `IDLE`.
 - `Dinamico` nunca inicia el motor por editar estando detenido, conserva solo el ultimo valor pendiente si el HID esta ocupado y persiste la seleccion en `localStorage`.
 - Cambiar fuera de `GuiControl` o desconectar detiene primero el lazo abierto; `ESTOP` conserva su camino inmediato sin `GET_STATUS` posterior.
+- `SetStepTestAsync()` sigue las mismas reglas (solo `GuiControl`, `KEEPALIVE` via `MaintainStepTestAsync()` en el mismo ciclo de 350 ms, watchdog de 1500 ms en firmware). Se detiene con `STOP`/`ESTOP`, que vuelven a `IDLE`.
 
 ## 9. Controles modulares
 
@@ -171,7 +172,7 @@ La persistencia en flash no viene del JSON. La UI muestra el boton guardar solo 
 - `TelemetryStore` conserva hasta 2000 muestras por variable.
 - `BridgeSnapshot.SpeedTelemetry` trae estadisticas agregadas.
 - Los canales disponibles son velocidad, `IU`, `IV` y periodo/calidad BEMF. Las corrientes incluyen cuentas ADC, flags de validez y sector de conmutacion.
-- `BridgeSnapshot.StartupConfiguration` y `BridgeSnapshot.SineDrive` exponen configuracion y readback del nuevo modo.
+- `BridgeSnapshot.StartupConfiguration`, `BridgeSnapshot.SineDrive` y `BridgeSnapshot.StepTest` exponen configuracion y readback de los modos manuales.
 - `Bridge.SpeedSamples` expone las muestras de `speed`; `Bridge.CurrentUSamples` y `Bridge.CurrentVSamples` exponen `current_u`/`current_v`.
 - `SpeedChart.razor` dibuja SVG manual (velocidad) y `CurrentChart.razor` dibuja IU e IV simultaneamente en el panel "Adquisicion de corrientes". Ambos reutilizan `js/speed-chart.js` para los cursores.
 
@@ -233,6 +234,7 @@ Los endpoints viven en `BridgeEndpointMapper.cs`.
   - `POST /api/bridge/estop`
   - `POST /api/bridge/set-speed`
   - `POST /api/bridge/sine-drive`
+  - `POST /api/bridge/step-test`
 - config:
   - `GET /api/bridge/config/{parameter}`
   - `POST /api/bridge/config/{parameter}`

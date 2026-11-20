@@ -85,6 +85,8 @@ public sealed class EscBridgeWorker : BackgroundService
             try
             {
                 await _bridge.MaintainSineDriveAsync(stoppingToken).ConfigureAwait(false);
+                await _bridge.MaintainStepTestAsync(stoppingToken).ConfigureAwait(false);
+                await _bridge.PollFreewheelAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -92,7 +94,7 @@ public sealed class EscBridgeWorker : BackgroundService
             }
             catch (Exception ex)
             {
-                _logger.LogDebug(ex, "Sine-drive keepalive failed.");
+                _logger.LogDebug(ex, "Manual output keepalive failed.");
             }
 
             await Task.Delay(350, stoppingToken).ConfigureAwait(false);

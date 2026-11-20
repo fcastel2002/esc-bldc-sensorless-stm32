@@ -144,6 +144,114 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public void StepTestPayloadUsesFirmwareStepIndexAndPermilleDuty()
+    {
+        byte[] payload = EscProtocol.StepTestPayload(new StepTestSettings(CommutationStep.WV, 30));
+
+        Assert.Equal(0x51, (byte)CommOpcode.StepTest);
+        Assert.Equal(0, (byte)CommutationStep.UV);
+        Assert.Equal([5, 0x2C, 0x01], payload);
+    }
+
+    [Theory]
+    [InlineData(-0.1)]
+    [InlineData(30.1)]
+    [InlineData(double.NaN)]
+    public void StepTestPayloadRejectsOutOfRangeDuty(double dutyPercent)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => EscProtocol.StepTestPayload(new StepTestSettings(CommutationStep.UV, dutyPercent)));
+    }
+
+    [Fact]
+    public void StepTestPayloadRejectsUnknownStep()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(
+            () => EscProtocol.StepTestPayload(new StepTestSettings((CommutationStep)6, 5)));
+    }
+
+    [Fact]
+    public void DecodeStepTestAndStatusRecognizeStepTestState()
+    {
+        byte[] raw = EscProtocol.BuildFrame(
+            4, CommOpcode.StepTest, 0, [3, 0x64, 0x00], CommFrameType.Response, CommStatus.Ok);
+        byte[] statusPayload = new byte[10];
+        statusPayload[0] = 11;
+        byte[] rawStatus = EscProtocol.BuildFrame(
+            5, CommOpcode.GetStatus, 0, statusPayload, CommFrameType.Response, CommStatus.Ok);
+
+        StepTestSettings settings = EscProtocol.DecodeStepTest(EscProtocol.Parse(raw));
+
+        Assert.Equal(new StepTestSettings(CommutationStep.VU, 10), settings);
+        Assert.Equal("STEP_TEST", EscProtocol.DecodeStatus(EscProtocol.Parse(rawStatus)).AppStateName);
+    }
+
+    [Fact]
+    public void ZcDiagReportAndAutoDetectAndZcMapDecodeCorrectly()
+    {
+        var map = new ZcChannelMap(1, 2, 0);
+        byte[] mapPayload = EscProtocol.ZcMapPayload(map);
+        Assert.Equal([1, 2, 0], mapPayload);
+        Assert.Equal(map, Assert.IsType<ZcChannelMap>(EscProtocol.DecodeConfigValue(ConfigParam.ZcMap, mapPayload)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => EscProtocol.ZcMapPayload(new ZcChannelMap(1, 1, 0)));
+
+        byte[] reportPayload = new byte[32];
+        reportPayload[0] = 1; // active
+        reportPayload[1] = 0b101; // PA0 & PB10 high
+        reportPayload[2] = 0x7E; // all 6 valid states seen
+        reportPayload[3] = (byte)(ZcHealthFlags.HasMotion | ZcHealthFlags.SequenceValid | ZcHealthFlags.DirectionForward);
+        BitConverter.GetBytes((ushort)12).CopyTo(reportPayload, 4);
+        BitConverter.GetBytes((ushort)12).CopyTo(reportPayload, 6);
+        BitConverter.GetBytes((ushort)12).CopyTo(reportPayload, 8);
+        BitConverter.GetBytes((ushort)35).CopyTo(reportPayload, 10);
+        BitConverter.GetBytes((ushort)0).CopyTo(reportPayload, 12);
+        BitConverter.GetBytes((ushort)0).CopyTo(reportPayload, 14);
+        BitConverter.GetBytes((ushort)1).CopyTo(reportPayload, 16);
+        BitConverter.GetBytes((ushort)420).CopyTo(reportPayload, 18);
+        BitConverter.GetBytes((ushort)2143).CopyTo(reportPayload, 20);
+        reportPayload[22] = 4;
+        reportPayload[23] = 2;
+        reportPayload[24] = 1;
+        reportPayload[25] = 0;
+        reportPayload[26] = 0x80 | 0x04 | 2; // PB10 rising
+        reportPayload[27] = 0x80 | 0x00 | 0; // PA0 falling
+
+        byte[] rawReport = EscProtocol.BuildFrame(
+            7, CommOpcode.ZcDiag, (byte)ZcDiagCommand.GetReport, reportPayload, CommFrameType.Response, CommStatus.Ok);
+        ZcDiagReport report = EscProtocol.DecodeZcDiagReport(EscProtocol.Parse(rawReport));
+
+        Assert.True(report.Active);
+        Assert.True(report.IsPinHigh(0));
+        Assert.False(report.IsPinHigh(1));
+        Assert.True(report.IsPinHigh(2));
+        Assert.Equal((ushort)420, report.EstimatedRpm);
+        Assert.Equal((byte)4, report.StepAsymmetryPct);
+        Assert.Equal(ZcChannelMap.Default, report.ActiveMap);
+        Assert.Equal(2, report.RecentEvents.Count);
+        Assert.Equal(new ZcRecentEvent(2, true), report.RecentEvents[0]);
+        Assert.Equal(new ZcRecentEvent(0, false), report.RecentEvents[1]);
+
+        byte[] detectPayload = [0, 1, 2, 0, 2, 1, 0, 10, 95, 5, 5, 8, 92, 96, 4, 6];
+        byte[] rawDetect = EscProtocol.BuildFrame(
+            8, CommOpcode.ZcDiag, (byte)ZcDiagCommand.AutoDetect, detectPayload, CommFrameType.Response, CommStatus.Ok);
+        ZcAutoDetectResult detected = EscProtocol.DecodeZcAutoDetect(EscProtocol.Parse(rawDetect));
+
+        Assert.Equal(ZcAutoDetectStatus.Ok, detected.Status);
+        Assert.Equal(new ZcChannelMap(1, 2, 0), detected.DetectedMap);
+        Assert.Equal(ZcChannelMap.Default, detected.ActiveMap);
+        Assert.False(detected.MatchesActiveMap);
+        Assert.Equal((byte)95, detected.HighPercent(0, 1));
+        Assert.Equal((byte)92, detected.HighPercent(1, 2));
+        Assert.Equal((byte)96, detected.HighPercent(2, 0));
+
+        byte[] statusPayload = new byte[10];
+        statusPayload[0] = 12;
+        byte[] rawStatus12 = EscProtocol.BuildFrame(
+            9, CommOpcode.GetStatus, 0, statusPayload, CommFrameType.Response, CommStatus.Ok);
+        Assert.Equal("FREEWHEEL", EscProtocol.DecodeStatus(EscProtocol.Parse(rawStatus12)).AppStateName);
+    }
+
+    [Fact]
     public void DecodeSineDriveReadsAppliedQuantizedSettings()
     {
         byte[] raw = EscProtocol.BuildFrame(

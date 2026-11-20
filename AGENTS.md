@@ -40,6 +40,7 @@
 - Run a focused GUI test by filter: `dotnet test gui\EscGui\tests\Esc.Tests\Esc.Tests.csproj --filter "FullyQualifiedName~ProtocolTests"` or replace `ProtocolTests` with the target class/method substring.
 - Publish Windows GUI exe from repo root: `powershell -ExecutionPolicy Bypass -File .\gui\EscGui\publish-gui-win-x64.ps1`; output is `gui\EscGui\publish\win-x64\Esc.Web.exe` plus required web assets in the same folder.
 - Run the Windows GUI publish command as final verification when a change affects `gui/EscGui/`, the shared GUI-facing protocol, bridge behavior, web assets, or Windows packaging. Do not publish the GUI for changes limited to firmware, documentation, repository metadata, or `simulacion_agitador/` unless they also affect the GUI.
+- Before publishing, close any running `Esc.Web` process (the published `Esc.Web.dll` is locked while the app runs and the publish fails with `MSB3021`). Kill it without asking: `Get-Process -Name "Esc.Web" -ErrorAction SilentlyContinue | Stop-Process -Force`.
 
 ## Git Workflow
 
@@ -63,7 +64,7 @@
 - RPM PI v2 stores gains as floats but executes Q16.16; `KP_RPM/KI_RPM` payloads use `int16` hundredths. KD is fixed at zero.
 - In `CLOSEDLOOP`, `PWM_FREQ`, `KP`, `KI`, and `KD` apply hot; other config changes use the deferred `CONFIG` path.
 - RPM PI v2 controls direct RPM error with canonical ARR=2000 output and trapezoidal integration; KD is not implemented.
-- `CURRENT_LIMIT` and `TEMP_LIMIT` remain `NOT_IMPLEMENTED`. `CURRENT_U`/`CURRENT_V` telemetry comes from synchronized low-side shunts; temperature telemetry remains a placeholder.
+- `CURRENT_LIMIT` and `TEMP_LIMIT` remain `NOT_IMPLEMENTED`. `CURRENT_U`/`CURRENT_V` telemetry (`PA3`/`PA4`, ADC1/ADC2 injected) exists in firmware, **but hardware current sensing is currently not connected/populated** (L298 `SENSE_A`/`SENSE_B` was dropped; planned replacement uses dedicated per-phase conditioning with op-amp); do not rely on current readings until the new sensing hardware is built. Temperature telemetry remains a placeholder.
 - CubeMX-generated files may contain `USER CODE BEGIN/END` regions; avoid editing generated sections outside those regions unless the task explicitly requires it.
 - C formatting/lint config exists at repo root as `.clang-format` and `.clang-tidy`.
 

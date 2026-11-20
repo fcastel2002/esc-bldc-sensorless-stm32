@@ -368,7 +368,7 @@ void speed_sensor_handle_consensus(void)
         filtered_speed = filtro_media_movil_zc(diff_speed);
     } else {
         /* Fallback al método original (captura simple) */
-        uint16_t current_capture = HAL_TIM_ReadCapturedValue(&htim2, TIM_CHANNEL_1);
+        uint16_t current_capture = HAL_TIM_ReadCapturedValue(&htim2, zc_phase_to_tim_channel(PHASE_W));
         if (last_speed_capture != 0) {
             uint16_t speed_period;
             if (last_speed_capture > current_capture) {

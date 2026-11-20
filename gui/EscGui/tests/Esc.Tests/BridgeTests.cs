@@ -246,6 +246,84 @@ public sealed class BridgeTests
     }
 
     [Fact]
+    public async Task StepTestHoldsCommutationStepKeepsLeaseAndStopsWithStop()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        var settings = new StepTestSettings(CommutationStep.VW, 12.5);
+
+        CommandResult result = await bridge.SetStepTestAsync(settings);
+
+        Assert.True(result.Success);
+        Assert.True(bridge.Snapshot.StepTest.Active);
+        Assert.Equal("STEP_TEST", bridge.Snapshot.Status?.AppStateName);
+        Assert.Equal(settings, bridge.Snapshot.StepTest.Applied);
+        Assert.Contains(
+            transport.RequestPayloads,
+            candidate => candidate.SequenceEqual(new byte[] { 2, 125, 0 }));
+
+        await bridge.MaintainStepTestAsync();
+        Assert.Contains(
+            transport.Requests,
+            request => request.Opcode == CommOpcode.StepTest &&
+                       request.Parameter == (byte)StepTestCommand.KeepAlive);
+
+        CommandResult stop = await bridge.StopAsync();
+        Assert.True(stop.Success);
+        Assert.False(bridge.Snapshot.StepTest.Active);
+        Assert.Null(bridge.Snapshot.StepTest.Requested);
+    }
+
+    [Fact]
+    public async Task FreewheelDiagAutoDetectAndSoftwareZcRemapWorkEndToEnd()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+
+        CommandResult start = await bridge.StartFreewheelAsync();
+        Assert.True(start.Success);
+        Assert.True(bridge.Snapshot.Freewheel.Active);
+        Assert.Equal("FREEWHEEL", bridge.Snapshot.Status?.AppStateName);
+        Assert.NotNull(bridge.Snapshot.Freewheel.Report);
+        Assert.Equal(ZcChannelMap.Default, bridge.Snapshot.Freewheel.ActiveMap);
+
+        await bridge.PollFreewheelAsync();
+        Assert.Contains(
+            transport.Requests,
+            req => req.Opcode == CommOpcode.ZcDiag && req.Parameter == (byte)ZcDiagCommand.GetReport);
+
+        CommandResult stop = await bridge.StopFreewheelAsync();
+        Assert.True(stop.Success);
+        Assert.False(bridge.Snapshot.Freewheel.Active);
+        Assert.Equal("IDLE", bridge.Snapshot.Status?.AppStateName);
+
+        CommandResult detect = await bridge.RunZcAutoDetectAsync(15);
+        Assert.True(detect.Success);
+        Assert.NotNull(bridge.Snapshot.Freewheel.LastAutoDetect);
+        Assert.Equal(new ZcChannelMap(1, 2, 0), bridge.Snapshot.Freewheel.LastAutoDetect!.DetectedMap);
+
+        CommandResult applyMap = await bridge.SetZcMapAsync(new ZcChannelMap(1, 2, 0));
+        Assert.True(applyMap.Success);
+        Assert.Equal(new ZcChannelMap(1, 2, 0), bridge.Snapshot.Freewheel.ActiveMap);
+        Assert.Equal(new ZcChannelMap(1, 2, 0), await bridge.GetZcMapAsync());
+    }
+
+    [Fact]
+    public async Task StepTestRejectsDutyAboveLimitWithoutSending()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+
+        CommandResult result = await bridge.SetStepTestAsync(new StepTestSettings(CommutationStep.UV, 30.1));
+
+        Assert.False(result.Success);
+        Assert.DoesNotContain(transport.RequestedOpcodes, opcode => opcode == CommOpcode.StepTest);
+    }
+
+    [Fact]
     public async Task DynamicSineUpdateUsesReadbackWithoutStatusRoundTrip()
     {
         FakeEscTransport transport = new();
@@ -719,6 +797,7 @@ public sealed class BridgeTests
     private sealed class FakeEscTransport : IEscTransport
     {
         private readonly Queue<EscFrame> _readQueue = new();
+        private byte[] _zcMap = [2, 1, 0];
 
         public bool IsOpen { get; private set; }
         public HidDeviceDescriptor? CurrentDevice { get; private set; }
@@ -771,7 +850,14 @@ public sealed class BridgeTests
             if (request.Opcode == CommOpcode.SetConfig)
             {
                 ConfigParam parameter = (ConfigParam)request.Parameter;
-                ConfigValues[parameter] = DecodeConfigPayload(parameter, request.Payload);
+                if (parameter == ConfigParam.ZcMap && request.Payload.Length == 3)
+                {
+                    _zcMap = [request.Payload[0], request.Payload[1], request.Payload[2]];
+                }
+                else
+                {
+                    ConfigValues[parameter] = DecodeConfigPayload(parameter, request.Payload);
+                }
             }
             if (request.Opcode == CommOpcode.HilStart)
             {
@@ -796,6 +882,28 @@ public sealed class BridgeTests
                 else
                 {
                     _appState = 10;
+                }
+            }
+            else if (request.Opcode == CommOpcode.StepTest)
+            {
+                if (request.Parameter == (byte)StepTestCommand.KeepAlive && _appState != 11)
+                {
+                    responseStatus = CommStatus.InvalidState;
+                }
+                else
+                {
+                    _appState = 11;
+                }
+            }
+            else if (request.Opcode == CommOpcode.ZcDiag)
+            {
+                if (request.Parameter == (byte)ZcDiagCommand.Start)
+                {
+                    _appState = 12;
+                }
+                else if (request.Parameter == (byte)ZcDiagCommand.Stop)
+                {
+                    _appState = 0;
                 }
             }
             else if ((request.Opcode is CommOpcode.Stop or CommOpcode.EmergencyStop) &&
@@ -829,6 +937,8 @@ public sealed class BridgeTests
                 CommOpcode.HilGetOutputs => HilOutputsPayload(),
                 CommOpcode.HilStep => HilStepResultPayload(),
                 CommOpcode.SineDrive => request.Payload,
+                CommOpcode.StepTest => request.Payload,
+                CommOpcode.ZcDiag => ZcDiagResponsePayload((ZcDiagCommand)request.Parameter),
                 _ => []
             };
 
@@ -985,8 +1095,45 @@ public sealed class BridgeTests
             return payload;
         }
 
+        private byte[] ZcDiagResponsePayload(ZcDiagCommand command)
+        {
+            switch (command)
+            {
+                case ZcDiagCommand.Start:
+                case ZcDiagCommand.GetReport:
+                {
+                    byte[] payload = new byte[32];
+                    payload[0] = _appState == 12 ? (byte)1 : (byte)0;
+                    payload[1] = 0b101;
+                    payload[2] = 0x7E;
+                    payload[3] = (byte)(ZcHealthFlags.HasMotion | ZcHealthFlags.SequenceValid | ZcHealthFlags.DirectionForward);
+                    BitConverter.GetBytes((ushort)12).CopyTo(payload, 4);
+                    BitConverter.GetBytes((ushort)12).CopyTo(payload, 6);
+                    BitConverter.GetBytes((ushort)12).CopyTo(payload, 8);
+                    BitConverter.GetBytes((ushort)35).CopyTo(payload, 10);
+                    BitConverter.GetBytes((ushort)300).CopyTo(payload, 18);
+                    BitConverter.GetBytes((ushort)3000).CopyTo(payload, 20);
+                    payload[22] = 3;
+                    payload[23] = _zcMap[0];
+                    payload[24] = _zcMap[1];
+                    payload[25] = _zcMap[2];
+                    payload[26] = 0x80 | 0x04 | 2;
+                    return payload;
+                }
+                case ZcDiagCommand.AutoDetect:
+                    return [0, 1, 2, 0, _zcMap[0], _zcMap[1], _zcMap[2], 8, 96, 4, 5, 6, 94, 95, 5, 7];
+                default:
+                    return [];
+            }
+        }
+
         private byte[] ConfigPayload(ConfigParam parameter)
         {
+            if (parameter == ConfigParam.ZcMap)
+            {
+                return [_zcMap[0], _zcMap[1], _zcMap[2]];
+            }
+
             double value = ConfigValues[parameter];
             return parameter switch
             {

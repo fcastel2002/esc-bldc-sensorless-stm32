@@ -1,0 +1,1150 @@
+% =====================================================================
+%  Modelado para simulacion de un ESC BLDC sensorless con carga
+%  agitadora magnetica: ecuaciones, simplificaciones y rango de validez.
+%  Compilar con:  latexmk -pdf modelo_simulacion.tex   (o pdflatex x2)
+% =====================================================================
+\documentclass[11pt,a4paper,oneside]{report}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands,es-tabla]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{bm}
+\usepackage{siunitx}
+\sisetup{output-decimal-marker={,},group-separator={.},per-mode=symbol}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+\usepackage[hidelinks]{hyperref}
+
+\theoremstyle{definition}
+\newtheorem{definicion}{Definición}[chapter]
+\newtheorem{ejemplo}{Ejemplo numérico}[chapter]
+\theoremstyle{remark}
+\newtheorem{nota}{Nota}[chapter]
+\newtheorem{hipotesis}{Hipótesis}[chapter]
+
+\newenvironment{idea}%
+  {\par\medskip\noindent\begin{minipage}{\linewidth}\hrule\smallskip
+   \noindent\textbf{Idea física.}\ }%
+  {\smallskip\hrule\end{minipage}\par\medskip}
+\newenvironment{lectura}%
+  {\par\smallskip\noindent\textbf{Cómo se lee.}\ }%
+  {\par\smallskip}
+
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\sgn}{\operatorname{sgn}}
+\newcommand{\clamp}{\operatorname{sat}}
+
+\title{\textbf{Modelado de un ESC BLDC sensorless\\ con carga agitadora magnética}\\[0.5em]
+\large Modelo mínimo defendible, no linealidades dominantes,\\
+linealización y rango de validez}
+\author{Proyecto \texttt{esc-bldc-stm32}}
+\date{Apuntes de estudio (revisión post-consulta)}
+
+\begin{document}
+\hypersetup{pageanchor=false}
+\maketitle
+\hypersetup{pageanchor=true}
+\tableofcontents
+
+% =====================================================================
+\chapter{Introducción, alcance y convenciones}
+% =====================================================================
+
+\section{Objetivo y criterio de modelado}
+Estos apuntes reúnen las ecuaciones necesarias para modelar, linealizar y simular
+el sistema completo \emph{motor BLDC (disco duro) + acople magnético no lineal
++ agitador + fluido + sensor de velocidad por cruces por cero + arranque a lazo
+abierto + controlador PI discreto}.
+
+Siguiendo el criterio de la cátedra, el cuerpo principal mantiene únicamente un
+\textbf{modelo mínimo comprensible y defendible con lápiz y papel}. Se evita
+introducir dinámicas o parámetros que no puedan justificarse desde mediciones,
+geometría o código real del firmware, para no generar una falsa sensación de
+precisión. Las deducciones extendidas y efectos secundarios quedan separados en
+el Apéndice~\ref{ap:referencia}.
+
+\paragraph{No linealidades dominantes del problema.} El modelo principal
+captura cuatro fenómenos físicos esenciales:
+\begin{enumerate}
+  \item \textbf{Pérdida de medición a baja velocidad:} por debajo de
+        $n_{\text{ciego}}\approx 300\text{--}\SI{400}{rpm}$, la BEMF cae por
+        debajo del umbral efectivo del comparador y el sensor queda ciego
+        (error del \SI{100}{\percent}), lo que obliga a incluir el
+        \textbf{arranque ciego a lazo abierto} y la transición a lazo cerrado.
+  \item \textbf{Retardo dependiente de la velocidad ($\tau \propto 1/n$):}
+        aun por encima de $n_{\text{ciego}}$, el muestreo por eventos de cruce
+        por cero y el promedio móvil degradan el margen de fase al bajar la
+        velocidad.
+  \item \textbf{Desenganche del acople magnético:} modelado como un acople
+        mecánico/cinemático no lineal con torque máximo $T_{\max}$ y ángulo
+        crítico $\delta_{\text{crit}}$ ($\SI{90}{\degree}$ para $N_a=1$ par de
+        polos); al superarlo (p.\,ej.\ al agregar fluido o subir viscosidad),
+        la barra se desincroniza aunque el motor siga regulando su propia
+        velocidad.
+  \item \textbf{Saturación en tensión del accionamiento:} el ciclo de trabajo
+        queda acotado a $d\in[d_{\min},1]$ ($[0{,}05,\,1]$ en lazo cerrado) sobre
+        una tensión de bus fija $V_{dc}$.
+\end{enumerate}
+
+\paragraph{Flujo metodológico.} Cada capítulo conecta directamente con los cuatro
+pasos exigidos para el análisis de control:
+\begin{enumerate}
+  \item plantear el \textbf{modelo no lineal} con los fenómenos dominantes;
+  \item modelar el \textbf{arranque ciego} hasta entrar en la zona observable;
+  \item \textbf{linealizar} la planta en un punto de operación $(\omega_0,\delta^\ast,d_0)$
+        y analizar el controlador PI lineal/discreto;
+  \item comparar el diseño lineal contra la \textbf{planta no lineal} para
+        delimitar su \textbf{rango de validez} (ceguera, saturación y desacople).
+\end{enumerate}
+
+Donde corresponde se toman los valores y algoritmos reales del firmware del
+proyecto (STM32F103, \texttt{startup.c}, \texttt{speed\_sensor.c},
+\texttt{motor\_control.c}, \texttt{rpm\_pi\_controller.c}).
+
+\section{Diagrama del sistema}
+
+\begin{center}
+\begin{tikzpicture}[
+  node distance=0.6cm and 0.55cm,
+  blk/.style={draw,rounded corners,align=center,minimum height=1.0cm,
+              font=\footnotesize,inner sep=4pt},
+  >={Stealth}]
+  \node[blk] (pi) {PI discreto\\+ sat.\ $d\in[d_{\min},1]$\\(cap.~\ref{cap:pi_lin})};
+  \node[blk,right=of pi] (sw) {Modo\\Arranque /\\Lazo cerrado\\(cap.~\ref{cap:bldc})};
+  \node[blk,right=of sw] (mot) {Motor BLDC\\eq.\ DC / SPWM\\(cap.~\ref{cap:bldc})};
+  \node[blk,right=of mot] (acp) {Acople no lineal\\$T_{\max},\,\delta_{\text{crit}}$\\(cap.~\ref{cap:mecanica})};
+  \node[blk,below=1.15cm of acp] (ag) {Agitador + fluido\\+ fricción\\(cap.~\ref{cap:cargas})};
+  \node[blk,below=1.15cm of mot] (sen) {Sensor virtual ZC\\ceguera $<300\text{--}400$ rpm\\+ retardo $1/n$ (cap.~\ref{cap:medicion})};
+  \draw[->] (pi) -- node[above,font=\scriptsize]{$d_k$} (sw);
+  \draw[->] (sw) -- node[above,font=\scriptsize]{$d$ / $A,f_e$} (mot);
+  \draw[->] (mot) -- node[above,font=\scriptsize]{$\theta_1,\omega_1$} (acp);
+  \draw[->] (acp) -- node[right,font=\scriptsize]{$T_c(\delta)$} (ag);
+  \draw[->] (mot.south) -- node[right,font=\scriptsize]{$\theta_1,\omega_1$} (sen.north);
+  \draw[->] (sen.west) -| node[pos=0.25,below,font=\scriptsize]{$\hat n_k$, estado ZC} (pi.south);
+  \node[left=0.45cm of pi,font=\footnotesize] (ref) {$n^\ast$};
+  \draw[->] (ref) -- (pi);
+\end{tikzpicture}
+\end{center}
+
+\section{Convenciones y notación}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+Símbolo & Significado & Unidad \\
+\midrule
+$\theta_1,\ \omega_1$ & ángulo y velocidad mecánica del rotor (lado motor) & \si{rad}, \si{rad/s} \\
+$\theta_2,\ \omega_2$ & ángulo y velocidad mecánica del agitador & \si{rad}, \si{rad/s} \\
+$\delta = \theta_1 - \theta_2$ & desfase angular en el acople magnético & \si{rad} \\
+$p$ & pares de polos del motor (firmware: $p=2$, verificar en HDD) & -- \\
+$\theta_e = p\,\theta_1,\ \omega_e = p\,\omega_1$ & ángulo y velocidad eléctricos & \si{rad}, \si{rad/s} \\
+$n$ & velocidad en rpm, $n = 30\,\omega_1/\pi$ & \si{rpm} \\
+$R,\ L_s$ & resistencia e inductancia por fase equivalentes & \si{\ohm}, \si{H} \\
+$k_e,\ k_t$ & cte.\ de BEMF de fase y de torque ($k_t = 2k_e$ en six-step) & \si{V.s/rad}, \si{N.m/A} \\
+$V_{dc},\ d$ & tensión de bus y ciclo de trabajo ($d\in[0{,}05,\,1]$) & \si{V}, -- \\
+$J_1,\ J_2$ & inercia lado motor (rotor+imán) y lado agitador & \si{kg.m^2} \\
+$N_a,\ \delta_{\text{crit}}$ & pares de polos del acople ($N_a=1$) y ángulo crítico ($\pi/(2N_a)$) & --, \si{rad} \\
+$T_e,\ T_c,\ T_L,\ T_f$ & torque eléctrico, de acople, de carga del fluido, de fricción & \si{N.m} \\
+$T_{\max}$ & torque máximo de desenganche (\emph{pull-out}) del acople & \si{N.m} \\
+$n_{\text{ciego}}$ & velocidad mínima observable por cruces por cero ($\sim 300\text{--}400$) & \si{rpm} \\
+$f_t,\ \Delta t_c$ & frecuencia del timer TIM2 (\SI{180}{kHz}) y período del PI (\SI{2}{ms}) & \si{Hz}, \si{s} \\
+\bottomrule
+\end{tabular}
+\caption{Notación principal del modelo mínimo.}
+\end{table}
+
+La relación entre ángulo eléctrico y mecánico, $\theta_e = p\,\theta_1$, nace de
+que un motor con $p$ pares de polos repite su distribución de campo $p$ veces
+por vuelta mecánica. En el firmware actual $p=2$ por defecto
+(\texttt{ESC\_DEFAULT\_POLE\_PAIRS}); como el prototipo usa un motor de disco
+duro recuperado, este parámetro debe verificarse empíricamente sobre la maqueta
+antes de cerrar los números finales.
+
+% =====================================================================
+\chapter{Modelo eléctrico del motor y arranque a lazo abierto}\label{cap:bldc}
+% =====================================================================
+
+\begin{idea}
+No hace falta modelar en detalle la conmutación de los seis transistores ni el
+\emph{cogging} para estudiar el control de velocidad y el desacople de la
+barra. El motor cumple dos roles según la etapa de operación:
+\begin{itemize}
+  \item \textbf{Durante el arranque ciego:} el ESC impone un campo magnético
+        rotante senoidal a lazo abierto (sin mirar el sensor) que ``engancha'' y
+        arrastra al rotor desde el reposo hasta superar la zona ciega.
+  \item \textbf{Una vez enganchado (six-step y lazo cerrado):} el motor se
+        comporta como un motor de corriente continua equivalente con resistencia
+        $2R$, inductancia $2L_s$ y constante $2k_e$.
+\end{itemize}
+\end{idea}
+
+\section{Modelo equivalente en operación six-step}
+Cuando el motor ya conmuta en seis pasos (\texttt{RUNNING} y
+\texttt{CLOSEDLOOP}), conducen dos fases en serie en cada sector de
+\SI{60}{\degree} eléctricos y la tercera queda flotante para medir BEMF. El
+inversor (a $f_{PWM}=\SI{18}{kHz}$, mucho más rápida que la dinámica mecánica y
+eléctrica) aplica una tensión media $d\,V_{dc}$ entre las dos fases activas. Por
+Kirchhoff y Faraday:
+\begin{equation}
+  \boxed{\;d\,V_{dc} = 2R\,I + 2L_s\frac{\dd I}{\dd t} + 2k_e\,\omega_1\;}
+  \label{eq:dcequiv}
+\end{equation}
+y por balance de potencia electromecánica ($P_{em} = 2k_e\,\omega_1\,I = T_e\,\omega_1$):
+\begin{equation}
+  \boxed{\;T_e = 2k_e\,I \equiv k_t\,I,\qquad k_t = 2k_e\;}
+  \label{eq:torque_dc}
+\end{equation}
+donde $R$ y $L_s=L-M$ son la resistencia e inductancia síncrona por fase (que
+se miden directamente entre terminales como $R_{LL}=2R$ y $L_{LL}=2L_s$).
+
+\begin{lectura}
+La tensión aplicada $d\,V_{dc}$ se reparte en tres términos: caída en el cobre
+($2R\,I$), cambio de corriente en la inductancia ($2L_s\,\dot I$) y BEMF
+($2k_e\,\omega_1$). En vacío y régimen permanente ($I\approx 0$), la velocidad
+queda fijada por $\omega_1 \approx d\,V_{dc}/(2k_e)$. Cuando aparece torque de
+carga, hace falta corriente, sube la caída $2RI$ y la velocidad cae con
+pendiente $R/(2k_e^2)$: el controlador PI debe subir $d$ para sostenerla.
+\end{lectura}
+
+\paragraph{Saturación de tensión del inversor.} El ciclo de trabajo está
+limitado físicamente por el bus disponible:
+\begin{equation}
+  d \in [d_{\min},\, 1], \qquad \text{con } d_{\min} = \frac{100}{2000} = 0{,}05
+  \text{ en lazo cerrado.}
+\end{equation}
+En particular, $d\le 1$ impone una cota dura sobre la corriente y velocidad
+máxima alcanzable: a tensión de bus $V_{dc}$ fija, no es posible pedir
+cualquier torque ni cualquier aceleración. (El modelo trifásico completo
+$v_{kn}$ y el \emph{cogging} se conservan como referencia en el
+Apéndice~\ref{ap:motor_extendido}).
+
+\section{Arranque ciego a lazo abierto (\texorpdfstring{\texttt{FOC\_STARTUP} $\to$ \texttt{RUNNING}}{FOC\_STARTUP -> RUNNING})}
+\label{sec:arranque}
+
+\begin{idea}
+Por debajo de $\sim 300\text{--}\SI{400}{rpm}$ el detector de cruces por cero
+está ciego. Por eso el firmware arranca ``a ciegas'': genera tres tensiones
+senoidales lentas que crean un campo magnético giratorio cuya frecuencia y
+amplitud crecen en rampa. Si la rampa es suficientemente suave, el rotor sigue
+al campo (como un motor síncrono) hasta ganar velocidad y permitir que el
+sensor empiece a ver la BEMF.
+\end{idea}
+
+En el firmware (\texttt{startup.c} y \texttt{hard\_config.h}), al ordenar el
+arranque (\texttt{FOC\_STARTUP}) se ejecuta una rampa lineal de duración
+$T_{\text{arr}}=\SI{3}{s}$:
+\begin{align}
+  f_e(t) &= f_{e,0} + (f_{e,f}-f_{e,0})\,\frac{t}{T_{\text{arr}}}, &
+  f_{e,0}&=\SI{2,09}{Hz},\quad f_{e,f}=\SI{9,28}{Hz}, \label{eq:rampa_f}\\
+  A(t) &= A_0 + (A_f-A_0)\,\frac{t}{T_{\text{arr}}}, &
+  A_0&=0{,}20,\quad A_f=1{,}00, \label{eq:rampa_a}\\
+  \theta_s(t) &= 2\pi\int_0^t f_e(\tau)\,\dd\tau.
+\end{align}
+Con modulación SPWM unipolar en las tres fases, la amplitud fundamental de
+tensión fase-neutro aplicada es $V_{ph}(t) = \tfrac{1}{2}A(t)\,V_{dc}$. A las
+bajas frecuencias eléctricas del arranque ($f_e < \SI{10}{Hz}$, donde
+$2\pi f_e L_s \ll R$), la dinámica de la inductancia es despreciable y el torque
+electromagnético de enganche síncrono puede aproximarse por:
+\begin{equation}
+  \boxed{\;T_{e,\text{arr}}(t) \approx \frac{3\,k_e}{2R}
+  \Big(V_{ph}(t)\,\sin\!\big(\theta_s(t)-p\,\theta_1\big) - k_e\,\omega_1\Big)\;}
+  \label{eq:torque_arranque}
+\end{equation}
+donde $\theta_s(t)-p\,\theta_1$ es el ángulo de carga eléctrico entre el campo
+estatórico y el rotor.
+
+\begin{lectura}
+La ecuación~\eqref{eq:torque_arranque} explica en una línea cuándo funciona y
+cuándo falla el arranque ciego:
+\begin{itemize}
+  \item Mientras el rotor acompaña al campo ($|\theta_s - p\theta_1|<\pi/2$), el
+        seno genera un torque restaurador que acelera a $\omega_1$ hasta
+        $\omega_{\text{campo}}(t)=2\pi f_e(t)/p$.
+  \item Si la rampa $f_e(t)$ acelera demasiado rápido o la carga mecánica
+        supera al par disponible $\frac{3k_e V_{ph}}{2R}$, el ángulo eléctrico
+        supera $\pi/2$ y el motor \textbf{pierde sincronismo en el arranque}.
+\end{itemize}
+\end{lectura}
+
+\paragraph{Transición al lazo cerrado (\emph{handoff}).} Al cumplirse
+$t = T_{\text{arr}}$, \texttt{startup.c} detiene la senoidal, aplica un ciclo
+de trabajo fijo $d_{\text{handoff}} = 0{,}45$ (\SI{45}{\percent}) en six-step y
+pasa al estado \texttt{RUNNING} (ecuación~\eqref{eq:dcequiv}). Cuando la fase~W
+acumula 4 cruces por cero consistentes, la máquina de estados pasa a
+\texttt{READY} $\to$ \texttt{CLOSEDLOOP} y habilita el PI con inicialización sin
+salto (\emph{bumpless}). Si transcurren \SI{4,5}{s} en \texttt{RUNNING} sin
+enganchar cruces válidos (o si se dispara \emph{stall}), corta PWM \SI{0,5}{s}
+y reintenta el arranque.
+
+\begin{nota}
+Con los valores por defecto del firmware ($f_{e,f}=\SI{9,28}{Hz}$) y $p=2$, la
+velocidad síncrona al final de la rampa SPWM es
+$n_{\text{sync}}(T_{\text{arr}}) = 60 f_{e,f}/p \approx \SI{278}{rpm}$, todavía
+dentro o en el borde de la zona ciega ($300\text{--}\SI{400}{rpm}$). Es el
+escalón a $d=0{,}45$ en \texttt{RUNNING} el que termina de acelerar el rotor
+por encima de $n_{\text{ciego}}$ para enganchar la conmutación sensorless.
+\end{nota}
+
+% =====================================================================
+\chapter{Mecánica de dos inercias y acople magnético no lineal}\label{cap:mecanica}
+% =====================================================================
+
+\begin{idea}
+Hay dos cuerpos que giran: abajo, el rotor del motor con su imán impulsor
+(inercia $J_1$); arriba, dentro del vaso, la cápsula o píldora agitadora
+(inercia $J_2$). No hay un eje rígido entre ambos. Desde el punto de vista
+mecánico-cinemático, el acople funciona como un resorte rotacional no lineal
+que se estira al aparecer un desfase angular $\delta = \theta_1 - \theta_2$:
+cuanto más se atrasa la cápsula, mayor es el torque que la arrastra,
+\textbf{hasta llegar a un ángulo crítico $\delta_{\text{crit}}$}. Si se pasa de
+ese ángulo, los imanes se sueltan, el torque cae de golpe y la barra patina.
+\end{idea}
+
+\section{Ecuaciones de Newton rotacionales}
+Aplicando $\sum T = J\,\dot\omega$ a cada cuerpo por separado y llamando
+$\delta = \theta_1 - \theta_2$ al desfase mecánico:
+\begin{align}
+  J_1\,\dot\omega_1 &= T_e - T_c(\delta) - T_{f1}(\omega_1), \label{eq:j1}\\
+  J_2\,\dot\omega_2 &= T_c(\delta) - T_L(\omega_2) - T_{f2}(\omega_2), \label{eq:j2}\\
+  \dot\delta &= \omega_1 - \omega_2 . \label{eq:delta}
+\end{align}
+Aquí $T_c(\delta)$ es el torque transmitido por el acople, $T_{f1}, T_{f2}$ son
+las fricciones mecánicas (sección~\ref{sec:friccion}) y $T_L$ es la carga del
+fluido (sección~\ref{sec:fluido}).
+
+\section{Modelo cinemático/mecánico del acople magnético}\label{cap:acople}
+Prescindiendo del detalle magnetostático (recogido en el
+Apéndice~\ref{ap:acople_dipolo}), un acople entre imanes de $N_a$ pares de polos
+queda caracterizado por dos magnitudes geométricas/empíricas claras:
+\begin{itemize}
+  \item el \textbf{torque máximo transmitible} (\emph{pull-out}) $T_{\max}$,
+        que depende de los imanes y fuertemente de la distancia vertical entre
+        el motor y el vaso;
+  \item el \textbf{ángulo crítico de desenganche}
+        \begin{equation}
+          \delta_{\text{crit}} = \frac{\pi}{2 N_a},
+        \end{equation}
+        donde se alcanza el torque máximo ($N_a=1$ para una píldora magnética
+        dipolar clásica $\Rightarrow \delta_{\text{crit}}=\SI{90}{\degree}$;
+        $N_a=2$ si hubiera 4 polos $\Rightarrow \delta_{\text{crit}}=\SI{45}{\degree}$).
+\end{itemize}
+La ley periódica más simple que crece monótonamente desde $0$ hasta $T_{\max}$
+en $\delta_{\text{crit}}$, cae al superarlo y se repite cada $2\pi/N_a$ es:
+\begin{equation}
+  \boxed{\;T_c(\delta) = T_{\max}\,\sin\!\left(\frac{\pi}{2}\,\frac{\delta}{\delta_{\text{crit}}}\right)
+                       = T_{\max}\,\sin(N_a\,\delta).\;}
+  \label{eq:acople}
+\end{equation}
+De forma conservadora, no se incluye amortiguamiento interno $c\,\dot\delta$ por
+corrientes parásitas en el modelo principal, al no disponerse de medición para
+ese coeficiente.
+
+\begin{lectura}
+Para $|\delta| < \delta_{\text{crit}}$, el desfase es un ``atraso'' elástico: si
+la carga frena a la píldora, $\delta$ crece y el acople transmite más torque
+para sostenerla. Para $|\delta| > \delta_{\text{crit}}$, el torque
+\emph{disminuye} con el ángulo y al pasar $2\delta_{\text{crit}}$ ($\pi/N_a$)
+cambia de signo: los polos opuestos se desencuentran y el acople pierde su
+capacidad de arrastre.
+\end{lectura}
+
+\section{Estabilidad estática y desacople dinámico}
+En régimen permanente a velocidad $\omega_0$, $\omega_1=\omega_2=\omega_0$ y
+$\dot\delta=0$. De~\eqref{eq:j2}, el acople debe equilibrar la carga total
+$T_{L,\text{tot}}(\omega_0) = T_L(\omega_0) + T_{f2}(\omega_0)$:
+\begin{equation}
+  T_{\max}\sin(N_a\delta^\ast) = T_{L,\text{tot}}(\omega_0).
+  \label{eq:eq_acople}
+\end{equation}
+\begin{itemize}
+  \item \textbf{Si $T_{L,\text{tot}} < T_{\max}$:} existen dos soluciones por
+        período, pero perturbando $\delta=\delta^\ast+\tilde\delta$, el torque
+        restaurador linealizado es $K_{\text{eff}}\,\tilde\delta$ con
+        $K_{\text{eff}} = N_a T_{\max}\cos(N_a\delta^\ast)$. Sólo es estable la
+        rama con $\cos(N_a\delta^\ast)>0$, es decir:
+        \begin{equation}
+          |\delta^\ast| < \delta_{\text{crit}} = \frac{\pi}{2N_a}.
+        \end{equation}
+  \item \textbf{Si $T_{L,\text{tot}} > T_{\max}$:} no existe equilibrio.
+        $\delta(t)$ crece sin cota, el valor medio temporal
+        $\langle T_{\max}\sin(N_a\delta)\rangle \to 0$ y el agitador
+        \textbf{desacopla y se frena} ($\omega_2 \to 0$) aunque el motor siga
+        girando a la consigna.
+\end{itemize}
+
+\paragraph{Desacople dinámico ante aceleraciones bruscas.} Aun con
+$T_{L,\text{tot}} < T_{\max}$, un escalón rápido del motor puede provocar el
+desenganche. Suponiendo $\dot\omega_1 \approx 0$ tras un cambio brusco de
+velocidad, de~\eqref{eq:j2} y~\eqref{eq:delta}:
+\begin{equation}
+  J_2\,\ddot\delta = -T_{\max}\sin(N_a\delta) + T_{L,\text{tot}}.
+  \label{eq:pendulo}
+\end{equation}
+Es la ecuación del péndulo con torque constante, con integral de energía:
+\begin{equation}
+  E = \tfrac{1}{2}J_2\dot\delta^2 - \frac{T_{\max}}{N_a}\cos(N_a\delta) - T_{L,\text{tot}}\,\delta = \text{cte}.
+\end{equation}
+El desenganche ocurre si la velocidad relativa inicial $\dot\delta$ aporta
+energía cinética suficiente para cruzar la barrera potencial situada en el
+equilibrio inestable $\delta_u = (\pi - \arcsin(T_{L,\text{tot}}/T_{\max}))/N_a$
+(criterio de áreas iguales). Por eso una rampa suave de velocidad evita el
+desacople frente a un escalón agresivo.
+
+\section{Rigidez linealizada y modo torsional en el punto de operación}
+A diferencia de linealizar en $\delta=0$ (válido sólo en vacío), alrededor de un
+equilibrio con carga $\delta^\ast\ne 0$ la pendiente local de~\eqref{eq:acople}
+es:
+\begin{equation}
+  \boxed{\;K_{\text{eff}}(\delta^\ast)
+    = \left.\frac{\partial T_c}{\partial \delta}\right|_{\delta^\ast}
+    = N_a\,T_{\max}\,\cos(N_a\,\delta^\ast)
+    = N_a\sqrt{T_{\max}^2 - T_{L,\text{tot}}^2}\;.}
+  \label{eq:keff}
+\end{equation}
+Despreciando temporalmente las fricciones y torques externos para mirar el
+movimiento relativo $\ddot\delta = \dot\omega_1 - \dot\omega_2$, resulta el
+oscilador torsional con frecuencia natural dependiente de la carga:
+\begin{equation}
+  \omega_n(\delta^\ast) = \sqrt{\frac{K_{\text{eff}}(\delta^\ast)}{J_{eq}}},
+  \qquad J_{eq} = \frac{J_1 J_2}{J_1 + J_2}.
+\end{equation}
+\begin{lectura}
+Cuanto más cerca está la carga de $T_{\max}$ ($\delta^\ast \to \delta_{\text{crit}}$),
+más cae $K_{\text{eff}}$: el ``resorte magnético'' se ablanda hasta anularse en
+el límite de desenganche. Ésta es una de las razones por las cuales el modelo
+linealizado en vacío pierde validez al acercarse a carga máxima.
+\end{lectura}
+
+% =====================================================================
+\chapter{Fricción y carga del fluido}\label{cap:cargas}
+% =====================================================================
+
+\section{Fricción mecánica: Coulomb más viscosa}\label{sec:friccion}
+Para el modelo principal se adopta la descomposición clásica en fricción seca
+constante (Coulomb) y fricción viscosa proporcional a la velocidad:
+\begin{equation}
+  \boxed{\;T_{f,i}(\omega_i) = T_{C,i}\tanh\!\left(\frac{\omega_i}{\omega_{0,f}}\right) + b_i\,\omega_i,
+  \qquad i\in\{1,2\}\;.}
+  \label{eq:friccion_simple}
+\end{equation}
+Se utiliza $\tanh(\omega_i/\omega_{0,f})$ con $\omega_{0,f}$ pequeño frente a
+la velocidad de operación (p.\,ej.\ $\omega_{0,f}\approx \SI{5}{rad/s}$) en
+lugar de $\sgn(\omega_i)$ únicamente para evitar una discontinuidad numérica en
+$\omega_i=0$ durante la integración.
+
+\paragraph{Por qué se omiten Stribeck y LuGre en el modelo principal.} Como el
+sensor está ciego por debajo de $300\text{--}\SI{400}{rpm}$ y el motor arranca a
+lazo abierto hasta superar el reposo, los parámetros adicionales de Stribeck o
+LuGre no son identificables con la instrumentación disponible ni intervienen en
+el régimen regulado; quedan documentados en el Apéndice~\ref{ap:friccion_extendida}.
+
+\section{Ensayo de desaceleración libre (identificación)}
+\begin{idea}
+Si se acelera el motor en vacío (sin barra o en aire) y se corta la
+alimentación ($d=0$, corriente nula), se detiene solo. Si la caída de
+velocidad es lineal en el tiempo domina la fricción seca $T_C$; si es
+exponencial domina la fricción viscosa $b$. Medir esa curva en telemetría
+permite identificar la fricción del eje con datos reales.
+\end{idea}
+Con el PWM apagado ($T_e=0$) para $\omega>0$:
+\begin{equation}
+  J\dot\omega = -T_C - b\,\omega
+  \quad\Longrightarrow\quad
+  \omega(t) = \left(\omega_0 + \frac{T_C}{b}\right)e^{-t/\tau} - \frac{T_C}{b},
+  \qquad \tau = \frac{J}{b},
+  \label{eq:coastdown}
+\end{equation}
+donde $\omega_0$ es la velocidad al cortar el PWM. Ajustando la curva de
+velocidad por encima de $n_{\text{ciego}}$ se estiman $T_C/J$ y $b/J$.
+
+\section{Torque de carga del fluido}\label{sec:fluido}
+La interacción de la píldora agitadora con el fluido dentro del vaso combina
+dos efectos físicos de sentido claro:
+\begin{itemize}
+  \item un \textbf{término lineal (laminar/viscoso)} $b_{fl}\,\omega_2$,
+        proporcional a la viscosidad $\mu$ del fluido;
+  \item un \textbf{término cuadrático (inercial/turbulento)} $c_{fl}\,\omega_2|\omega_2|$,
+        asociado a acelerar masa de fluido (proporcional a la densidad $\rho$ y
+        al tamaño de la barra).
+\end{itemize}
+Sumando ambas contribuciones:
+\begin{equation}
+  \boxed{\;T_L(\omega_2) = b_{fl}\,\omega_2 + c_{fl}\,\omega_2|\omega_2|\;.}
+  \label{eq:carga}
+\end{equation}
+\begin{nota}
+A diferencia de tanques normalizados con deflectores (donde existen tablas de
+número de potencia $N_p(\mathrm{Re})$ resumidas en el
+Apéndice~\ref{ap:fluido_dimensional}), en un vaso de laboratorio sin deflectores
+esos coeficientes publicados no aplican directamente. Para no introducir
+constantes ajenas a la geometría real, $b_{fl}$ y $c_{fl}$ se tratan como
+parámetros globales efectivos del medio (aire $\approx 0$, agua, mezclas
+viscosas) a acotar o ajustar experimentalmente.
+\end{nota}
+
+\section{Escenario crítico: arranque en aire, agregado de fluido y desacople no observable}
+\label{sec:aire_agua}
+Para reproducir el ensayo clave discutido en la consulta del proyecto, se
+parametriza la carga en función del tiempo o del medio:
+\begin{equation}
+  b_{fl}(t) = b_{fl,0} + \Delta b_{fl}\,\mathbb{1}(t - t_0), \qquad
+  c_{fl}(t) = c_{fl,0} + \Delta c_{fl}\,\mathbb{1}(t - t_0).
+\end{equation}
+\begin{enumerate}
+  \item Para $t < t_0$ el vaso está en vacío/aire ($b_{fl,0}\approx 0$,
+        $c_{fl,0}\approx 0$): el sistema arranca a lazo abierto, engancha el
+        lazo cerrado y motor y barra giran acoplados a $\omega_1=\omega_2=\omega_0$.
+  \item En $t = t_0$ ingresa líquido o aumenta la viscosidad (agua / solución
+        viscosa). Si la nueva carga supera $T_{\max}$ (o si el salto dinámico
+        supera la barrera $\delta_u$ en~\eqref{eq:pendulo}), la píldora
+        desacopla: $\delta$ crece, $\langle T_c\rangle \to 0$ y $\omega_2 \to 0$.
+  \item \textbf{Consecuencia sobre la observabilidad:} al desaparecer el par
+        transmitido $T_c$, la ecuación del motor~\eqref{eq:j1} queda
+        desconectada del agitador ($J_1\dot\omega_1 \approx T_e - T_{f1}$). Como
+        el firmware solo realimenta $\omega_1$ y no mide corriente ni movimiento
+        de la barra, el controlador PI mantiene $\omega_1 \approx n^\ast$ (con
+        apenas una perturbación transitoria leve) y \textbf{no detecta que el
+        agitador se detuvo}.
+\end{enumerate}
+
+% =====================================================================
+\chapter{Medición de velocidad sensorless}\label{cap:medicion}
+% =====================================================================
+
+\begin{idea}
+El ESC \textbf{no mide la velocidad}: cronometra el tiempo entre cruces por cero
+de la BEMF, que ocurren cada \SI{60}{\degree} eléctricos. A partir de esa
+física aparecen las dos limitaciones que realmente condicionan el lazo en
+nuestra maqueta:
+\begin{enumerate}
+  \item por debajo de $\sim 300\text{--}\SI{400}{rpm}$, la BEMF queda tapada por
+        el ruido de conmutación y el umbral del comparador: \textbf{el sensor se
+        queda ciego} (error del \SI{100}{\percent});
+  \item por encima de ese umbral, la velocidad calculada siempre llega
+        \textbf{atrasada}, porque mide el período que ya pasó y lo retiene
+        hasta el cruce siguiente.
+\end{enumerate}
+\end{idea}
+
+\section{Del período medido a la velocidad}
+En conmutación six-step, cada fase queda flotante dos veces por ciclo eléctrico
+y su BEMF cruza por cero en cada ventana. El tiempo entre dos cruces
+consecutivos de la misma fase es medio ciclo eléctrico:
+\begin{equation}
+  T_{ZC} = \frac{1}{2f_e} = \frac{\pi}{p\,\omega_1} = \frac{30}{p\,n}\quad[\si{s}].
+\end{equation}
+El timer de captura TIM2 cuenta a $f_t = \SI{72}{MHz}/(399+1) = \SI{180}{kHz}$
+(tick de \SI{5,56}{\micro s}), por lo que el período en ticks es
+$P = f_t\,T_{ZC}$ y la velocidad estimada es:
+\begin{equation}
+  \boxed{\;n = \frac{30\, f_t}{p\, P}\;}
+  \label{eq:period2rpm}
+\end{equation}
+que implementa directamente \texttt{period\_to\_rpm()} en
+\texttt{speed\_sensor.c}.
+
+\begin{ejemplo}
+Con $f_t = \SI{180}{kHz}$ y $p=2$, resulta $n = 2{,}7\times10^6/P$:
+\begin{center}
+\begin{tabular}{@{}lrr@{}}
+\toprule
+Límite en firmware (\texttt{speed\_sensor.h} / \texttt{motor\_control.c}) & $P$ [ticks] & $n$ [rpm] \\
+\midrule
+Período máximo del timer de 16 bits & 65535 & 41 \\
+\texttt{ZCP\_VALID\_MAX\_THRESHOLD} & 50000 & 54 \\
+\texttt{SPEED\_MIN} (cota inferior del filtro) & 14000 & 193 \\
+Límite empírico de ceguera en maqueta / \texttt{MIN\_RPM} & 9000--6750 & 300--400 \\
+\texttt{SPEED\_MAX} (cota superior del filtro) & 200 & 13500 \\
+\bottomrule
+\end{tabular}
+\end{center}
+Si el motor físico de disco duro tiene $p > 2$, la relación período--rpm se
+escala inversamente con $p$, pero el corte práctico impuesto por la amplitud de
+BEMF frente al comparador sigue ocurriendo en el rango experimental de
+$300\text{--}\SI{400}{rpm}$.
+\end{ejemplo}
+
+\section{Ceguera a baja velocidad (no linealidad dominante del sensor)}
+Experimentalmente en la placa con comparador LM339 y el motor de disco duro,
+por debajo de $n_{\text{ciego}} \approx 300\text{--}\SI{400}{rpm}$ no se detectan
+cruces por cero utilizables:
+\begin{itemize}
+  \item \textbf{Error de medición del \SI{100}{\percent}:} no hay eventos de
+        captura válidos; el lazo cerrado no dispone de realimentación de
+        velocidad real.
+  \item \textbf{Comportamiento en firmware:} durante un breve lapso la rutina
+        \texttt{filtro\_\allowbreak media\_\allowbreak movil\_\allowbreak zc()}
+        retiene el último período válido; pero si transcurren más de
+        $\tau_{\text{stall}} = \SI{200}{ms}$
+        (\texttt{TIMEOUT\_\allowbreak MOTOR\_\allowbreak STALL\_\allowbreak MS},
+        verificado cada \SI{25}{ms} hasta 3~conteos) sin cruces en la fase~W,
+        \texttt{check\_\allowbreak motor\_\allowbreak status()} marca
+        \texttt{motor\_stalled = true}, corta el PWM y relanza el arranque a
+        lazo abierto (\texttt{foc\_startup()}).
+\end{itemize}
+Por ello, en el modelo de simulación la condición
+\begin{equation}
+  n_1 < n_{\text{ciego}} \quad (\approx 300\text{--}\SI{400}{rpm})
+\end{equation}
+bloquea los nuevos eventos ZC y, tras $\tau_{\text{stall}}$, fuerza la señal de
+pérdida de medición ($\hat n_k \to 0$ y bandera de \emph{stall}), evitando la
+ficción de retener eternamente la última velocidad válida cuando el rotor se
+frenó.
+
+\section{Retardo por muestreo por eventos (\texorpdfstring{$\tau \propto 1/n$}{tau proporcional a 1/n})}\label{sec:retardo}
+Aun por encima de $n_{\text{ciego}}$, el sensado introduce un retardo variable
+con la velocidad debido a tres contribuciones acumulativas:
+\begin{enumerate}
+  \item \textbf{Promedio móvil de $M$ períodos:} el firmware promedia
+        $M=\texttt{ZCP\_BUFFER\_SIZE}=2$ períodos, lo que centra la ventana con
+        un retardo medio de $M T_{ZC}/2$.
+  \item \textbf{Retención entre cruces (ZOH por eventos):} entre un cruce y el
+        siguiente el dato queda congelado; retardo medio $T_{ZC}/2$.
+  \item \textbf{Muestreo del PI} cada $\Delta t_c = \SI{2}{ms}$: retardo medio
+        $\Delta t_c/2$.
+\end{enumerate}
+Sumando las tres contribuciones y sustituyendo $T_{ZC}=30/(p\,n)$:
+\begin{equation}
+  \boxed{\;\tau(n) \approx \frac{M+1}{2}\,T_{ZC} + \frac{\Delta t_c}{2}
+         = \frac{15\,(M+1)}{p\,n} + \frac{\Delta t_c}{2}\;.}
+  \label{eq:retardo}
+\end{equation}
+
+\begin{ejemplo}
+Con $M=2$, $p=2$ y $\Delta t_c=\SI{2}{ms}$: a \SI{400}{rpm},
+$\tau \approx \SI{57,3}{ms}$; a \SI{1000}{rpm}, $\tau \approx \SI{23,5}{ms}$; a
+\SI{3000}{rpm}, $\tau \approx \SI{8,5}{ms}$. El retardo crece como $1/n$.
+\end{ejemplo}
+
+\paragraph{Consecuencia para el margen de fase.} Un retardo $e^{-s\tau}$ aporta
+fase $-\omega\tau$ sin alterar el módulo. Si el lazo diseñado a velocidad nominal
+tiene frecuencia de cruce $\omega_c$ y un margen $\Delta\phi$ disponible antes
+de volverse oscilatorio, debe cumplirse $\omega_c\,\tau(n) < \Delta\phi$:
+\begin{equation}
+  \boxed{\;n_{\min,\text{estab}} \approx \frac{15\,(M+1)\,\omega_c}{p\,\Delta\phi}\;.}
+\end{equation}
+Así, un PI fijo bien ajustado a \SI{2000}{rpm} puede empezar a oscilar al bajar
+la consigna antes incluso de tocar el límite de ceguera. (Los efectos
+secundarios de alta velocidad —cuantización $\delta n\propto n^2$, retardo RC,
+\emph{blanking} y \emph{jitter} fino— se resumen en el
+Apéndice~\ref{ap:sensor_extendido}).
+
+\section{Algoritmo del sensor virtual para Simulink}\label{sec:sensor_virtual}
+El bloque recibe $(\theta_1, \omega_1, t)$ y reproduce los efectos dominantes
+(ceguera $< n_{\text{ciego}}$, timeout de \emph{stall}, retardo por eventos,
+aritmética entera del timer de 16 bits y filtro $M=2$):
+\begin{small}
+\begin{verbatim}
+function [n_hat, stalled] = sensor_virtual(theta_m, omega_m, t, ...
+                                           p, ft, M, n_blind, tau_stall)
+% Sensor virtual ZC: ceguera a baja rpm + timeout + retardo por eventos.
+persistent last_k last_stamp periods idx count n_out last_valid_t
+if isempty(last_k)
+    last_k = zeros(3,1);  last_stamp = -ones(3,1);
+    periods = zeros(3,M); idx = ones(3,1);
+    count = zeros(3,1);   n_out = 0;  last_valid_t = 0;
+end
+n_real = abs(omega_m)*30/pi;
+theta_e = p*theta_m;
+phi = [0, 2*pi/3, -2*pi/3];
+for k = 1:3
+    kk = floor((theta_e - phi(k))/pi);
+    if kk == last_k(k), continue; end
+    last_k(k) = kk;
+    if n_real < n_blind                  % zona ciega: no detecta cruces
+        continue;
+    end
+    stamp = mod(round(t*ft), 65536);     % captura timer de 16 bits
+    if last_stamp(k) >= 0
+        P = mod(stamp - last_stamp(k), 65536);
+        if P > 50 && P < 50000
+            periods(k,idx(k)) = P;
+            idx(k) = mod(idx(k), M) + 1;
+            count(k) = min(count(k)+1, M);
+            if count(k) == M
+                Pavg = floor(mean(periods(k,:)));
+                ok = all(abs(periods(k,:) - Pavg) <= 0.25*Pavg);
+                if ok && Pavg >= 200 && Pavg <= 14000
+                    n_out = floor(30*ft/(p*Pavg));
+                    last_valid_t = t;
+                end
+            end
+        end
+    end
+    last_stamp(k) = stamp;
+end
+if (t - last_valid_t) > tau_stall        % perdida de senal (>200 ms)
+    n_out = 0;
+    stalled = 1;
+else
+    stalled = 0;
+end
+n_hat = n_out;
+\end{verbatim}
+\end{small}
+
+% =====================================================================
+\chapter{Controlador PI discreto, linealización y rango de validez}\label{cap:pi_lin}
+% =====================================================================
+
+\section{Controlador PI discreto del firmware}
+El controlador opera cada $\Delta t_c = \SI{2}{ms}$ sobre el error en rpm
+$e_k = n^\ast - \hat n_k$, generando una salida en cuentas canónicas
+$u_k \in [u_{\min}, u_{\max}] = [100,\,2000]$ (que en la planta corresponde al
+ciclo de trabajo $d_k = u_k/2000 \in [0{,}05,\,1]$).
+
+\paragraph{Discretización trapezoidal (Tustin).} A partir del PI continuo
+$u(t) = K_p e(t) + K_i\int_0^t e(\tau)\,\dd\tau$, aproximando el integrador
+por trapecios de paso $\Delta t_c$:
+\begin{equation}
+  I_k = I_{k-1} + K_i\,\Delta t_c\,\frac{e_k + e_{k-1}}{2}, \qquad
+  u_k^{\text{lin}} = K_p\,e_k + I_k .
+  \label{eq:pi_tustin}
+\end{equation}
+En transformada $\mathcal Z$:
+\begin{equation}
+  \boxed{\;C(z) = \frac{U(z)}{E(z)} = K_p + \frac{K_i\,\Delta t_c}{2}\,\frac{z+1}{z-1}\;.}
+  \label{eq:cz}
+\end{equation}
+
+\paragraph{Saturación y anti-windup por \emph{clamping}.} Para evitar que el
+integrador siga acumulando error cuando el inversor alcanza el límite
+$[u_{\min},u_{\max}]$ (por ejemplo durante un bloqueo o un escalón grande), el
+firmware recorta el estado integral antes de saturar la salida:
+\begin{equation}
+\begin{aligned}
+  I_k &\leftarrow \clamp\!\left(I_k,\; u_{\min} - K_p e_k,\; u_{\max} - K_p e_k\right), \\
+  u_k &= \clamp\!\left(K_p e_k + I_k,\; u_{\min},\; u_{\max}\right),
+  \qquad d_k = \frac{u_k}{2000}.
+\end{aligned}
+\label{eq:antiwindup}
+\end{equation}
+(El detalle de implementación entera en punto fijo Q16.16/Q30 del STM32 se
+documenta en el Apéndice~\ref{ap:q16}).
+
+\section{Modelo no lineal completo y equilibrio de operación}
+En operación normal tras el arranque (modo \texttt{CLOSEDLOOP}), la dinámica
+completa de la planta reúne las ecuaciones continuas~\eqref{eq:dcequiv},
+\eqref{eq:torque_dc}, \eqref{eq:j1}--\eqref{eq:delta}, \eqref{eq:acople},
+\eqref{eq:friccion_simple} y~\eqref{eq:carga}:
+\begin{align}
+  2L_s\,\dot I &= d_k V_{dc} - 2R\,I - 2k_e\,\omega_1, \\
+  J_1\,\dot\omega_1 &= 2k_e I - T_{\max}\sin(N_a\delta) - T_{C1}\tanh(\omega_1/\omega_{0,f}) - b_1\omega_1, \\
+  J_2\,\dot\omega_2 &= T_{\max}\sin(N_a\delta) - b_{fl}\omega_2 - c_{fl}\omega_2|\omega_2| - T_{C2}\tanh(\omega_2/\omega_{0,f}) - b_2\omega_2, \\
+  \dot\delta &= \omega_1 - \omega_2, \qquad \dot\theta_1 = \omega_1 .
+\end{align}
+
+\paragraph{Punto de equilibrio $(\omega_0, I_0, \delta^\ast, d_0)$.} Fijada una
+velocidad de operación $\omega_0 > \omega_{0,f}$ (donde $\tanh\approx 1$,
+$n_0 = \frac{30}{\pi}\omega_0 > n_{\text{ciego}}$) y anulando derivadas:
+\begin{align}
+  T_{L,\text{tot}}(\omega_0) &= b_{fl}\omega_0 + c_{fl}\omega_0|\omega_0| + T_{C2} + b_2\omega_0, \\
+  \delta^\ast &= \frac{1}{N_a}\arcsin\!\left(\frac{T_{L,\text{tot}}(\omega_0)}{T_{\max}}\right)
+  \qquad\big(\text{existe sólo si } T_{L,\text{tot}}(\omega_0) < T_{\max}\big), \\
+  I_0 &= \frac{T_{L,\text{tot}}(\omega_0) + T_{C1} + b_1\omega_0}{2k_e}, \\
+  d_0 &= \frac{2R\,I_0 + 2k_e\,\omega_0}{V_{dc}}
+  \qquad\big(\text{requiere } d_0 \in [d_{\min}, 1]\big).
+\end{align}
+
+\section{Linealización alrededor de \texorpdfstring{$(\omega_0,\delta^\ast,d_0)$}{(omega0, delta*, d0)}}
+Definiendo variables incrementales $\tilde x = x - x_0$ para $\omega_1,\omega_2 > 0$
+(en torno a $\omega_0 \gg \omega_{0,f}$ la fricción seca $T_{C,i}$ es constante y
+su derivada es nula):
+\begin{align}
+  B_{1,\text{eq}} &= b_1, \\
+  B_{2,\text{eq}}(\omega_0) &= b_2 + b_{fl} + 2\,c_{fl}\,\omega_0, \\
+  K_{\text{eff}}(\delta^\ast) &= N_a\,T_{\max}\cos(N_a\,\delta^\ast)
+                               = N_a\sqrt{T_{\max}^2 - T_{L,\text{tot}}(\omega_0)^2}.
+\end{align}
+El sistema linealizado en espacio de estados $\dot{\tilde x} = A\,\tilde x + B\,\tilde d$,
+$\tilde n_1 = C\,\tilde x$ (con $\tilde x = [\tilde I,\ \tilde\omega_1,\ \tilde\omega_2,\ \tilde\delta]^\mathsf{T}$
+y salida en rpm) es:
+\begin{equation}
+  A = \begin{bmatrix}
+    -\dfrac{R}{L_s} & -\dfrac{k_e}{L_s} & 0 & 0 \\[6pt]
+    \dfrac{2k_e}{J_1} & -\dfrac{B_{1,\text{eq}}}{J_1} & 0 & -\dfrac{K_{\text{eff}}}{J_1} \\[6pt]
+    0 & 0 & -\dfrac{B_{2,\text{eq}}}{J_2} & \dfrac{K_{\text{eff}}}{J_2} \\[6pt]
+    0 & 1 & -1 & 0
+  \end{bmatrix},
+  \qquad
+  B = \begin{bmatrix}
+    \dfrac{V_{dc}}{2L_s} \\[6pt] 0 \\[4pt] 0 \\[4pt] 0
+  \end{bmatrix},
+  \qquad
+  C = \begin{bmatrix} 0 & \dfrac{30}{\pi} & 0 & 0 \end{bmatrix}.
+  \label{eq:ss_lineal}
+\end{equation}
+
+\paragraph{Reducción para análisis a mano (lápiz y papel).} Como la constante
+eléctrica $\tau_e = L_s/R$ suele ser mucho menor que las mecánicas, puede
+tomarse corriente cuasi-estática $\tilde I \approx (V_{dc}\tilde d - 2k_e\tilde\omega_1)/(2R)$.
+Eso introduce el amortiguamiento eléctrico $B_e = 2k_e^2/R$ sobre el rotor,
+llamando $B_1' = B_{1,\text{eq}} + 2k_e^2/R$, y da la función de transferencia
+de 2 inercias:
+\begin{equation}
+  G_2(s) = \frac{\Omega_1(s)}{D(s)}
+  = \frac{\dfrac{k_e V_{dc}}{R}\,(J_2 s^2 + B_{2,\text{eq}} s + K_{\text{eff}})}
+         {(J_1 s + B_1')(J_2 s^2 + B_{2,\text{eq}} s + K_{\text{eff}}) + K_{\text{eff}}(J_2 s + B_{2,\text{eq}})}.
+  \label{eq:g2s}
+\end{equation}
+\begin{lectura}
+La ecuación~\eqref{eq:g2s} muestra dos casos límite inmediatos a mano:
+\begin{itemize}
+  \item \textbf{Acople rígido ($K_{\text{eff}}\to\infty$, operación lejos del
+        límite de desenganche):} el sistema colapsa a un primer orden con
+        $J_{\text{tot}} = J_1 + J_2$ y $B_{\text{tot}} = B_{1,\text{eq}} + B_{2,\text{eq}}(\omega_0)$,
+        ideal para ajustar el PI a mano:
+        \begin{equation}
+          G_1(s) = \frac{\Omega_1(s)}{D(s)} = \frac{K_{dc}}{\tau_{\text{mec}} s + 1},
+          \qquad
+          K_{dc} = \frac{V_{dc}/(2k_e)}{1 + \dfrac{R\,B_{\text{tot}}}{2k_e^2}},
+          \qquad
+          \tau_{\text{mec}} = \frac{J_{\text{tot}}}{B_{\text{tot}} + \dfrac{2k_e^2}{R}}.
+          \label{eq:g1s}
+        \end{equation}
+        (Recordar multiplicar por $\frac{30}{\pi}\frac{1}{2000}$ si se conecta
+        directamente al PI que mide error en rpm y entrega cuentas sobre 2000.)
+  \item \textbf{Acople perdido ($K_{\text{eff}}\to 0$, en $\delta^\ast\to\delta_{\text{crit}}$ o tras desenganche):}
+        el par de polos y ceros del agitador $(J_2 s^2 + B_{2,\text{eq}} s)$ se
+        cancela en~\eqref{eq:g2s}, dejando únicamente la planta del motor solo
+        $\frac{k_e V_{dc}/R}{J_1 s + B_1'}$: la dinámica de la barra desaparece
+        por completo de la salida $\omega_1$!
+\end{itemize}
+\end{lectura}
+
+Incluyendo el retardo de medición~\eqref{eq:retardo} en el punto de operación,
+el lazo linealizado completo a analizar es $L(s) = \frac{30}{2000\pi}\,C(s)\,G_2(s)\,e^{-s\tau(n_0)}$
+(o en tiempo discreto mediante la discretización de $G(s)\,e^{-s\tau(n_0)}$ con
+$C(z)$).
+
+\section{Rango de validez de la aproximación lineal}
+El controlador lineal diseñado con~\eqref{eq:g1s}--\eqref{eq:g2s} coincide con la
+planta real sólo dentro de una ventana de operación acotada. En la planta no
+lineal deja de funcionar por cuatro fronteras concretas:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{4.3cm}>{\raggedright\arraybackslash}p{7.3cm}@{}}
+\toprule
+Frontera no lineal & Condición de ruptura & Qué ocurre en la planta no lineal \\
+\midrule
+Zona ciega del sensor & $n_1 < n_{\text{ciego}}$ ($\sim 300\text{--}\SI{400}{rpm}$) & Error \SI{100}{\percent}, timeout \SI{200}{ms} $\to$ \emph{stall} y reinicio \\
+Retardo variable $1/n$ & $n_1 < n_{\min,\text{estab}}$ & Cae el margen de fase; ciclo oscilatorio sin cambiar el PI \\
+Saturación de tensión & $d_k$ choca en $0{,}05$ ó $1{,}0$ & Lazo abierto temporal; el anti-windup frena el integrador \\
+Desacople del acople & $T_{L,\text{tot}} > T_{\max}$ ó $\delta > \delta_u$ & $K_{\text{eff}}\to 0$, $\omega_2\to 0$; el PI sigue en $\omega_1\approx n^\ast$ sin detectarlo \\
+\bottomrule
+\end{tabular}
+\caption{Fronteras que definen el rango de validez del modelo lineal.}
+\end{table}
+
+% =====================================================================
+\chapter{Parámetros, implementación en Simulink y plan de pruebas}\label{cap:escalar}
+% =====================================================================
+
+\section{Origen real de cada parámetro}
+Para evitar parámetros inventados sin sustento experimental, cada magnitud del
+modelo mínimo tiene asignado su método de obtención o acotación conservadora:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}ll>{\raggedright\arraybackslash}p{6.8cm}@{}}
+\toprule
+Parámetro & Origen & Cómo se obtiene / justifica \\
+\midrule
+$f_t,\Delta t_c,f_{PWM},M,d_{\min}$ & firmware & $\SI{180}{kHz}$, $\SI{2}{ms}$, $\SI{18}{kHz}$, $2$, $0{,}05$ (exactos del código) \\
+$T_{\text{arr}},f_{e,0},f_{e,f},A_0,A_f$ & firmware & $\SI{3}{s}$, $\SI{2,09}{Hz}$, $\SI{9,28}{Hz}$, $0{,}20$, $1{,}00$ (\texttt{hard\_config.h}) \\
+$K_p,\ K_i$ & firmware & Ganancias del PI discreto (ej.\ $K_p=0{,}28$, $K_i=1{,}00$) \\
+$R,\ L_s$ & medición & Medidos con multímetro y osciloscopio sobre las fases del HDD \\
+$k_e,\ p$ & medición / inspección & $k_e$ midiendo BEMF con giro externo en osciloscopio; verificar $p$ del HDD ($p=2$ default) \\
+$V_{dc}$ & fuente / medición & Tensión de alimentación medida en bornes del puente L298N \\
+$J_1,\ J_2$ & CAD + balanza & Geometría de soporte, imán impulsor y píldora agitadora \\
+$T_C,\ b$ & ensayo en vacío & Curva de desaceleración libre~\eqref{eq:coastdown} con telemetría \\
+$N_a,\ \delta_{\text{crit}}$ & geometría & Pares de polos del imán ($N_a=1 \Rightarrow \delta_{\text{crit}}=\SI{90}{\degree}$) \\
+$T_{\max}$ & medición estática / barrido & Traba mecánica + brazo/dinamómetro (o ángulo límite), o barrido conservador \\
+$b_{fl},\ c_{fl}$ & ajuste empírico & Aire ($\approx 0$), agua y fluido viscoso; barrido para capturar frontera de desacople \\
+$n_{\text{ciego}},\ \tau_{\text{stall}}$ & banco + firmware & $300\text{--}\SI{400}{rpm}$ observado en comparador; $\tau_{\text{stall}}=\SI{200}{ms}$ \\
+\bottomrule
+\end{tabular}
+\caption{Trazabilidad de los parámetros del modelo mínimo.}
+\end{table}
+
+\section{Implementación escalar en Simulink}
+\begin{idea}
+Un diagrama de Simulink sin bloques ocultos (sin usar cajas negras de Simscape
+que oculten los signos o parámetros internos) es una ecuación diferencial
+dibujada: todo lo que aparece derivado sale de un \texttt{Integrator}, y cada
+cable tiene significado físico comprobable a mano.
+\end{idea}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}llll@{}}
+\toprule
+Estado & Integrador de & Significado físico & Cond.\ inicial \\
+\midrule
+$I$ & $\dot I$ (ec.~\eqref{eq:dcequiv}) & corriente de fase equivalente & $0$ \\
+$\omega_1$ & $\dot\omega_1$ (ec.~\eqref{eq:j1}) & velocidad angular del motor & $0$ \\
+$\omega_2$ & $\dot\omega_2$ (ec.~\eqref{eq:j2}) & velocidad angular de la píldora & $0$ \\
+$\theta_1$ & $\omega_1$ & posición angular del motor (para sensor y arranque) & $0$ \\
+$\delta$ & $\omega_1 - \omega_2$ & desfase en el acople (evita restar ángulos grandes) & $0$ \\
+\bottomrule
+\end{tabular}
+\caption{Estados continuos del modelo reducido.}
+\end{table}
+
+\paragraph{Estructura de bloques.}
+\begin{itemize}
+  \item \textbf{Selector de modo (\texttt{FOC\_STARTUP} vs \texttt{CLOSEDLOOP}):}
+        para $t < T_{\text{arr}}$, un bloque \texttt{MATLAB Function} genera
+        $\theta_s(t)$, $A(t)$ y $T_{e,\text{arr}}$ según~\eqref{eq:torque_arranque};
+        al finalizar la rampa, conmuta a la ecuación~\eqref{eq:dcequiv} con
+        $d = 0{,}45$ hasta que el sensor virtual valide cruces consistentes
+        (\texttt{stalled == 0} y $n_1 \ge n_{\text{ciego}}$) y habilita el PI.
+  \item \textbf{Subsistema eléctrico (six-step):} \texttt{Product} ($d\cdot V_{dc}$),
+        realimentación $-2R\,I$ y $-2k_e\,\omega_1$, \texttt{Gain} $1/(2L_s)$
+        e \texttt{Integrator} $\to I$ (opcionalmente limitado a $I\ge 0$ si no
+        hay regeneración), y \texttt{Gain} $2k_e \to T_e$.
+  \item \textbf{Acople mecánico no lineal:} \texttt{Sum} $\omega_1-\omega_2$
+        $\to$ \texttt{Integrator} $\to \delta$ $\to$ \texttt{Fcn}
+        \verb|Tmax*sin(Na*u)| $\to T_c$ (resta en $J_1$, suma en $J_2$).
+  \item \textbf{Fricción y fluido:} bloques \texttt{Fcn} sin estado propio con
+        expresiones \verb|Tc*tanh(u/w0f) + b*u| (fricción) y
+        \verb|bfl(t)*u + cfl(t)*u*abs(u)| (fluido).
+  \item \textbf{Sensor virtual y PI discreto:} el sensor de la
+        sección~\ref{sec:sensor_virtual} como \texttt{MATLAB Function}, y el PI
+        discreto~\eqref{eq:pi_tustin}--\eqref{eq:antiwindup} con \emph{Sample time}
+        $= \SI{0,002}{s}$.
+  \item \textbf{Solver:} paso fijo \texttt{ode4} (RK4) con $h = 1/f_t \approx \SI{5,56}{\micro s}$,
+        de modo que las capturas queden cuantizadas al tick real de TIM2 y el
+        PI caiga exactamente cada 360 pasos.
+\end{itemize}
+
+\section{Plan mínimo de simulaciones de verificación}
+\begin{enumerate}
+  \item \textbf{Validación analítica en lazo abierto:} motor sin carga con $d$
+        constante $\to$ verificar $\omega_1 \to d\,V_{dc}/(2k_e)$; luego corte
+        $d=0$ $\to$ verificar desaceleración libre~\eqref{eq:coastdown}.
+  \item \textbf{Arranque ciego a lazo abierto:} verificar que la rampa SPWM
+        saca al sistema desde $\omega_1=\omega_2=0$ en aire, cruza la zona
+        ciega ($300\text{--}\SI{400}{rpm}$) y engancha el PI sin desacoplar la
+        píldora; luego probar una rampa más rápida para observar pérdida de
+        sincronismo en el arranque o en $\delta$.
+  \item \textbf{Lineal vs.\ no lineal (rango de validez):} comparar respuesta al
+        escalón del modelo lineal~\eqref{eq:g1s}--\eqref{eq:g2s} contra el
+        modelo no lineal en un punto nominal (p.\,ej.\ \SI{1000}{rpm}); luego
+        reducir consigna hacia $300\text{--}\SI{400}{rpm}$ (oscilación por
+        retardo + ceguera) y exigir escalones grandes (saturación de $d$ y
+        desacople dinámico).
+  \item \textbf{Experimento aire $\to$ líquido / cambio de viscosidad:}
+        arrancar en vacío, estabilizar en lazo cerrado y aplicar en $t=t_0$ el
+        escalón de $b_{fl}, c_{fl}$ hasta superar $T_{\max}$: verificar que
+        $\omega_2 \to 0$ mientras el controlador sigue regulando
+        $\omega_1 \approx n^\ast$ sin advertir el desacople.
+\end{enumerate}
+
+% =====================================================================
+\appendix
+\chapter{Material de referencia y extensiones (fuera del modelo principal)}
+\label{ap:referencia}
+% =====================================================================
+\noindent\textit{Nota:} Las secciones de este apéndice recogen deducciones
+extendidas y detalles de implementación que \textbf{no forman parte del modelo
+mínimo ni se asumen como hipótesis activas de la simulación principal}, salvo
+que un ensayo específico justifique incorporarlos.
+
+\section{Modelo trifásico completo y torque de cogging}\label{ap:motor_extendido}
+En el modelo detallado de Pillay y Krishnan~\cite{pillay1989}, cada fase
+$k\in\{a,b,c\}$ de un motor en estrella sin neutro ($i_a+i_b+i_c=0$, $L_s=L-M$)
+satisface:
+\begin{equation}
+  v_{kn} = R\,i_k + L_s\frac{\dd i_k}{\dd t} + k_e f_k(\theta_e)\,\omega_1,
+  \qquad
+  v_{nN} = \frac{1}{3}\sum_k v_{kN} - \frac{1}{3}\sum_k e_k,
+  \qquad
+  T_e = k_e\sum_k f_k(\theta_e)\,i_k .
+\end{equation}
+Para $f_a(\theta_e)$ trapezoidal unitaria con dos fases activas conduciendo
+$\pm I$ en los planos ($\pm 1$), se recupera $T_e = 2k_e I$ y~\eqref{eq:dcequiv}.
+
+El torque de \emph{cogging} (interacción magnética sin corriente entre imanes y
+ranuras $Q$) es periódico en $\theta_1$ con $N_c=\operatorname{mcm}(Q,2p)$:
+$T_{cog}(\theta_1) = \sum_{h\ge 1} T_{cog,h}\sin(hN_c\theta_1 + \varphi_h)$~\cite{hanselman2006}.
+Se omite del modelo principal por carecer de medición de $T_{cog,h}$.
+
+\section{Origen dipolar del acople y amortiguamiento parásito}\label{ap:acople_dipolo}
+A primer orden, un imán de momento $\mathbf m$ en un campo $\mathbf B$ tiene
+energía $U=-\mathbf m\cdot\mathbf B = -mB\cos\alpha$ y torque
+$\tau = -\dd U/\dd\alpha = -mB\sin\alpha$~\cite{griffiths2017}. Generalizando
+a un acople periódico de $N_a$ pares de polos por serie de Fourier par,
+$U(\delta)\approx U_0 - U_1\cos(N_a\delta)$, por trabajos virtuales
+$T_c = \partial U/\partial\delta = N_a U_1\sin(N_a\delta) = T_{\max}\sin(N_a\delta)$~\cite{montague2012,ravaud2009}.
+En acoples con carcasas conductoras puede aparecer un término viscoso adicional
+$c\,\dot\delta$ por corrientes parásitas, omitido por conservadurismo.
+
+\section{Modelos extendidos de fricción (Stribeck, LuGre, Petroff)}\label{ap:friccion_extendida}
+Para reproducir \emph{stick-slip} cerca de $\omega=0$, la formulación de
+\emph{Rotational Friction} de Simscape~\cite{simscape-friction,armstrong1994}
+agrega al modelo Coulomb + viscoso el pico de despegue $T_{brk} > T_C$:
+\begin{equation}
+  T_f(\omega) = \sqrt{2e}\,(T_{brk}-T_C)\,e^{-(\omega/\omega_{St})^2}\frac{\omega}{\omega_{St}}
+              + T_C\tanh\!\left(\frac{\omega}{\omega_{Coul}}\right) + b\,\omega,
+\end{equation}
+con $\omega_{St}=\sqrt2\,\omega_{brk}$ y $\omega_{Coul}=\omega_{brk}/10$. El
+modelo dinámico LuGre~\cite{canudas1995} agrega un estado interno de asperezas
+$\dot z = \omega - \frac{\sigma_0|\omega|}{g(\omega)}z$,
+$T_f=\sigma_0 z + \sigma_1\dot z + b\,\omega$. Por su parte, un buje lubricado
+de radio $r$, largo $\ell$ y huelgo $h$ (ley de Petroff) explica la fricción
+viscosa lineal como $b = 2\pi\mu r^3\ell/h$.
+
+\section{Análisis dimensional del fluido (Buckingham y \texorpdfstring{$N_p$}{Np})}\label{ap:fluido_dimensional}
+Para un agitador de diámetro $D$ girando a $N=\omega_2/(2\pi)$ rev/s en un
+fluido de densidad $\rho$ y viscosidad $\mu$, sin formación de vórtice, el
+teorema $\Pi$ de Buckingham~\cite{buckingham1914} reduce $T_L=\phi(N,D,\rho,\mu)$
+al número de potencia $N_p = 2\pi T_L/(\rho N^2 D^5)$ en función de
+$\mathrm{Re} = \rho N D^2/\mu$~\cite{rushton1950,paul2004,mccabe2005}:
+\begin{itemize}
+  \item régimen laminar ($\mathrm{Re}\lesssim 10$): $N_p\mathrm{Re}=K_L \implies
+        T_L = \frac{K_L \mu D^3}{4\pi^2}\,\omega_2 = b_{fl}\omega_2$;
+  \item régimen turbulento ($\mathrm{Re}\gtrsim 10^4$): $N_p\to N_{p,\infty} \implies
+        T_L = \frac{N_{p,\infty}\rho D^5}{8\pi^3}\,\omega_2^2 = c_{fl}\omega_2^2$.
+\end{itemize}
+Como $K_L$ y $N_{p,\infty}$ tabulados corresponden a tanques con deflectores, en
+el modelo principal se identifican o barren directamente $b_{fl}$ y $c_{fl}$.
+
+\section{Imperfecciones secundarias del sensor ZC}\label{ap:sensor_extendido}
+Además de la ceguera a baja velocidad y el retardo $\tau\propto 1/n$ del
+Capítulo~\ref{cap:medicion}, el sensor presenta efectos de segundo orden:
+\begin{itemize}
+  \item \textbf{Cuantización de ticks (alta velocidad):} para $P$ entero,
+        $\delta n \approx \frac{p\,n^2}{30\,f_t}$ (a \SI{1000}{rpm} con $p=2$,
+        apenas $\SI{0,37}{rpm}$)~\cite{ohmae1982}.
+  \item \textbf{\emph{Jitter} por ruido de tensión:} con ruido $\sigma_v$ en
+        la entrada del comparador, la pendiente en el cruce es
+        $\dot e = \kappa k_e p\,\omega_1^2$, dando $\sigma_t = \sigma_v/(\kappa k_e p\,\omega_1^2)$
+        y $\sigma_n/n = \sqrt2\,\sigma_v/(\pi\kappa k_e\omega_1)$.
+  \item \textbf{Retardo del filtro RC del detector:}
+        $\varphi_f = \arctan(\omega_e R_f C_f)$ atrasa la conmutación a alta
+        velocidad.
+  \item \textbf{\emph{Blanking} postconmutación:} ignorar el comparador durante
+        $t_b$ (\texttt{BEMF\_BLANKING\_US}, default $0\,\mu\text{s}$, máximo
+        $200\,\mu\text{s}$) limita la velocidad máxima a
+        $\omega_{m,\text{blank}} = \pi/(6 p t_b)$ ($\approx \SI{12500}{rpm}$ con
+        $p=2, t_b=\SI{200}{\micro s}$), muy por encima del rango del agitador.
+  \item \textbf{Consenso trifásico:} \texttt{calculate\_consensus\_speed()}
+        exige al menos 2 fases consistentes dentro del \SI{15}{\percent} entre sí
+        (o degrada a 1 fase válida antes de activar el fallback).
+\end{itemize}
+
+\section{Implementación en punto fijo Q16.16 del PI en el STM32}\label{ap:q16}
+Para evitar aritmética en coma flotante en el STM32F103 (sin FPU),
+\texttt{rpm\_pi\_controller.c} y su réplica exacta en MATLAB
+\texttt{firmware\_pi\_reference\_step.m} ejecutan~\eqref{eq:pi_tustin}--\eqref{eq:antiwindup}
+en enteros con escala $2^{16}$ (Q16.16):
+\begin{itemize}
+  \item $K_{p,q} = \mathrm{round}(K_p\cdot 2^{16})$ y $e_k\in\mathbb Z$
+        (cuentas de rpm) producen $K_{p,q}e_k$ en Q16;
+  \item $(K_i\Delta t_c/2)$ se almacena en Q30 ($K_{i,q30}=\mathrm{round}(K_i\frac{\Delta t_c}{2}2^{30})$)
+        para conservar resolución, y el producto por $(e_k+e_{k-1})$ se desplaza
+        14 bits a la derecha para volver a Q16 ($30-14=16$);
+  \item el \emph{clamping} del integrador y de la salida se aplican en Q16 entre
+        $100\cdot 2^{16}$ y $2000\cdot 2^{16}$;
+  \item finalmente $u_k = \lfloor u_q/2^{16}\rfloor$ y se escala al período real
+        del timer PWM mediante $\mathrm{PWM}=\lfloor(u_k\,\mathrm{ARR}+1000)/2000\rfloor$.
+\end{itemize}
+Además, las ganancias viajan por el protocolo binario en centésimas de
+resolución ($0{,}01$).
+
+% =====================================================================
+\begin{thebibliography}{99}
+% =====================================================================
+
+\bibitem{pillay1989}
+P.~Pillay y R.~Krishnan,
+``Modeling, simulation, and analysis of permanent-magnet motor drives,
+Part~II: The brushless DC motor drive,''
+\emph{IEEE Transactions on Industry Applications}, vol.~25, no.~2,
+pp.~274--279, 1989.
+
+\bibitem{hanselman2006}
+D.~Hanselman,
+\emph{Brushless Permanent Magnet Motor Design}, 2.ª ed.
+Magna Physics Publishing, 2006.
+
+\bibitem{griffiths2017}
+D.~J.~Griffiths,
+\emph{Introduction to Electrodynamics}, 4.ª ed.
+Cambridge University Press, 2017. (Cap.~6: torque y energía de un dipolo.)
+
+\bibitem{ravaud2009}
+R.~Ravaud, G.~Lemarquand, V.~Lemarquand y C.~Depollier,
+``Torque in permanent magnet couplings: Comparison of uniform and radial
+magnetization,''
+\emph{Journal of Applied Physics}, vol.~105, 053904, 2009.
+
+\bibitem{montague2012}
+R.~G.~Montague, C.~M.~Bingham y K.~Atallah,
+``Servo control of magnetic gears,''
+\emph{IEEE/ASME Transactions on Mechatronics}, vol.~17, no.~2,
+pp.~269--278, 2012.
+
+\bibitem{armstrong1994}
+B.~Armstrong-Hélouvry, P.~Dupont y C.~Canudas de Wit,
+``A survey of models, analysis tools and compensation methods for the control
+of machines with friction,''
+\emph{Automatica}, vol.~30, no.~7, pp.~1083--1138, 1994.
+
+\bibitem{canudas1995}
+C.~Canudas de Wit, H.~Olsson, K.~J.~Åström y P.~Lischinsky,
+``A new model for control of systems with friction,''
+\emph{IEEE Transactions on Automatic Control}, vol.~40, no.~3,
+pp.~419--425, 1995.
+
+\bibitem{simscape-friction}
+The MathWorks,
+``Rotational Friction,'' documentación de Simscape.\\
+\url{https://www.mathworks.com/help/simscape/ref/rotationalfriction.html}
+
+\bibitem{buckingham1914}
+E.~Buckingham,
+``On physically similar systems; illustrations of the use of dimensional
+equations,''
+\emph{Physical Review}, vol.~4, no.~4, pp.~345--376, 1914.
+
+\bibitem{rushton1950}
+J.~H.~Rushton, E.~W.~Costich y H.~J.~Everett,
+``Power characteristics of mixing impellers,''
+\emph{Chemical Engineering Progress}, vol.~46, pp.~395--404 y 467--476, 1950.
+
+\bibitem{paul2004}
+E.~L.~Paul, V.~A.~Atiemo-Obeng y S.~M.~Kresta (eds.),
+\emph{Handbook of Industrial Mixing: Science and Practice}.
+Wiley-Interscience, 2004.
+
+\bibitem{mccabe2005}
+W.~L.~McCabe, J.~C.~Smith y P.~Harriott,
+\emph{Unit Operations of Chemical Engineering}, 7.ª ed.
+McGraw-Hill, 2005. (Cap.~9: agitación y mezcla.)
+
+\bibitem{ohmae1982}
+T.~Ohmae, T.~Matsuda, K.~Kamiyama y M.~Tachikawa,
+``A microprocessor-controlled high-accuracy wide-range speed regulator for
+motor drives,''
+\emph{IEEE Transactions on Industrial Electronics}, vol.~IE-29, no.~3,
+pp.~207--211, 1982.
+
+\end{thebibliography}
+
+\end{document}

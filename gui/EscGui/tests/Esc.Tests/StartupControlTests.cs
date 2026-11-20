@@ -16,6 +16,6 @@ public sealed class StartupControlTests
         Assert.Contains("Aplicar en RAM", markup, StringComparison.Ordinal);
         Assert.Contains("Guardar en flash", markup, StringComparison.Ordinal);
         Assert.Contains("CultureInfo.InvariantCulture", markup, StringComparison.Ordinal);
-        Assert.Contains("startup-estop", markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("Bridge.EmergencyStopAsync", markup, StringComparison.Ordinal);
     }
 }
