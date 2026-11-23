@@ -486,7 +486,9 @@ public static class EscProtocol
                     (PowerMonitorFlags)frame.Payload[10],
                     frame.Payload[11],
                     BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(12, 2)),
-                    BinaryPrimitives.ReadInt32LittleEndian(frame.Payload.AsSpan(14, 4)))
+                    BinaryPrimitives.ReadInt32LittleEndian(frame.Payload.AsSpan(14, 4)),
+                    frame.Payload.Length >= 20 ? (PowerMonitorError)frame.Payload[18] : PowerMonitorError.None,
+                    frame.Payload.Length >= 20 ? frame.Payload[19] : (byte)0)
                 : null);
     }
 

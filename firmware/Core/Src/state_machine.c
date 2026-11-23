@@ -131,7 +131,7 @@ __attribute__((optimize("Oz"))) App_States_t handleState(void)
     break;
   case CLOSEDLOOP:
     if (hil_session_state != (uint8_t)HIL_EXECUTION_STEPPED + 1U) {
-      HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
+      motor_control_timer_start();
     }
     current_time = HAL_GetTick();
     if (hil_session_state == 0U && motor_stalled) {

@@ -53,6 +53,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/comm_transport.c
     Core/Src/current_sense.c
     Core/Src/power_monitor.c
+    Drivers/STM32F1xx_HAL_Driver/Src/stm32f1xx_hal_i2c.c
     Core/Src/hard_config.c
     Core/Src/flash_config.c
     Core/Src/main.c

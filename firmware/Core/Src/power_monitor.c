@@ -1,12 +1,13 @@
 /*
  * power_monitor.c
  *
- * INA219 DC-bus voltage/current monitor on I2C1 (PB6 = SCL, PB7 = SDA, no remap).
+ * INA219 DC-bus voltage/current monitor on I2C1 (PB6 = SCL, PB7 = SDA, no
+ * remap), driven through the ST HAL I2C driver in blocking mode.
  *
- * The HAL I2C module is not part of this project, so I2C1 is driven with a
- * small register-level, polling, timeout-guarded master that only implements
- * what the INA219 needs: 3-byte register write and 2-byte register read
- * (RM0008 "method 2" for N = 2 with POS/ACK handling).
+ * PB6/PB7 are shared with remapped USART1 (UART transport) and PB6 is also
+ * TIM4_CH1; the monitor therefore runs only in USB transport mode and the
+ * motor-control timer is started without enabling the CH1 output
+ * (see motor_control_timer_start()).
  *
  * The INA219 runs in continuous shunt+bus mode with 16-sample averaging
  * (~8.5 ms per channel), PGA /8 (+/-320 mV shunt => +/-3.2 A with 0.1 ohm) and
@@ -32,27 +33,26 @@
 #define INA219_BUS_OVF 0x0001U
 
 #define I2C_SPEED_HZ 100000U
-#define I2C_TIMEOUT_MS 3U
+#define I2C_TIMEOUT_MS 5U
 #define POWER_MONITOR_MAX_FAILURES 5U
 
 #define I2C_SCL_PIN GPIO_PIN_6
 #define I2C_SDA_PIN GPIO_PIN_7
 
+static I2C_HandleTypeDef hi2c1;
 static PowerMonitorSnapshot snapshot;
 static bool monitor_enabled = false;
 static uint8_t failure_count = 0;
 static uint32_t last_poll_tick = 0;
 static uint32_t last_retry_tick = 0;
 
-/* ---------------------------------------------------------------- I2C1 ---- */
-
-static void i2c_short_delay(void)
+static void short_delay(void)
 {
-  /* ~5 us at 72 MHz; only used for bus recovery bit-banging. */
-  for (volatile uint32_t i = 0; i < 60U; i++) {
+  for (volatile uint32_t i = 0; i < 60U; i++) { /* ~5 us at 72 MHz */
   }
 }
 
+/* Free a slave stuck mid-byte (up to 9 SCL pulses + STOP) with the pins as GPIO. */
 static void i2c_bus_recover(void)
 {
   GPIO_InitTypeDef gpio = { 0 };
@@ -62,177 +62,126 @@ static void i2c_bus_recover(void)
   gpio.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_WritePin(GPIOB, I2C_SCL_PIN | I2C_SDA_PIN, GPIO_PIN_SET);
   HAL_GPIO_Init(GPIOB, &gpio);
-  i2c_short_delay();
+  short_delay();
 
-  /* Clock out any slave stuck mid-byte, then issue a STOP. */
-  for (uint8_t i = 0; i < 9U; i++) {
+  for (uint8_t i = 0; i < 9U && HAL_GPIO_ReadPin(GPIOB, I2C_SDA_PIN) == GPIO_PIN_RESET; i++) {
     HAL_GPIO_WritePin(GPIOB, I2C_SCL_PIN, GPIO_PIN_RESET);
-    i2c_short_delay();
+    short_delay();
     HAL_GPIO_WritePin(GPIOB, I2C_SCL_PIN, GPIO_PIN_SET);
-    i2c_short_delay();
+    short_delay();
   }
+  HAL_GPIO_WritePin(GPIOB, I2C_SCL_PIN, GPIO_PIN_RESET);
+  short_delay();
   HAL_GPIO_WritePin(GPIOB, I2C_SDA_PIN, GPIO_PIN_RESET);
-  i2c_short_delay();
+  short_delay();
   HAL_GPIO_WritePin(GPIOB, I2C_SCL_PIN, GPIO_PIN_SET);
-  i2c_short_delay();
+  short_delay();
   HAL_GPIO_WritePin(GPIOB, I2C_SDA_PIN, GPIO_PIN_SET);
-  i2c_short_delay();
+  short_delay();
 }
 
-static void i2c_hw_init(void)
+static void i2c_init(void)
 {
+  if (hi2c1.State != HAL_I2C_STATE_RESET) {
+    (void)HAL_I2C_DeInit(&hi2c1);
+  }
+
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_AFIO_CLK_ENABLE();
   __HAL_RCC_I2C1_CLK_ENABLE();
   __HAL_AFIO_REMAP_I2C1_DISABLE();
 
-  I2C1->CR1 = 0U;
   i2c_bus_recover();
 
   GPIO_InitTypeDef gpio = { 0 };
   gpio.Pin = I2C_SCL_PIN | I2C_SDA_PIN;
   gpio.Mode = GPIO_MODE_AF_OD;
-  gpio.Pull = GPIO_NOPULL;
+  gpio.Pull = GPIO_NOPULL; /* the INA219 module provides the pull-ups */
   gpio.Speed = GPIO_SPEED_FREQ_HIGH;
   HAL_GPIO_Init(GPIOB, &gpio);
 
-  /* Software reset clears a BUSY flag latched by the analog filter (errata). */
-  I2C1->CR1 = I2C_CR1_SWRST;
-  I2C1->CR1 = 0U;
+  /* Errata: the analog filter can latch BUSY after GPIO reconfiguration. */
+  __HAL_RCC_I2C1_FORCE_RESET();
+  __HAL_RCC_I2C1_RELEASE_RESET();
 
-  uint32_t pclk1 = HAL_RCC_GetPCLK1Freq();
-  uint32_t freq_mhz = pclk1 / 1000000U;
-  I2C1->CR2 = freq_mhz & I2C_CR2_FREQ;
-  I2C1->CCR = pclk1 / (2U * I2C_SPEED_HZ); /* standard mode, 50 % duty */
-  I2C1->TRISE = freq_mhz + 1U;             /* 1000 ns max rise time */
-  I2C1->CR1 = I2C_CR1_PE;
+  hi2c1.Instance = I2C1;
+  hi2c1.Init.ClockSpeed = I2C_SPEED_HZ;
+  hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
+  hi2c1.Init.OwnAddress1 = 0U;
+  hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+  hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+  hi2c1.Init.OwnAddress2 = 0U;
+  hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+  hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+  (void)HAL_I2C_Init(&hi2c1);
 }
 
-static void i2c_abort(void)
+static uint8_t map_hal_error(HAL_StatusTypeDef status)
 {
-  I2C1->SR1 &= ~I2C_SR1_AF;
-  I2C1->CR1 |= I2C_CR1_STOP;
-  I2C1->CR1 &= ~(I2C_CR1_POS | I2C_CR1_ACK);
+  uint32_t code = HAL_I2C_GetError(&hi2c1);
+  if ((code & HAL_I2C_ERROR_AF) != 0U) return POWER_ERR_NACK;
+  if ((code & (HAL_I2C_ERROR_BERR | HAL_I2C_ERROR_ARLO)) != 0U) return POWER_ERR_BUS;
+  if ((code & HAL_I2C_ERROR_TIMEOUT) != 0U) return POWER_ERR_TIMEOUT;
+  if (status == HAL_BUSY) return POWER_ERR_BUSY;
+  if (status == HAL_TIMEOUT) return POWER_ERR_TIMEOUT;
+  return POWER_ERR_OTHER;
 }
 
-static bool i2c_wait_sr1(uint32_t mask)
+static void record_error(uint8_t error)
 {
-  uint32_t start = HAL_GetTick();
-  while ((I2C1->SR1 & mask) == 0U) {
-    if ((I2C1->SR1 & (I2C_SR1_AF | I2C_SR1_BERR | I2C_SR1_ARLO)) != 0U) {
-      I2C1->SR1 &= ~(I2C_SR1_BERR | I2C_SR1_ARLO);
-      return false;
-    }
-    if ((uint32_t)(HAL_GetTick() - start) > I2C_TIMEOUT_MS) {
-      return false;
-    }
+  snapshot.last_error = error;
+  if (snapshot.error_count < 0xFFU) {
+    snapshot.error_count++;
   }
-  return true;
 }
 
-static bool i2c_start(uint8_t addr_byte)
+static uint8_t ina219_write(uint8_t addr, uint8_t reg, uint16_t value)
 {
-  uint32_t start = HAL_GetTick();
-  while ((I2C1->CR1 & I2C_CR1_STOP) != 0U || (I2C1->SR2 & I2C_SR2_BUSY) != 0U) {
-    if ((uint32_t)(HAL_GetTick() - start) > I2C_TIMEOUT_MS) {
-      return false;
-    }
-  }
-
-  I2C1->CR1 |= I2C_CR1_START;
-  if (!i2c_wait_sr1(I2C_SR1_SB)) {
-    return false;
-  }
-  I2C1->DR = addr_byte;
-  return i2c_wait_sr1(I2C_SR1_ADDR);
+  uint8_t buf[2] = { (uint8_t)(value >> 8), (uint8_t)(value & 0xFFU) };
+  HAL_StatusTypeDef st = HAL_I2C_Mem_Write(&hi2c1, (uint16_t)(addr << 1), reg,
+                                           I2C_MEMADD_SIZE_8BIT, buf, 2U, I2C_TIMEOUT_MS);
+  return st == HAL_OK ? POWER_ERR_NONE : map_hal_error(st);
 }
 
-static bool ina219_write(uint8_t addr, uint8_t reg, uint16_t value)
+static uint8_t ina219_read(uint8_t addr, uint8_t reg, uint16_t* value)
 {
-  if (!i2c_start((uint8_t)(addr << 1))) {
-    i2c_abort();
-    return false;
+  uint8_t buf[2] = { 0U, 0U };
+  HAL_StatusTypeDef st = HAL_I2C_Mem_Read(&hi2c1, (uint16_t)(addr << 1), reg,
+                                          I2C_MEMADD_SIZE_8BIT, buf, 2U, I2C_TIMEOUT_MS);
+  if (st != HAL_OK) {
+    return map_hal_error(st);
   }
-  (void)I2C1->SR1;
-  (void)I2C1->SR2;
-
-  const uint8_t bytes[3] = { reg, (uint8_t)(value >> 8), (uint8_t)(value & 0xFFU) };
-  for (uint8_t i = 0; i < 3U; i++) {
-    I2C1->DR = bytes[i];
-    if (!i2c_wait_sr1(I2C_SR1_TXE)) {
-      i2c_abort();
-      return false;
-    }
-  }
-  if (!i2c_wait_sr1(I2C_SR1_BTF)) {
-    i2c_abort();
-    return false;
-  }
-  I2C1->CR1 |= I2C_CR1_STOP;
-  return true;
+  *value = (uint16_t)(((uint16_t)buf[0] << 8) | buf[1]);
+  return POWER_ERR_NONE;
 }
-
-static bool ina219_read(uint8_t addr, uint8_t reg, uint16_t* value)
-{
-  /* Pointer write. */
-  if (!i2c_start((uint8_t)(addr << 1))) {
-    i2c_abort();
-    return false;
-  }
-  (void)I2C1->SR1;
-  (void)I2C1->SR2;
-  I2C1->DR = reg;
-  if (!i2c_wait_sr1(I2C_SR1_BTF)) {
-    i2c_abort();
-    return false;
-  }
-  I2C1->CR1 |= I2C_CR1_STOP;
-
-  /* Two-byte read: ACK+POS before START, clear ACK before clearing ADDR. */
-  I2C1->CR1 |= I2C_CR1_ACK | I2C_CR1_POS;
-  if (!i2c_start((uint8_t)((addr << 1) | 1U))) {
-    i2c_abort();
-    return false;
-  }
-  I2C1->CR1 &= ~I2C_CR1_ACK;
-  (void)I2C1->SR1;
-  (void)I2C1->SR2;
-  if (!i2c_wait_sr1(I2C_SR1_BTF)) {
-    i2c_abort();
-    return false;
-  }
-  I2C1->CR1 |= I2C_CR1_STOP;
-  uint8_t msb = (uint8_t)I2C1->DR;
-  uint8_t lsb = (uint8_t)I2C1->DR;
-  I2C1->CR1 &= ~I2C_CR1_POS;
-
-  *value = (uint16_t)(((uint16_t)msb << 8) | lsb);
-  return true;
-}
-
-/* ------------------------------------------------------------- INA219 ---- */
 
 static bool ina219_probe(void)
 {
-  i2c_hw_init();
+  i2c_init();
   snapshot.flags &= (uint8_t)~(POWER_FLAG_PRESENT | POWER_FLAG_VALID);
   snapshot.i2c_addr = 0U;
 
-  if (ina219_write(POWER_MONITOR_I2C_ADDR_DEFAULT, INA219_REG_CONFIG, INA219_CONFIG_VALUE)) {
-    snapshot.i2c_addr = POWER_MONITOR_I2C_ADDR_DEFAULT;
-  } else {
-    for (uint8_t addr = 0x40U; addr <= 0x4FU; addr++) {
-      if (addr != POWER_MONITOR_I2C_ADDR_DEFAULT &&
-          ina219_write(addr, INA219_REG_CONFIG, INA219_CONFIG_VALUE)) {
-        snapshot.i2c_addr = addr;
-        break;
-      }
+  HAL_StatusTypeDef st = HAL_ERROR;
+  for (uint8_t addr = POWER_MONITOR_I2C_ADDR_DEFAULT; addr <= 0x4FU; addr++) {
+    st = HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(addr << 1), 2U, I2C_TIMEOUT_MS);
+    if (st == HAL_OK) {
+      snapshot.i2c_addr = addr;
+      break;
     }
   }
-
   if (snapshot.i2c_addr == 0U) {
+    /* A plain NACK on every address means nobody answered; anything else is a bus fault. */
+    record_error(HAL_I2C_GetError(&hi2c1) == HAL_I2C_ERROR_AF ? POWER_ERR_NOT_FOUND
+                                                               : map_hal_error(st));
     return false;
   }
+
+  uint8_t err = ina219_write(snapshot.i2c_addr, INA219_REG_CONFIG, INA219_CONFIG_VALUE);
+  if (err != POWER_ERR_NONE) {
+    record_error(err);
+    return false;
+  }
+
   snapshot.flags |= POWER_FLAG_PRESENT;
   failure_count = 0U;
   return true;
@@ -280,11 +229,15 @@ void power_monitor_process(void)
 
   uint16_t shunt = 0U;
   uint16_t bus = 0U;
-  if (!ina219_read(snapshot.i2c_addr, INA219_REG_SHUNT, &shunt) ||
-      !ina219_read(snapshot.i2c_addr, INA219_REG_BUS, &bus)) {
+  uint8_t err = ina219_read(snapshot.i2c_addr, INA219_REG_SHUNT, &shunt);
+  if (err == POWER_ERR_NONE) {
+    err = ina219_read(snapshot.i2c_addr, INA219_REG_BUS, &bus);
+  }
+  if (err != POWER_ERR_NONE) {
+    record_error(err);
     snapshot.flags &= (uint8_t)~POWER_FLAG_VALID;
     if (++failure_count >= POWER_MONITOR_MAX_FAILURES) {
-      snapshot.flags &= (uint8_t)~POWER_FLAG_PRESENT; /* re-probe on next retry */
+      snapshot.flags &= (uint8_t)~POWER_FLAG_PRESENT; /* re-init + re-probe on next retry */
       last_retry_tick = now;
     }
     return;

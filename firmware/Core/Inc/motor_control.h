@@ -86,6 +86,9 @@ extern void     stop_motor(uint8_t mode);
 extern uint8_t  control_mode_set(uint8_t mode);
 extern void     hil_start(uint16_t input_timeout_ms, HilExecutionMode execution_mode);
 extern void     hil_stop(void);
+/* Start the TIM4 CC1 control-period interrupt without enabling the TIM4_CH1
+ * output (PB6 is shared with the INA219 I2C1 SCL line). Idempotent. */
+void            motor_control_timer_start(void);
 extern void     hil_set_inputs(uint16_t speed_rpm,
                                int16_t load_torque,
                                uint8_t flags,

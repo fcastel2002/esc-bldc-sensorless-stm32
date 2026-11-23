@@ -96,18 +96,24 @@ configuration.
 | 11 | `uint8` | INA219 7-bit I2C address (`0` when absent) |
 | 12..13 | `uint16` | DC-bus voltage at INA219 `VIN-`, mV |
 | 14..17 | `int32` | DC-bus current through the 0.1 ohm shunt, microamps |
+| 18 | `uint8` | INA219 last I2C error: `0` none, `1` not found (no ACK at `0x40..0x4F`), `2` NACK, `3` timeout, `4` bus error/arbitration lost, `5` bus busy, `6` other |
+| 19 | `uint8` | INA219 failed-transaction counter (saturates at 255) |
 
-The current payload is 18 bytes. Legacy firmware returns 10 bytes; clients must
+The current payload is 20 bytes (an 18-byte variant without bytes 18..19 is also accepted). Legacy firmware returns 10 bytes; clients must
 treat a 10-byte status as "no power monitor".
 
-INA219 notes: the sensor sits on `I2C1` (`PB6` SCL, `PB7` SDA, no remap), which
+INA219 notes: the sensor sits on `I2C1` (`PB6` SCL, `PB7` SDA, no remap), driven by
+the ST HAL I2C driver, which
 is the same pin pair used by remapped `USART1` for the UART transport. It is
 therefore enabled only when the board boots in USB mode (`PB8` HIGH); in UART
 mode bit 3 is set and all readings are zero. Firmware configures it for 32 V bus
 range, PGA /8 (+/-320 mV shunt, +/-3.2 A with 0.1 ohm), 16-sample averaging on
-both channels, and polls it every 20 ms from the main loop. If it does not
-answer at `0x40`, addresses `0x40..0x4F` are probed; a missing sensor is
-re-probed every 1 s.
+both channels, and polls it every 20 ms from the main loop. Addresses
+`0x40..0x4F` are probed; a missing sensor (or 5 consecutive read failures)
+triggers a bus recovery, I2C re-init and re-probe every 1 s. `PB6` is also
+`TIM4_CH1`: the control-period timer is started with only the CC1 interrupt
+(`motor_control_timer_start()`), never `HAL_TIM_OC_Start_IT`, so the timer
+output never fights the I2C clock.
 
 `app_state=10` identifies the continuous open-loop `SINE_DRIVE` state,
 `app_state=11` the commutation-step debug `STEP_TEST` state, and `app_state=12`

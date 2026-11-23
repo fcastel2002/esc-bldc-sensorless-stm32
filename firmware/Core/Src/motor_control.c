@@ -417,8 +417,15 @@ hil_start(uint16_t input_timeout_ms, HilExecutionMode execution_mode)
   __HAL_TIM_CLEAR_FLAG(&htim4, TIM_FLAG_UPDATE | TIM_FLAG_CC1);
   app_state = CLOSEDLOOP;
   if (execution_mode == HIL_EXECUTION_PERIODIC) {
-    HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
+    motor_control_timer_start();
   }
+}
+
+void motor_control_timer_start(void)
+{
+  /* HAL_TIM_OC_Start_IT() would also set CC1E, driving TIM4_CH1 onto PB6 (I2C1 SCL). */
+  __HAL_TIM_ENABLE_IT(&htim4, TIM_IT_CC1);
+  __HAL_TIM_ENABLE(&htim4);
 }
 
 __attribute__((optimize("Oz"))) void hil_stop(void)

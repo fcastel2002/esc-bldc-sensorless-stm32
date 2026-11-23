@@ -97,8 +97,10 @@ public sealed class ProtocolTests
     [Fact]
     public void DecodeStatusParsesIna219PowerExtension()
     {
-        byte[] payload = new byte[18];
+        byte[] payload = new byte[20];
         payload[1] = 1;
+        payload[18] = (byte)PowerMonitorError.Nack;
+        payload[19] = 7;
         payload[10] = (byte)(PowerMonitorFlags.Present | PowerMonitorFlags.Valid);
         payload[11] = 0x40;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(12, 2), 12_040);
@@ -115,6 +117,8 @@ public sealed class ProtocolTests
         Assert.Equal(12.04, status.Power.BusVolts, 3);
         Assert.Equal(-0.2503, status.Power.CurrentAmps, 6);
         Assert.Equal(12.04 * -0.2503, status.Power.PowerWatts, 6);
+        Assert.Equal(PowerMonitorError.Nack, status.Power.LastError);
+        Assert.Equal(7, status.Power.ErrorCount);
     }
 
     [Fact]

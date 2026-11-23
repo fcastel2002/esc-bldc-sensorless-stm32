@@ -21,12 +21,25 @@ public enum PowerMonitorFlags : byte
     Disabled = 1 << 3,
 }
 
+public enum PowerMonitorError : byte
+{
+    None = 0,
+    NotFound = 1,
+    Nack = 2,
+    Timeout = 3,
+    Bus = 4,
+    Busy = 5,
+    Other = 6,
+}
+
 /// <summary>INA219 DC-bus reading carried by the extended GET_STATUS payload (bytes 10..17).</summary>
 public sealed record PowerMonitorReading(
     PowerMonitorFlags Flags,
     byte I2cAddress,
     ushort BusMillivolts,
-    int CurrentMicroamps)
+    int CurrentMicroamps,
+    PowerMonitorError LastError = PowerMonitorError.None,
+    byte ErrorCount = 0)
 {
     public bool Present => Flags.HasFlag(PowerMonitorFlags.Present);
     public bool Valid => Flags.HasFlag(PowerMonitorFlags.Valid);
