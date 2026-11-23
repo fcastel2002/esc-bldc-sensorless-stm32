@@ -5,6 +5,7 @@
 #include "flash_config.h"
 #include "hard_config.h"
 #include "motor_control.h"
+#include "power_monitor.h"
 #include "speed_sensor.h"
 #include "startup.h"
 #include "state_machine.h"
@@ -624,6 +625,12 @@ static uint8_t logging_variable_from_param(uint8_t param, LoggeableVariable* var
   case COMM_LOG_PARAM_BEMF_PERIOD:
     *variable = VAR_BEMF_PERIOD;
     return COMM_STATUS_OK;
+  case COMM_LOG_PARAM_BUS_VOLTAGE:
+    *variable = VAR_BUS_VOLTAGE;
+    return COMM_STATUS_OK;
+  case COMM_LOG_PARAM_BUS_CURRENT:
+    *variable = VAR_BUS_CURRENT;
+    return COMM_STATUS_OK;
   default:
     return COMM_STATUS_UNKNOWN_PARAM;
   }
@@ -679,7 +686,13 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     write_u16_le(&payload_out[4], speed_setpoint_rpm);
     write_u16_le(&payload_out[6], actual_speed_rpm);
     write_u16_le(&payload_out[8], max_pwm);
-    *payload_out_len = 10;
+    PowerMonitorSnapshot power;
+    power_monitor_get_snapshot(&power);
+    payload_out[10] = power.flags;
+    payload_out[11] = power.i2c_addr;
+    write_u16_le(&payload_out[12], power.bus_mv);
+    write_u32_le(&payload_out[14], (uint32_t)power.current_ua);
+    *payload_out_len = 18;
     return COMM_STATUS_OK;
   }
 
@@ -760,6 +773,8 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
       start_logging_param(VAR_CURRENT_U);
       start_logging_param(VAR_CURRENT_V);
       start_logging_param(VAR_BEMF_PERIOD);
+      start_logging_param(VAR_BUS_VOLTAGE);
+      start_logging_param(VAR_BUS_CURRENT);
       return COMM_STATUS_OK;
     } else {
       LoggeableVariable variable;

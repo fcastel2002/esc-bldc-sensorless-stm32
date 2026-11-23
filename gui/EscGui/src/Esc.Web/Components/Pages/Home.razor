@@ -83,6 +83,33 @@
         </div>
 
         <aside class="dashboard-side">
+            <section class="panel supply-panel collapsible-panel @(IsPanelCollapsed(PanelSupply) ? "is-collapsed" : null)">
+                <div class="panel-title">
+                    <div class="panel-heading">
+                        <h2>Alimentacion</h2>
+                        <span>INA219 · bus DC · @SupplyStateText</span>
+                    </div>
+                    <div class="panel-heading-actions">
+                        <button type="button" class="panel-toggle" aria-expanded="@(!IsPanelCollapsed(PanelSupply))" aria-controls="supply-monitor-body" aria-label='@PanelToggleLabel(PanelSupply, "Alimentacion")' @onclick="() => TogglePanelAsync(PanelSupply)">
+                            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="supply-monitor-body" class="panel-body" hidden="@IsPanelCollapsed(PanelSupply)">
+                    <div class="supply-readouts" aria-live="polite">
+                        <div class="supply-reading voltage"><span>Voltaje</span><strong>@SupplyVoltageText <small>V</small></strong></div>
+                        <div class="supply-reading current"><span>Corriente</span><strong>@SupplyCurrentText <small>@SupplyCurrentUnit</small></strong></div>
+                        <div class="supply-reading power"><span>Potencia</span><strong>@SupplyPowerText <small>W</small></strong></div>
+                    </div>
+                    <p class="supply-state @SupplyStateClass">@SupplyStateDetail</p>
+                    <div class="supply-telemetry">
+                        @ChannelCard(LogParam.BusVoltage, "INA219 · VIN-", "Voltaje bus", Snapshot.BusVoltageTelemetry, Snapshot.BusVoltageLoggingEnabled, "mV", "vbus")
+                        @ChannelCard(LogParam.BusCurrent, "INA219 · R100", "Corriente bus", Snapshot.BusCurrentTelemetry, Snapshot.BusCurrentLoggingEnabled, "mA", "ibus")
+                    </div>
+                    <p class="hint">Lectura en vivo via GET_STATUS (500 ms). La adquisicion por telemetria solo emite fuera de IDLE. Requiere transporte USB (PB6/PB7 compartidos con UART).</p>
+                </div>
+            </section>
+
             <section class="panel command-panel collapsible-panel @(IsPanelCollapsed(PanelPower) ? "is-collapsed" : null)">
                 <div class="panel-title">
                     <h2>Marcha</h2>
@@ -161,8 +188,9 @@
     private const string PanelParameters = "parameter-adjustment";
     private const string PanelTelemetry = "speed-acquisition";
     private const string PanelCurrents = "current-acquisition";
+    private const string PanelSupply = "supply-monitor";
     private static readonly string[] KnownPanels =
-        [PanelStatus, PanelPower, PanelParameters, PanelTelemetry, PanelCurrents];
+        [PanelStatus, PanelPower, PanelParameters, PanelTelemetry, PanelCurrents, PanelSupply];
     private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
 
     private BridgeSnapshot Snapshot { get; set; } = default!;
@@ -187,6 +215,43 @@
         "HARD_ERROR" => "bad",
         _ => null
     } ?? string.Empty;
+    private PowerMonitorReading? Supply => Snapshot.Status?.Power;
+    private bool SupplyReadable => Supply is { Valid: true };
+    private string SupplyVoltageText => SupplyReadable ? Supply!.BusVolts.ToString("0.00", Inv) : "-";
+    private bool SupplyCurrentInAmps => SupplyReadable && Math.Abs(Supply!.CurrentAmps) >= 1.0;
+    private string SupplyCurrentUnit => SupplyCurrentInAmps ? "A" : "mA";
+    private string SupplyCurrentText => !SupplyReadable
+        ? "-"
+        : SupplyCurrentInAmps
+            ? Supply!.CurrentAmps.ToString("0.000", Inv)
+            : (Supply!.CurrentMicroamps / 1000.0).ToString("0.0", Inv);
+    private string SupplyPowerText => SupplyReadable ? Supply!.PowerWatts.ToString("0.00", Inv) : "-";
+    private string SupplyStateText => Supply switch
+    {
+        null => "sin datos",
+        { Disabled: true } => "deshabilitado",
+        { Present: false } => "no detectado",
+        { Overflow: true } => "sobrerango",
+        { Valid: true } => "OK",
+        _ => "sin lectura"
+    };
+    private string SupplyStateClass => Supply switch
+    {
+        { Valid: true, Overflow: false } => "ok",
+        { Valid: true, Overflow: true } => "warn",
+        null => string.Empty,
+        _ => "bad"
+    };
+    private string SupplyStateDetail => Supply switch
+    {
+        null when IsConnected => "El firmware no reporta INA219 (GET_STATUS de 10 bytes); actualice el firmware.",
+        null => "Conecte el ESC para leer la alimentacion.",
+        { Disabled: true } => "Transporte UART activo: PB6/PB7 son de USART1, el INA219 queda deshabilitado.",
+        { Present: false } => "INA219 no responde en I2C1 (PB6 SCL / PB7 SDA, 0x40..0x4F); reintentando cada 1 s.",
+        { Overflow: true } => $"INA219 0x{Supply.I2cAddress:X2}: sobrerango del shunt (> 320 mV / 3.2 A).",
+        { Valid: true } => $"INA219 en 0x{Supply.I2cAddress:X2} · shunt 0.1 Ω · PGA ±320 mV.",
+        _ => $"INA219 en 0x{Supply.I2cAddress:X2}: fallo de lectura I2C."
+    };
     private string ModeHint => Snapshot.Mode switch
     {
         ControlMode.SimulinkControl => "Modo Simulink: los comandos quedan reservados para Simulink salvo ESTOP.",
@@ -376,11 +441,17 @@
         TelemetrySample? sample = Bridge.GetTelemetrySamples(parameter).LastOrDefault();
         if (sample is null) return $"{stats.SampleCount} muestras";
         string raw = sample.AdcRawValue.HasValue
-            ? parameter == LogParam.BemfPeriod
-                ? $"periodo {sample.AdcRawValue.Value} ticks"
-                : $"ADC {sample.AdcRawValue.Value}"
+            ? parameter switch
+            {
+                LogParam.BemfPeriod => $"periodo {sample.AdcRawValue.Value} ticks",
+                LogParam.BusVoltage => "INA219",
+                LogParam.BusCurrent => $"shunt {(short)sample.AdcRawValue.Value * 10} uV",
+                _ => $"ADC {sample.AdcRawValue.Value}"
+            }
             : "sin raw";
-        string validity = sample.IsValid ? "valida" : "fuera de ventana";
+        string validity = parameter is LogParam.BusVoltage or LogParam.BusCurrent
+            ? (sample.IsValid ? "presente" : "sin sensor")
+            : sample.IsValid ? "valida" : "fuera de ventana";
         return $"{stats.SampleCount} muestras · {raw} · {validity}";
     }
 

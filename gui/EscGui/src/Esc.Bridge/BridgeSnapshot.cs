@@ -30,7 +30,13 @@ public sealed record BridgeSnapshot(
     StepTestStatus StepTest,
     FreewheelStatus Freewheel,
     DateTimeOffset? ValidationReferenceCapturedAt,
-    string? ValidationReferenceError);
+    string? ValidationReferenceError)
+{
+    public bool BusVoltageLoggingEnabled { get; init; }
+    public bool BusCurrentLoggingEnabled { get; init; }
+    public TelemetryStats BusVoltageTelemetry { get; init; } = TelemetryStats.Empty("mV");
+    public TelemetryStats BusCurrentTelemetry { get; init; } = TelemetryStats.Empty("mA");
+}
 
 public sealed record ActiveControllerConfig(
     double Kp,
@@ -75,7 +81,10 @@ public sealed record TelemetryStats(
     uint? LastTargetTickMs,
     DateTimeOffset? LastHostTimestamp,
     double EffectiveRateHz,
-    uint DroppedSamples);
+    uint DroppedSamples)
+{
+    public static TelemetryStats Empty(string unit) => new(0, null, unit, null, null, 0, 0);
+}
 
 public sealed record HilBridgeStats(
     bool Enabled,

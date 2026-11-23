@@ -59,7 +59,7 @@ public sealed class HomeControlTests
         string homeMarkup = File.ReadAllText(
             Path.Combine(AppContext.BaseDirectory, "TestAssets", "Home.razor"));
 
-        Assert.Equal(5, Count(homeMarkup, "class=\"panel-toggle\""));
+        Assert.Equal(6, Count(homeMarkup, "class=\"panel-toggle\""));
         Assert.Contains("aria-expanded=", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("aria-controls=", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("hidden=\"@IsPanelCollapsed(PanelTelemetry)\"", homeMarkup, StringComparison.Ordinal);

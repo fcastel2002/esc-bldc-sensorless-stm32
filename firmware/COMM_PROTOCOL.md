@@ -92,6 +92,22 @@ configuration.
 | 4..5 | `uint16` | speed setpoint RPM |
 | 6..7 | `uint16` | measured speed RPM |
 | 8..9 | `uint16` | `max_pwm` |
+| 10 | `uint8` | INA219 flags: bit 0 present, bit 1 last read valid, bit 2 shunt overflow, bit 3 disabled (UART transport) |
+| 11 | `uint8` | INA219 7-bit I2C address (`0` when absent) |
+| 12..13 | `uint16` | DC-bus voltage at INA219 `VIN-`, mV |
+| 14..17 | `int32` | DC-bus current through the 0.1 ohm shunt, microamps |
+
+The current payload is 18 bytes. Legacy firmware returns 10 bytes; clients must
+treat a 10-byte status as "no power monitor".
+
+INA219 notes: the sensor sits on `I2C1` (`PB6` SCL, `PB7` SDA, no remap), which
+is the same pin pair used by remapped `USART1` for the UART transport. It is
+therefore enabled only when the board boots in USB mode (`PB8` HIGH); in UART
+mode bit 3 is set and all readings are zero. Firmware configures it for 32 V bus
+range, PGA /8 (+/-320 mV shunt, +/-3.2 A with 0.1 ohm), 16-sample averaging on
+both channels, and polls it every 20 ms from the main loop. If it does not
+answer at `0x40`, addresses `0x40..0x4F` are probed; a missing sensor is
+re-probed every 1 s.
 
 `app_state=10` identifies the continuous open-loop `SINE_DRIVE` state,
 `app_state=11` the commutation-step debug `STEP_TEST` state, and `app_state=12`
@@ -260,6 +276,8 @@ Log params:
 | `0x03` | `CURRENT_U` (`PA3`, ADC1_IN3; hardware actualmente desconectado) |
 | `0x04` | `CURRENT_V` (`PA4`, ADC2_IN4; hardware actualmente desconectado) |
 | `0x05` | `BEMF_PERIOD` (periodo filtrado de capturas `TIM2`) |
+| `0x06` | `BUS_VOLTAGE` (INA219, value en mV; raw = mV; flags = INA219 flags) |
+| `0x07` | `BUS_CURRENT` (INA219, value en mA; raw = registro shunt `int16`, 10 uV/LSB; flags = INA219 flags) |
 | `0xFF` | `ALL` |
 
 `LOG_RATE` accepts `100..5000 ms`. Telemetry is sent as `type=0x82`, `opcode=0x33`.

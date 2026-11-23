@@ -1818,7 +1818,13 @@ public sealed class EscBridgeService
                 _lastZcAutoDetect,
                 _freewheelLastUpdatedAt),
             _validationReferenceCapturedAt,
-            _validationReferenceError);
+            _validationReferenceError)
+        {
+            BusVoltageLoggingEnabled = _enabledLogs.Contains(LogParam.BusVoltage),
+            BusCurrentLoggingEnabled = _enabledLogs.Contains(LogParam.BusCurrent),
+            BusVoltageTelemetry = _telemetryStore.GetStats("bus_voltage", "mV"),
+            BusCurrentTelemetry = _telemetryStore.GetStats("bus_current", "mA"),
+        };
     }
 
     private static string TelemetryVariable(LogParam parameter) => parameter switch
@@ -1828,6 +1834,8 @@ public sealed class EscBridgeService
         LogParam.CurrentU => "current_u",
         LogParam.CurrentV => "current_v",
         LogParam.BemfPeriod => "bemf_period",
+        LogParam.BusVoltage => "bus_voltage",
+        LogParam.BusCurrent => "bus_current",
         _ => throw new ArgumentOutOfRangeException(nameof(parameter), parameter, "Canal de telemetria no soportado.")
     };
 

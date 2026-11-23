@@ -480,7 +480,14 @@ public static class EscProtocol
             frame.Payload[3] != 0,
             BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(4, 2)),
             BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(6, 2)),
-            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(8, 2)));
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(8, 2)),
+            frame.Payload.Length >= 18
+                ? new PowerMonitorReading(
+                    (PowerMonitorFlags)frame.Payload[10],
+                    frame.Payload[11],
+                    BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(12, 2)),
+                    BinaryPrimitives.ReadInt32LittleEndian(frame.Payload.AsSpan(14, 4)))
+                : null);
     }
 
     public static ValidationReference DecodeValidationReference(EscFrame frame)
@@ -537,6 +544,8 @@ public static class EscProtocol
             LogParam.Temperature => "cdeg",
             LogParam.CurrentU or LogParam.CurrentV => "mA",
             LogParam.BemfPeriod => "ticks",
+            LogParam.BusVoltage => "mV",
+            LogParam.BusCurrent => "mA",
             _ => "raw"
         };
 
@@ -547,6 +556,8 @@ public static class EscProtocol
             LogParam.CurrentU => "current_u",
             LogParam.CurrentV => "current_v",
             LogParam.BemfPeriod => "bemf_period",
+            LogParam.BusVoltage => "bus_voltage",
+            LogParam.BusCurrent => "bus_current",
             _ => $"0x{frame.Payload[0]:X2}"
         };
 

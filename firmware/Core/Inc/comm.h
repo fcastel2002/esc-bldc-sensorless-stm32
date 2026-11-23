@@ -12,7 +12,7 @@
 
 #define BUFFER_SIZE 128
 #define MAX_CMD_LEN 64
-#define MAX_LOGGED_PARAMS 5
+#define MAX_LOGGED_PARAMS 7
 
 extern uint8_t rx_data[1];
 extern volatile uint8_t rx_buffer[BUFFER_SIZE];
@@ -55,6 +55,8 @@ typedef enum {
   VAR_CURRENT_U,
   VAR_CURRENT_V,
   VAR_BEMF_PERIOD,
+  VAR_BUS_VOLTAGE,
+  VAR_BUS_CURRENT,
   VAR_SPEED,
 } LoggeableVariable;
 

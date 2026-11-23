@@ -65,6 +65,7 @@
 - In `CLOSEDLOOP`, `PWM_FREQ`, `KP`, `KI`, and `KD` apply hot; other config changes use the deferred `CONFIG` path.
 - RPM PI v2 controls direct RPM error with canonical ARR=2000 output and trapezoidal integration; KD is not implemented.
 - `CURRENT_LIMIT` and `TEMP_LIMIT` remain `NOT_IMPLEMENTED`. `CURRENT_U`/`CURRENT_V` telemetry (`PA3`/`PA4`, ADC1/ADC2 injected) exists in firmware, **but hardware current sensing is currently not connected/populated** (L298 `SENSE_A`/`SENSE_B` was dropped; planned replacement uses dedicated per-phase conditioning with op-amp); do not rely on current readings until the new sensing hardware is built. Temperature telemetry remains a placeholder.
+- INA219 DC-bus monitor (`power_monitor.c`) uses `I2C1` on `PB6/PB7` with a register-level driver (no HAL I2C). Those pins are shared with remapped `USART1`, so it runs only in USB transport mode; `GET_STATUS` bytes `10..17` and log params `0x06/0x07` carry its voltage/current.
 - CubeMX-generated files may contain `USER CODE BEGIN/END` regions; avoid editing generated sections outside those regions unless the task explicitly requires it.
 - C formatting/lint config exists at repo root as `.clang-format` and `.clang-tidy`.
 

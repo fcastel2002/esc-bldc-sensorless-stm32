@@ -174,6 +174,8 @@ public enum LogParam : byte
     CurrentU = 0x03,
     CurrentV = 0x04,
     BemfPeriod = 0x05,
+    BusVoltage = 0x06,
+    BusCurrent = 0x07,
     All = 0xFF,
 }
 

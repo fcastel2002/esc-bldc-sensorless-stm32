@@ -196,6 +196,8 @@ public static class BridgeEndpointMapper
             "CURRENT_U" or "IU" => LogParam.CurrentU,
             "CURRENT_V" or "IV" => LogParam.CurrentV,
             "BEMF" or "BEMF_PERIOD" => LogParam.BemfPeriod,
+            "BUS_VOLTAGE" or "VBUS" or "VOLTAGE" => LogParam.BusVoltage,
+            "BUS_CURRENT" or "IBUS" or "CURRENT" => LogParam.BusCurrent,
             _ => throw new BadHttpRequestException($"Unknown telemetry parameter '{parameter}'.")
         };
     }

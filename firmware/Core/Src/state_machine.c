@@ -7,6 +7,7 @@
 
 #include "state_machine.h"
 #include "usart.h"
+#include "power_monitor.h"
 
 #pragma GCC optimize("Os")
 
@@ -48,6 +49,8 @@ __attribute__((optimize("Oz"))) App_States_t handleState(void)
     processUartData();
     last_comm_check = current_time;
   }
+
+  power_monitor_process();
 
   if (app_state != IDLE && app_state != HARD_ERROR) {
     process_logging_queue();

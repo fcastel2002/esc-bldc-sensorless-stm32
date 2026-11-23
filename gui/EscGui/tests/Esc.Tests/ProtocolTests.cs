@@ -95,6 +95,54 @@ public sealed class ProtocolTests
     }
 
     [Fact]
+    public void DecodeStatusParsesIna219PowerExtension()
+    {
+        byte[] payload = new byte[18];
+        payload[1] = 1;
+        payload[10] = (byte)(PowerMonitorFlags.Present | PowerMonitorFlags.Valid);
+        payload[11] = 0x40;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(12, 2), 12_040);
+        BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(14, 4), -250_300);
+        byte[] raw = EscProtocol.BuildFrame(3, CommOpcode.GetStatus, 0, payload, CommFrameType.Response, CommStatus.Ok);
+
+        EscStatus status = EscProtocol.DecodeStatus(EscProtocol.Parse(raw));
+
+        Assert.NotNull(status.Power);
+        Assert.True(status.Power!.Present);
+        Assert.True(status.Power.Valid);
+        Assert.False(status.Power.Disabled);
+        Assert.Equal(0x40, status.Power.I2cAddress);
+        Assert.Equal(12.04, status.Power.BusVolts, 3);
+        Assert.Equal(-0.2503, status.Power.CurrentAmps, 6);
+        Assert.Equal(12.04 * -0.2503, status.Power.PowerWatts, 6);
+    }
+
+    [Fact]
+    public void DecodeStatusLegacyPayloadHasNoPowerReading()
+    {
+        byte[] raw = EscProtocol.BuildFrame(3, CommOpcode.GetStatus, 0, new byte[10], CommFrameType.Response, CommStatus.Ok);
+
+        Assert.Null(EscProtocol.DecodeStatus(EscProtocol.Parse(raw)).Power);
+    }
+
+    [Theory]
+    [InlineData(LogParam.BusVoltage, "bus_voltage", "mV", 12040)]
+    [InlineData(LogParam.BusCurrent, "bus_current", "mA", -250)]
+    public void DecodeTelemetryNamesIna219Channels(LogParam parameter, string name, string unit, int value)
+    {
+        byte[] payload = new byte[15];
+        payload[0] = (byte)parameter;
+        BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(1, 4), value);
+        byte[] raw = EscProtocol.BuildFrame(0, CommOpcode.TelemetryEvent, (byte)parameter, payload, CommFrameType.Event, CommStatus.Ok);
+
+        TelemetrySample sample = EscProtocol.DecodeTelemetry(EscProtocol.Parse(raw), DateTimeOffset.UtcNow);
+
+        Assert.Equal(name, sample.Variable);
+        Assert.Equal(unit, sample.Unit);
+        Assert.Equal(value, sample.RawValue);
+    }
+
+    [Fact]
     public void DecodeStatusUsesFirmwareStateOrder()
     {
         byte[] payload = new byte[10];

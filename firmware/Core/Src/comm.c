@@ -11,6 +11,7 @@
 #include "current_sense.h"
 #include "bldc_driver.h"
 #include "motor_control.h"
+#include "power_monitor.h"
 #include "speed_sensor.h"
 
 uint8_t rx_index = 0;
@@ -37,6 +38,7 @@ void commInit(void)
   rx_tail = 0;
   memset((void*)rx_buffer, 0, sizeof(rx_buffer));
   comm_transport_init();
+  power_monitor_init(comm_transport_get_mode() == COMM_TRANSPORT_USB);
 }
 
 void processUartData(void)
@@ -84,6 +86,10 @@ static uint8_t logging_id_to_protocol(LoggeableVariable variable)
     return COMM_LOG_PARAM_CURRENT_V;
   case VAR_BEMF_PERIOD:
     return COMM_LOG_PARAM_BEMF_PERIOD;
+  case VAR_BUS_VOLTAGE:
+    return COMM_LOG_PARAM_BUS_VOLTAGE;
+  case VAR_BUS_CURRENT:
+    return COMM_LOG_PARAM_BUS_CURRENT;
   default:
     return 0;
   }
@@ -98,7 +104,8 @@ typedef struct {
 } LoggingValue;
 
 static LoggingValue logging_value(LoggeableVariable variable,
-                                  const CurrentSenseSnapshot* current)
+                                  const CurrentSenseSnapshot* current,
+                                  const PowerMonitorSnapshot* power)
 {
   LoggingValue result = { .commutation_step = bldc_get_commutation_step() };
   switch (variable) {
@@ -131,6 +138,16 @@ static LoggingValue logging_value(LoggeableVariable variable,
     result.value = result.raw;
     result.flags = speed_sensor_get_bemf_quality_flags();
     return result;
+  case VAR_BUS_VOLTAGE:
+    result.value = power->bus_mv;
+    result.raw = power->bus_mv;
+    result.flags = power->flags;
+    return result;
+  case VAR_BUS_CURRENT:
+    result.value = power->current_ua / 1000; /* mA */
+    result.raw = (uint16_t)power->shunt_raw; /* 10 uV/LSB, signed */
+    result.flags = power->flags;
+    return result;
   default:
     return result;
   }
@@ -148,12 +165,14 @@ void process_logging_queue(void)
 
   CurrentSenseSnapshot current_snapshot;
   current_sense_get_snapshot(&current_snapshot);
+  PowerMonitorSnapshot power_snapshot;
+  power_monitor_get_snapshot(&power_snapshot);
 
   for (uint8_t i = 0; i < logging_queue.count; i++) {
     uint8_t frame[COMM_FRAME_SIZE];
     uint8_t payload[15];
     LoggeableVariable variable = logging_queue.params[i];
-    LoggingValue reading = logging_value(variable, &current_snapshot);
+    LoggingValue reading = logging_value(variable, &current_snapshot, &power_snapshot);
     uint32_t tick = HAL_GetTick();
 
     payload[0] = logging_id_to_protocol(variable);
