@@ -1,7 +1,8 @@
 /*
  * power_monitor.h
  *
- * INA219 DC-bus monitor on I2C1 (PB6 = SCL, PB7 = SDA) using the ST HAL I2C driver.
+ * INA219 DC-bus monitor on PB6 = SCL, PB7 = SDA, driven by a software I2C master
+ * on open-drain GPIOs (see power_monitor.c for why the I2C1 peripheral is not used).
  *
  * PB6/PB7 are shared with USART1 (remapped) used by the UART transport, so the
  * monitor is only active when the board boots in USB transport mode (PB8 HIGH).
@@ -32,9 +33,9 @@
 #define POWER_ERR_NONE 0U
 #define POWER_ERR_NOT_FOUND 1U /**< No ACK at 0x40..0x4F (wiring, pull-ups, power). */
 #define POWER_ERR_NACK 2U      /**< Acknowledge failure during a transfer. */
-#define POWER_ERR_TIMEOUT 3U   /**< HAL timeout (SCL held low / no response). */
+#define POWER_ERR_TIMEOUT 3U   /**< SCL held low (clock-stretch timeout). */
 #define POWER_ERR_BUS 4U       /**< Bus error or arbitration lost (noise). */
-#define POWER_ERR_BUSY 5U      /**< Bus stuck busy (SDA held low). */
+#define POWER_ERR_BUSY 5U      /**< SDA held low before START. */
 #define POWER_ERR_OTHER 6U
 
 /* Stage of the last failure, GET_STATUS byte 21. */
@@ -44,7 +45,7 @@
 #define POWER_STAGE_CONFIG_VERIFY 3U /**< Config read-back failed or mismatched. */
 #define POWER_STAGE_READ_SHUNT 4U
 #define POWER_STAGE_READ_BUS 5U
-#define POWER_STAGE_IDLE_BUSY 6U    /**< BUSY latched while idle; peripheral re-initialised. */
+#define POWER_STAGE_IDLE_BUSY 6U    /**< Legacy (hardware-I2C BUSY lock-up); no longer reported. */
 
 /* Idle line levels sampled as floating inputs before each probe, byte 20. */
 #define POWER_LINE_SCL_HIGH 0x01U
@@ -56,7 +57,7 @@ typedef struct {
   uint8_t line_state;   /**< POWER_LINE_* idle levels (pull-ups present => 0x03). */
   uint8_t fail_stage;   /**< POWER_STAGE_* of the last failure. */
   uint16_t config_readback; /**< Config register read back after the probe write. */
-  uint16_t busy_recoveries; /**< Peripheral resets done because BUSY was latched. */
+  uint16_t busy_recoveries; /**< Legacy hardware-I2C BUSY resets; always 0 with the GPIO master. */
   uint16_t bus_mv;      /**< Bus voltage at VIN- relative to GND, mV. */
   int32_t current_ua;   /**< DC-bus current through the shunt, microamps. */
   int16_t shunt_raw;    /**< Raw shunt-voltage register (10 uV/LSB). */

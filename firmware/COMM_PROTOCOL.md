@@ -109,22 +109,24 @@ present after the config register reads back the written value, so a floating
 bus that fakes an address ACK is not mistaken for an INA219. Legacy firmware returns 10 bytes; clients must
 treat a 10-byte status as "no power monitor".
 
-INA219 notes: the sensor sits on `I2C1` (`PB6` SCL, `PB7` SDA, no remap), driven by
-the ST HAL I2C driver, which
+INA219 notes: the sensor sits on `PB6` (SCL) / `PB7` (SDA), driven by a software
+(bit-banged) I2C master on open-drain GPIOs at ~100 kHz. The pins
 is the same pin pair used by remapped `USART1` for the UART transport. It is
 therefore enabled only when the board boots in USB mode (`PB8` HIGH); in UART
 mode bit 3 is set and all readings are zero. Firmware configures it for 32 V bus
 range, PGA /8 (+/-320 mV shunt, +/-3.2 A with 0.1 ohm), 16-sample averaging on
 both channels, and polls it every 20 ms from the main loop. Addresses
 `0x40..0x4F` are probed; a missing sensor (or 5 consecutive read failures)
-triggers a bus recovery, I2C re-init and re-probe every 1 s. Before every
-transfer the firmware re-initialises the peripheral if `BUSY` is latched while
-the bus is idle: on this board the F1 I2C1 keeps `BUSY` set after each 2-byte
-read (analog-filter errata), which made the following transfer time out. A
-failed read is also retried once after a re-init. `PB6` is also
+triggers a bus recovery, I2C re-init and re-probe every 1 s. The hardware
+I2C1 peripheral is not used: it needs `PB6/PB7` in alternate-function mode,
+where remapped `USART1` interferes (reads fail), and clearing `USART1_REMAP`
+moves `USART1` onto the TIM1 phase PWM pins `PA8/PA9/PA10`, which breaks the
+power-stage drive and the ZC auto-detect. `USART1_REMAP` must stay set. In GPIO
+mode the pins are driven only by `ODR`, so nothing else can interfere. Byte 24..25
+(BUSY resets) is kept for compatibility and is always `0`; stage `6` is no longer
+reported. `PB6` is also
 `TIM4_CH1`: the control-period timer is started with only the CC1 interrupt
-(`motor_control_timer_start()`), never `HAL_TIM_OC_Start_IT`, so the timer
-output never fights the I2C clock.
+(`motor_control_timer_start()`), never `HAL_TIM_OC_Start_IT`.
 
 `app_state=10` identifies the continuous open-loop `SINE_DRIVE` state,
 `app_state=11` the commutation-step debug `STEP_TEST` state, and `app_state=12`
