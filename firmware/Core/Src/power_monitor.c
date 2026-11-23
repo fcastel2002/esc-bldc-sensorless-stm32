@@ -80,6 +80,24 @@ static void i2c_bus_recover(void)
   short_delay();
 }
 
+/* Sample idle SCL/SDA as floating inputs: both must read high when the
+ * module's pull-ups are powered. */
+static void sample_idle_lines(void)
+{
+  GPIO_InitTypeDef gpio = { 0 };
+  gpio.Pin = I2C_SCL_PIN | I2C_SDA_PIN;
+  gpio.Mode = GPIO_MODE_INPUT;
+  gpio.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOB, &gpio);
+  short_delay();
+  short_delay();
+
+  uint8_t state = 0U;
+  if (HAL_GPIO_ReadPin(GPIOB, I2C_SCL_PIN) == GPIO_PIN_SET) state |= POWER_LINE_SCL_HIGH;
+  if (HAL_GPIO_ReadPin(GPIOB, I2C_SDA_PIN) == GPIO_PIN_SET) state |= POWER_LINE_SDA_HIGH;
+  snapshot.line_state = state;
+}
+
 static void i2c_init(void)
 {
   if (hi2c1.State != HAL_I2C_STATE_RESET) {
@@ -91,6 +109,7 @@ static void i2c_init(void)
   __HAL_RCC_I2C1_CLK_ENABLE();
   __HAL_AFIO_REMAP_I2C1_DISABLE();
 
+  sample_idle_lines();
   i2c_bus_recover();
 
   GPIO_InitTypeDef gpio = { 0 };
@@ -127,9 +146,10 @@ static uint8_t map_hal_error(HAL_StatusTypeDef status)
   return POWER_ERR_OTHER;
 }
 
-static void record_error(uint8_t error)
+static void record_error(uint8_t error, uint8_t stage)
 {
   snapshot.last_error = error;
+  snapshot.fail_stage = stage;
   if (snapshot.error_count < 0xFFU) {
     snapshot.error_count++;
   }
@@ -172,13 +192,23 @@ static bool ina219_probe(void)
   if (snapshot.i2c_addr == 0U) {
     /* A plain NACK on every address means nobody answered; anything else is a bus fault. */
     record_error(HAL_I2C_GetError(&hi2c1) == HAL_I2C_ERROR_AF ? POWER_ERR_NOT_FOUND
-                                                               : map_hal_error(st));
+                                                               : map_hal_error(st),
+                 POWER_STAGE_PROBE);
     return false;
   }
 
   uint8_t err = ina219_write(snapshot.i2c_addr, INA219_REG_CONFIG, INA219_CONFIG_VALUE);
   if (err != POWER_ERR_NONE) {
-    record_error(err);
+    record_error(err, POWER_STAGE_CONFIG_WRITE);
+    return false;
+  }
+
+  /* A floating bus can fake an address ACK; only a correct read-back proves the INA219. */
+  uint16_t readback = 0U;
+  err = ina219_read(snapshot.i2c_addr, INA219_REG_CONFIG, &readback);
+  snapshot.config_readback = readback;
+  if (err != POWER_ERR_NONE || readback != INA219_CONFIG_VALUE) {
+    record_error(err != POWER_ERR_NONE ? err : POWER_ERR_OTHER, POWER_STAGE_CONFIG_VERIFY);
     return false;
   }
 
@@ -229,12 +259,14 @@ void power_monitor_process(void)
 
   uint16_t shunt = 0U;
   uint16_t bus = 0U;
+  uint8_t stage = POWER_STAGE_READ_SHUNT;
   uint8_t err = ina219_read(snapshot.i2c_addr, INA219_REG_SHUNT, &shunt);
   if (err == POWER_ERR_NONE) {
+    stage = POWER_STAGE_READ_BUS;
     err = ina219_read(snapshot.i2c_addr, INA219_REG_BUS, &bus);
   }
   if (err != POWER_ERR_NONE) {
-    record_error(err);
+    record_error(err, stage);
     snapshot.flags &= (uint8_t)~POWER_FLAG_VALID;
     if (++failure_count >= POWER_MONITOR_MAX_FAILURES) {
       snapshot.flags &= (uint8_t)~POWER_FLAG_PRESENT; /* re-init + re-probe on next retry */

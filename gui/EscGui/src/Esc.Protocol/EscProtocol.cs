@@ -488,7 +488,10 @@ public static class EscProtocol
                     BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(12, 2)),
                     BinaryPrimitives.ReadInt32LittleEndian(frame.Payload.AsSpan(14, 4)),
                     frame.Payload.Length >= 20 ? (PowerMonitorError)frame.Payload[18] : PowerMonitorError.None,
-                    frame.Payload.Length >= 20 ? frame.Payload[19] : (byte)0)
+                    frame.Payload.Length >= 20 ? frame.Payload[19] : (byte)0,
+                    frame.Payload.Length >= 24 ? frame.Payload[20] : null,
+                    frame.Payload.Length >= 24 ? (PowerMonitorStage)frame.Payload[21] : PowerMonitorStage.None,
+                    frame.Payload.Length >= 24 ? BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(22, 2)) : (ushort)0)
                 : null);
     }
 

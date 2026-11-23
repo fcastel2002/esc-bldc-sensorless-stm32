@@ -254,7 +254,21 @@
     };
     private string SupplyErrorSuffix => Supply is null || Supply.LastError == PowerMonitorError.None
         ? string.Empty
-        : $" · ultimo error: {SupplyErrorText(Supply.LastError)} ({Supply.ErrorCount} fallos)";
+        : $" · ultimo error: {SupplyErrorText(Supply.LastError)} en {SupplyStageText(Supply.FailStage)} ({Supply.ErrorCount} fallos){SupplyLineText}";
+    private string SupplyLineText => Supply?.LineState is null
+        ? string.Empty
+        : Supply.SclIdleHigh == true && Supply.SdaIdleHigh == true
+            ? " · lineas en reposo OK (SCL/SDA altas)"
+            : $" · lineas en reposo: SCL {(Supply.SclIdleHigh == true ? "alta" : "BAJA")}, SDA {(Supply.SdaIdleHigh == true ? "alta" : "BAJA")} → revisar VCC del INA219 y pull-ups";
+    private static string SupplyStageText(PowerMonitorStage stage) => stage switch
+    {
+        PowerMonitorStage.Probe => "deteccion",
+        PowerMonitorStage.ConfigWrite => "escritura de config",
+        PowerMonitorStage.ConfigVerify => "verificacion de config",
+        PowerMonitorStage.ReadShunt => "lectura shunt",
+        PowerMonitorStage.ReadBus => "lectura bus",
+        _ => "-"
+    };
     private static string SupplyErrorText(PowerMonitorError error) => error switch
     {
         PowerMonitorError.NotFound => "sin ACK en 0x40..0x4F (cableado, pull-ups o VCC)",

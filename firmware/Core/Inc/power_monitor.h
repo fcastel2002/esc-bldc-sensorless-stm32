@@ -37,9 +37,24 @@
 #define POWER_ERR_BUSY 5U      /**< Bus stuck busy (SDA held low). */
 #define POWER_ERR_OTHER 6U
 
+/* Stage of the last failure, GET_STATUS byte 21. */
+#define POWER_STAGE_NONE 0U
+#define POWER_STAGE_PROBE 1U        /**< No address ACK in 0x40..0x4F. */
+#define POWER_STAGE_CONFIG_WRITE 2U /**< Writing the configuration register. */
+#define POWER_STAGE_CONFIG_VERIFY 3U /**< Config read-back failed or mismatched. */
+#define POWER_STAGE_READ_SHUNT 4U
+#define POWER_STAGE_READ_BUS 5U
+
+/* Idle line levels sampled as floating inputs before each probe, byte 20. */
+#define POWER_LINE_SCL_HIGH 0x01U
+#define POWER_LINE_SDA_HIGH 0x02U
+
 typedef struct {
   uint8_t last_error;   /**< POWER_ERR_* of the last failed transaction. */
   uint8_t error_count;  /**< Saturating count of failed transactions. */
+  uint8_t line_state;   /**< POWER_LINE_* idle levels (pull-ups present => 0x03). */
+  uint8_t fail_stage;   /**< POWER_STAGE_* of the last failure. */
+  uint16_t config_readback; /**< Config register read back after the probe write. */
   uint16_t bus_mv;      /**< Bus voltage at VIN- relative to GND, mV. */
   int32_t current_ua;   /**< DC-bus current through the shunt, microamps. */
   int16_t shunt_raw;    /**< Raw shunt-voltage register (10 uV/LSB). */

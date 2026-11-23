@@ -98,8 +98,14 @@ configuration.
 | 14..17 | `int32` | DC-bus current through the 0.1 ohm shunt, microamps |
 | 18 | `uint8` | INA219 last I2C error: `0` none, `1` not found (no ACK at `0x40..0x4F`), `2` NACK, `3` timeout, `4` bus error/arbitration lost, `5` bus busy, `6` other |
 | 19 | `uint8` | INA219 failed-transaction counter (saturates at 255) |
+| 20 | `uint8` | idle line levels sampled as floating inputs before each probe: bit 0 SCL high, bit 1 SDA high (`0x03` = pull-ups present) |
+| 21 | `uint8` | stage of the last failure: `0` none, `1` probe (address), `2` config write, `3` config read-back verify, `4` shunt read, `5` bus read |
+| 22..23 | `uint16` | INA219 config register read back after the probe write (expected `0x3E67`) |
 
-The current payload is 20 bytes (an 18-byte variant without bytes 18..19 is also accepted). Legacy firmware returns 10 bytes; clients must
+The current payload is 24 bytes; 18- and 20-byte variants (without the trailing
+diagnostics) are also accepted by the GUI. The probe only reports the sensor as
+present after the config register reads back the written value, so a floating
+bus that fakes an address ACK is not mistaken for an INA219. Legacy firmware returns 10 bytes; clients must
 treat a 10-byte status as "no power monitor".
 
 INA219 notes: the sensor sits on `I2C1` (`PB6` SCL, `PB7` SDA, no remap), driven by
