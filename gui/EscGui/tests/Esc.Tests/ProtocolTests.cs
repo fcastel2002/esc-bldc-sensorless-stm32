@@ -97,7 +97,8 @@ public sealed class ProtocolTests
     [Fact]
     public void DecodeStatusParsesIna219PowerExtension()
     {
-        byte[] payload = new byte[24];
+        byte[] payload = new byte[26];
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(24, 2), 513);
         payload[20] = 0x01;
         payload[21] = (byte)PowerMonitorStage.ConfigVerify;
         BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(22, 2), 0x399F);
@@ -126,6 +127,7 @@ public sealed class ProtocolTests
         Assert.False(status.Power.SdaIdleHigh);
         Assert.Equal(PowerMonitorStage.ConfigVerify, status.Power.FailStage);
         Assert.Equal(0x399F, status.Power.ConfigReadback);
+        Assert.Equal(513, status.Power.BusyRecoveries);
     }
 
     [Fact]

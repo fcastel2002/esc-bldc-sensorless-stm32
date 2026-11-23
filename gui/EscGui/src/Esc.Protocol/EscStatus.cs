@@ -53,7 +53,8 @@ public sealed record PowerMonitorReading(
     byte ErrorCount = 0,
     byte? LineState = null,
     PowerMonitorStage FailStage = PowerMonitorStage.None,
-    ushort ConfigReadback = 0)
+    ushort ConfigReadback = 0,
+    ushort BusyRecoveries = 0)
 {
     public bool? SclIdleHigh => LineState is { } s ? (s & 0x01) != 0 : null;
     public bool? SdaIdleHigh => LineState is { } s ? (s & 0x02) != 0 : null;

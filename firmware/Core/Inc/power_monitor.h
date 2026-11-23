@@ -56,6 +56,7 @@ typedef struct {
   uint8_t line_state;   /**< POWER_LINE_* idle levels (pull-ups present => 0x03). */
   uint8_t fail_stage;   /**< POWER_STAGE_* of the last failure. */
   uint16_t config_readback; /**< Config register read back after the probe write. */
+  uint16_t busy_recoveries; /**< Peripheral resets done because BUSY was latched. */
   uint16_t bus_mv;      /**< Bus voltage at VIN- relative to GND, mV. */
   int32_t current_ua;   /**< DC-bus current through the shunt, microamps. */
   int16_t shunt_raw;    /**< Raw shunt-voltage register (10 uV/LSB). */

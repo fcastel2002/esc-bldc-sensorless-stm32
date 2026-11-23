@@ -156,8 +156,25 @@ static void record_error(uint8_t error, uint8_t stage)
   }
 }
 
+/* On this board the F1 I2C peripheral latches BUSY after a completed 2-byte
+ * read even though SCL/SDA are idle high (analog-filter errata, see ES096
+ * "I2C analog filter may provide wrong value, locking BUSY flag"). The next
+ * transfer then times out. Reset the peripheral before any transfer that
+ * finds BUSY set while the lines are free. */
+static void i2c_ensure_idle(void)
+{
+  if (__HAL_I2C_GET_FLAG(&hi2c1, I2C_FLAG_BUSY) == RESET) {
+    return;
+  }
+  if (snapshot.busy_recoveries < 0xFFFFU) {
+    snapshot.busy_recoveries++;
+  }
+  i2c_init();
+}
+
 static uint8_t ina219_write(uint8_t addr, uint8_t reg, uint16_t value)
 {
+  i2c_ensure_idle();
   uint8_t buf[2] = { (uint8_t)(value >> 8), (uint8_t)(value & 0xFFU) };
   HAL_StatusTypeDef st = HAL_I2C_Mem_Write(&hi2c1, (uint16_t)(addr << 1), reg,
                                            I2C_MEMADD_SIZE_8BIT, buf, 2U, I2C_TIMEOUT_MS);
@@ -166,6 +183,7 @@ static uint8_t ina219_write(uint8_t addr, uint8_t reg, uint16_t value)
 
 static uint8_t ina219_read(uint8_t addr, uint8_t reg, uint16_t* value)
 {
+  i2c_ensure_idle();
   uint8_t buf[2] = { 0U, 0U };
   HAL_StatusTypeDef st = HAL_I2C_Mem_Read(&hi2c1, (uint16_t)(addr << 1), reg,
                                           I2C_MEMADD_SIZE_8BIT, buf, 2U, I2C_TIMEOUT_MS);
@@ -257,14 +275,6 @@ void power_monitor_process(void)
     return;
   }
   last_poll_tick = now;
-
-  /* STM32F1 I2C can latch BUSY on a line glitch (a spurious START without a
-   * STOP) while idle; it then never starts another transfer. If BUSY is set
-   * between our own transactions, count it and re-init the peripheral. */
-  if (__HAL_I2C_GET_FLAG(&hi2c1, I2C_FLAG_BUSY) != RESET) {
-    record_error(POWER_ERR_BUSY, POWER_STAGE_IDLE_BUSY);
-    i2c_init();
-  }
 
   uint16_t shunt = 0U;
   uint16_t bus = 0U;

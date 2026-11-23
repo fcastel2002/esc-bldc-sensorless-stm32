@@ -249,7 +249,7 @@
         { Disabled: true } => "Transporte UART activo: PB6/PB7 son de USART1, el INA219 queda deshabilitado.",
         { Present: false } => $"INA219 no responde en I2C1 (PB6 SCL / PB7 SDA){SupplyErrorSuffix}; reintentando cada 1 s.",
         { Overflow: true } => $"INA219 0x{Supply.I2cAddress:X2}: sobrerango del shunt (> 320 mV / 3.2 A).",
-        { Valid: true } => $"INA219 en 0x{Supply.I2cAddress:X2} · shunt 0.1 Ω · PGA ±320 mV · {Supply.ErrorCount} fallos I2C.",
+        { Valid: true } => $"INA219 en 0x{Supply.I2cAddress:X2} · shunt 0.1 Ω · PGA ±320 mV · {Supply.ErrorCount} fallos I2C · {Supply.BusyRecoveries} reinicios BUSY.",
         _ => $"INA219 en 0x{Supply.I2cAddress:X2}: fallo de lectura I2C{SupplyErrorSuffix}."
     };
     private string SupplyErrorSuffix => Supply is null || Supply.LastError == PowerMonitorError.None

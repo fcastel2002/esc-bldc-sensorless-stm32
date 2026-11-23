@@ -697,7 +697,8 @@ execute_request(const uint8_t request[COMM_FRAME_SIZE],
     payload_out[20] = power.line_state;
     payload_out[21] = power.fail_stage;
     write_u16_le(&payload_out[22], power.config_readback);
-    *payload_out_len = 24;
+    write_u16_le(&payload_out[24], power.busy_recoveries);
+    *payload_out_len = 26;
     return COMM_STATUS_OK;
   }
 

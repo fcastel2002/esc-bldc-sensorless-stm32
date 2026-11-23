@@ -491,7 +491,8 @@ public static class EscProtocol
                     frame.Payload.Length >= 20 ? frame.Payload[19] : (byte)0,
                     frame.Payload.Length >= 24 ? frame.Payload[20] : null,
                     frame.Payload.Length >= 24 ? (PowerMonitorStage)frame.Payload[21] : PowerMonitorStage.None,
-                    frame.Payload.Length >= 24 ? BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(22, 2)) : (ushort)0)
+                    frame.Payload.Length >= 24 ? BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(22, 2)) : (ushort)0,
+                    frame.Payload.Length >= 26 ? BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(24, 2)) : (ushort)0)
                 : null);
     }
 
