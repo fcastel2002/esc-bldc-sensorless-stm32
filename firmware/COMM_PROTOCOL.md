@@ -99,7 +99,7 @@ configuration.
 | 18 | `uint8` | INA219 last I2C error: `0` none, `1` not found (no ACK at `0x40..0x4F`), `2` NACK, `3` timeout, `4` bus error/arbitration lost, `5` bus busy, `6` other |
 | 19 | `uint8` | INA219 failed-transaction counter (saturates at 255) |
 | 20 | `uint8` | idle line levels sampled as floating inputs before each probe: bit 0 SCL high, bit 1 SDA high (`0x03` = pull-ups present) |
-| 21 | `uint8` | stage of the last failure: `0` none, `1` probe (address), `2` config write, `3` config read-back verify, `4` shunt read, `5` bus read |
+| 21 | `uint8` | stage of the last failure: `0` none, `1` probe (address), `2` config write, `3` config read-back verify, `4` shunt read, `5` bus read, `6` BUSY latched while idle (peripheral re-initialised) |
 | 22..23 | `uint16` | INA219 config register read back after the probe write (expected `0x3E67`) |
 
 The current payload is 24 bytes; 18- and 20-byte variants (without the trailing
@@ -116,7 +116,9 @@ mode bit 3 is set and all readings are zero. Firmware configures it for 32 V bus
 range, PGA /8 (+/-320 mV shunt, +/-3.2 A with 0.1 ohm), 16-sample averaging on
 both channels, and polls it every 20 ms from the main loop. Addresses
 `0x40..0x4F` are probed; a missing sensor (or 5 consecutive read failures)
-triggers a bus recovery, I2C re-init and re-probe every 1 s. `PB6` is also
+triggers a bus recovery, I2C re-init and re-probe every 1 s. Each poll also
+re-initialises the peripheral when `BUSY` is latched between transactions
+(F1 lock-up after a line glitch) and retries a failed read once after a re-init. `PB6` is also
 `TIM4_CH1`: the control-period timer is started with only the CC1 interrupt
 (`motor_control_timer_start()`), never `HAL_TIM_OC_Start_IT`, so the timer
 output never fights the I2C clock.

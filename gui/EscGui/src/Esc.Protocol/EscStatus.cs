@@ -40,6 +40,7 @@ public enum PowerMonitorStage : byte
     ConfigVerify = 3,
     ReadShunt = 4,
     ReadBus = 5,
+    IdleBusy = 6,
 }
 
 /// <summary>INA219 DC-bus reading carried by the extended GET_STATUS payload (bytes 10..17).</summary>

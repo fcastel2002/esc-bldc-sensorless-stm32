@@ -138,10 +138,11 @@ static void i2c_init(void)
 static uint8_t map_hal_error(HAL_StatusTypeDef status)
 {
   uint32_t code = HAL_I2C_GetError(&hi2c1);
+  /* HAL returns HAL_BUSY when the BUSY flag never cleared before START. */
+  if (status == HAL_BUSY) return POWER_ERR_BUSY;
   if ((code & HAL_I2C_ERROR_AF) != 0U) return POWER_ERR_NACK;
   if ((code & (HAL_I2C_ERROR_BERR | HAL_I2C_ERROR_ARLO)) != 0U) return POWER_ERR_BUS;
   if ((code & HAL_I2C_ERROR_TIMEOUT) != 0U) return POWER_ERR_TIMEOUT;
-  if (status == HAL_BUSY) return POWER_ERR_BUSY;
   if (status == HAL_TIMEOUT) return POWER_ERR_TIMEOUT;
   return POWER_ERR_OTHER;
 }
@@ -257,16 +258,33 @@ void power_monitor_process(void)
   }
   last_poll_tick = now;
 
+  /* STM32F1 I2C can latch BUSY on a line glitch (a spurious START without a
+   * STOP) while idle; it then never starts another transfer. If BUSY is set
+   * between our own transactions, count it and re-init the peripheral. */
+  if (__HAL_I2C_GET_FLAG(&hi2c1, I2C_FLAG_BUSY) != RESET) {
+    record_error(POWER_ERR_BUSY, POWER_STAGE_IDLE_BUSY);
+    i2c_init();
+  }
+
   uint16_t shunt = 0U;
   uint16_t bus = 0U;
   uint8_t stage = POWER_STAGE_READ_SHUNT;
-  uint8_t err = ina219_read(snapshot.i2c_addr, INA219_REG_SHUNT, &shunt);
-  if (err == POWER_ERR_NONE) {
-    stage = POWER_STAGE_READ_BUS;
-    err = ina219_read(snapshot.i2c_addr, INA219_REG_BUS, &bus);
+  uint8_t err = POWER_ERR_NONE;
+  for (uint8_t attempt = 0U; attempt < 2U; attempt++) {
+    stage = POWER_STAGE_READ_SHUNT;
+    err = ina219_read(snapshot.i2c_addr, INA219_REG_SHUNT, &shunt);
+    if (err == POWER_ERR_NONE) {
+      stage = POWER_STAGE_READ_BUS;
+      err = ina219_read(snapshot.i2c_addr, INA219_REG_BUS, &bus);
+    }
+    if (err == POWER_ERR_NONE) {
+      break;
+    }
+    /* Record the first failure, recover the peripheral and retry once. */
+    record_error(err, stage);
+    i2c_init();
   }
   if (err != POWER_ERR_NONE) {
-    record_error(err, stage);
     snapshot.flags &= (uint8_t)~POWER_FLAG_VALID;
     if (++failure_count >= POWER_MONITOR_MAX_FAILURES) {
       snapshot.flags &= (uint8_t)~POWER_FLAG_PRESENT; /* re-init + re-probe on next retry */

@@ -267,6 +267,7 @@
         PowerMonitorStage.ConfigVerify => "verificacion de config",
         PowerMonitorStage.ReadShunt => "lectura shunt",
         PowerMonitorStage.ReadBus => "lectura bus",
+        PowerMonitorStage.IdleBusy => "reposo (BUSY trabado por glitch, I2C reiniciado)",
         _ => "-"
     };
     private static string SupplyErrorText(PowerMonitorError error) => error switch

@@ -44,6 +44,7 @@
 #define POWER_STAGE_CONFIG_VERIFY 3U /**< Config read-back failed or mismatched. */
 #define POWER_STAGE_READ_SHUNT 4U
 #define POWER_STAGE_READ_BUS 5U
+#define POWER_STAGE_IDLE_BUSY 6U    /**< BUSY latched while idle; peripheral re-initialised. */
 
 /* Idle line levels sampled as floating inputs before each probe, byte 20. */
 #define POWER_LINE_SCL_HIGH 0x01U
