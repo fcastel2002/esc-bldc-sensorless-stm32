@@ -1,0 +1,3055 @@
+% =====================================================================
+%  Física y modelado dinámico de un motor BLDC con acople magnético
+%  y carga fluida — Guía progresiva desde las leyes fundamentales
+%  Compilar con:  pdflatex fundamentos_fisicos_modelado.tex (x2)
+%             o:  latexmk -pdf fundamentos_fisicos_modelado.tex
+% =====================================================================
+\documentclass[11pt,a4paper,oneside]{book}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[spanish,es-noshorthands,es-tabla]{babel}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage[top=2.6cm,bottom=2.6cm,left=2.6cm,right=2.4cm,headheight=24pt]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{cancel}
+\usepackage{bm}
+\usepackage{siunitx}
+\sisetup{
+  output-decimal-marker={,},
+  group-separator={.},
+  per-mode=symbol,
+  detect-all
+}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,decorations.pathmorphing,patterns,shapes.geometric}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
+\usepackage[skins]{tcolorbox}
+\usepackage[hidelinks,bookmarks=true,bookmarksopen=true]{hyperref}
+
+% ---- Paleta sobria estilo libro de ingeniería ----
+\definecolor{inkblue}{HTML}{1B3A5C}
+\definecolor{tealaccent}{HTML}{196463}
+\definecolor{amberwarn}{HTML}{9A5B13}
+\definecolor{crimson}{HTML}{9B2226}
+\definecolor{slatebg}{HTML}{F5F7FA}
+\definecolor{tealbg}{HTML}{F1F8F7}
+\definecolor{amberbg}{HTML}{FDF8F0}
+\definecolor{quizbg}{HTML}{F3F5F9}
+\definecolor{mutedgray}{HTML}{5C6773}
+
+% ---- Encabezados y pies de página estilo libro ----
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{mutedgray}\nouppercase{\leftmark}}
+\fancyhead[R]{\small\color{inkblue}\bfseries\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{inkblue!25}\leaders\hrule height \headrulewidth\hfill}}
+
+\fancypagestyle{plain}{
+  \fancyhf{}
+  \fancyfoot[C]{\small\color{inkblue}\bfseries\thepage}
+  \renewcommand{\headrulewidth}{0pt}
+}
+
+% ---- Estilo limpio de títulos de capítulo (sin titlesec) ----
+\makeatletter
+\def\@makechapterhead#1{%
+  \vspace*{10\p@}%
+  {\parindent \z@ \raggedright \normalfont
+    \ifnum \c@secnumdepth >\m@ne
+      \if@mainmatter
+        {\large\scshape\color{tealaccent}\@chapapp\space \thechapter}%
+        \par\nobreak
+        \vskip 6\p@
+      \fi
+    \fi
+    \interlinepenalty\@M
+    {\Huge \bfseries \color{inkblue} #1\par\nobreak}%
+    \vskip 8\p@
+    {\color{inkblue!35}\hrule height 1.2pt}%
+    \vskip 24\p@
+  }}
+\def\@makeschapterhead#1{%
+  \vspace*{10\p@}%
+  {\parindent \z@ \raggedright \normalfont
+    \interlinepenalty\@M
+    {\Huge \bfseries \color{inkblue} #1\par\nobreak}%
+    \vskip 8\p@
+    {\color{inkblue!35}\hrule height 1.2pt}%
+    \vskip 24\p@
+  }}
+\makeatother
+
+% ---- Cajas pedagógicas ----
+\newtcolorbox{ideafisica}[1][Idea física]{
+  enhanced,
+  colback=tealbg, colframe=tealaccent,
+  boxrule=0pt, leftrule=3.5pt, arc=2pt,
+  top=8pt, bottom=8pt, left=11pt, right=11pt,
+  before skip=10pt, after skip=10pt,
+  fonttitle=\bfseries\color{tealaccent},
+  title={#1},
+  attach title to upper={\par\smallskip}
+}
+
+\newtcolorbox{lectura}[1][Cómo se lee término a término]{
+  enhanced,
+  colback=slatebg, colframe=inkblue,
+  boxrule=0pt, leftrule=3.5pt, arc=2pt,
+  top=8pt, bottom=8pt, left=11pt, right=11pt,
+  before skip=10pt, after skip=10pt,
+  fonttitle=\bfseries\color{inkblue},
+  title={#1},
+  attach title to upper={\par\smallskip}
+}
+
+\newtcolorbox{unidades}[1][Verificación dimensional]{
+  enhanced,
+  colback=white, colframe=inkblue!40,
+  boxrule=0.6pt, arc=2pt,
+  top=6pt, bottom=6pt, left=10pt, right=10pt,
+  before skip=8pt, after skip=10pt,
+  fonttitle=\bfseries\small\color{inkblue},
+  title={#1},
+  attach title to upper={\quad}
+}
+
+\newtcolorbox{antidoto}[1][Qué dejamos afuera a propósito (antídoto contra la página en negro)]{
+  enhanced,
+  colback=amberbg, colframe=amberwarn,
+  boxrule=0pt, leftrule=3.5pt, arc=2pt,
+  top=8pt, bottom=8pt, left=11pt, right=11pt,
+  before skip=12pt, after skip=10pt,
+  fonttitle=\bfseries\color{amberwarn},
+  title={#1},
+  attach title to upper={\par\smallskip}
+}
+
+\newtcolorbox{lapizypapel}[1][Prueba de lápiz y papel (antes de seguir al próximo capítulo)]{
+  enhanced,
+  colback=quizbg, colframe=inkblue!75,
+  boxrule=0.8pt, arc=3pt,
+  top=8pt, bottom=8pt, left=11pt, right=11pt,
+  before skip=12pt, after skip=14pt,
+  fonttitle=\bfseries\color{white},
+  colbacktitle=inkblue,
+  title={#1}
+}
+
+\newtcolorbox{ecuacionclave}{
+  enhanced,
+  colback=slatebg, colframe=inkblue!45,
+  boxrule=0.7pt, arc=2pt,
+  top=5pt, bottom=5pt, left=8pt, right=8pt,
+  before skip=8pt, after skip=8pt
+}
+
+% ---- Comandos matemáticos ----
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\sgn}{\operatorname{sgn}}
+\newcommand{\sat}{\operatorname{sat}}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+
+% =====================================================================
+\begin{document}
+% =====================================================================
+
+\frontmatter
+\hypersetup{pageanchor=false}
+
+% ---- Portada ----
+\begin{titlepage}
+  \centering
+  \vspace*{1.6cm}
+  {\small\scshape\color{tealaccent} Cuaderno de estudio --- Física y Control de Sistemas\par}
+  \vspace{0.8cm}
+  {\color{inkblue}\rule{\linewidth}{1.6pt}\par}
+  \vspace{0.9cm}
+  {\Huge\bfseries\color{inkblue}
+    Física y modelado dinámico\\[0.35em]
+    de un motor BLDC con acople magnético\\[0.35em]
+    y carga fluida\par}
+  \vspace{0.6cm}
+  {\Large\color{mutedgray}\itshape
+    Cómo construir el modelo desde cero con lápiz y papel:\\
+    de las leyes elementales a la linealización y los límites de validez\par}
+  \vspace{0.9cm}
+  {\color{inkblue}\rule{\linewidth}{1.6pt}\par}
+  \vspace{1.8cm}
+
+  % Diagrama minimalista en portada
+  \begin{tikzpicture}[
+    node distance=1.22cm,
+    box/.style={draw=inkblue!70, fill=slatebg, rounded corners=3pt,
+                minimum width=2.15cm, minimum height=1.08cm, align=center,
+                font=\scriptsize\color{inkblue}},
+    >={Stealth[length=5pt]}
+  ]
+    \node[box] (e) {\textbf{Dominio}\\\textbf{eléctrico}\\$V,\,I$};
+    \node[box, right=of e] (m1) {\textbf{Rotor}\\\textbf{del motor}\\$J_1,\,\omega_1$};
+    \node[box, right=of m1, fill=amberbg, draw=amberwarn] (ac) {\textbf{Acople}\\\textbf{magnético}\\$T_c(\delta)$};
+    \node[box, right=of ac] (m2) {\textbf{Agitador}\\\textbf{y fluido}\\$J_2,\,\omega_2$};
+    \draw[->, thick, inkblue] (e) -- node[above, font=\scriptsize]{$T_e = K I$} (m1);
+    \draw[->, thick, amberwarn] (m1) -- node[above, font=\scriptsize]{$\delta$} (ac);
+    \draw[->, thick, amberwarn] (ac) -- node[above, font=\scriptsize]{$T_c$} (m2);
+    \draw[->, dashed, tealaccent] (m1.south) -- ++(0,-0.65) -| node[pos=0.25, below, font=\scriptsize]{BEMF $e = K\omega_1$} (e.south);
+  \end{tikzpicture}
+
+  \vfill
+  {\normalsize\color{mutedgray}
+    Enfoque progresivo basado exclusivamente en leyes físicas comprensibles\\
+    sin cajas negras ni parámetros sin sustento\par}
+  \vspace{0.6cm}
+  {\small\color{inkblue} Guía teórica de acompañamiento --- Control y Sistemas\par}
+  \vspace*{0.6cm}
+\end{titlepage}
+\hypersetup{pageanchor=true}
+
+% =====================================================================
+\chapter*{Prefacio: cómo leer este libro}
+\addcontentsline{toc}{chapter}{Prefacio: cómo leer este libro}
+\markboth{Prefacio}{Prefacio}
+% =====================================================================
+
+Aprender a modelar un sistema electromecánico suele resultar intimidante cuando
+uno abre un documento técnico y se encuentra, en la primera página, con una
+matriz $4\times 4$, una función de transferencia de tercer orden y cinco
+ecuaciones diferenciales ya armadas. Parece que hiciera falta memorizar fórmulas
+de memoria. Sin embargo, ocurre exactamente lo contrario: \textbf{en ingeniería,
+un buen modelo no se memoriza; se reconstruye en cinco minutos sobre una hoja en
+blanco a partir de cuatro leyes físicas muy simples}.
+
+Este libro fue escrito con un único propósito: acompañarte paso a paso en esa
+construcción desde cero, olvidándonos por completo de detalles de programación,
+registros de microcontroladores o bloques de simulador, para concentrarnos en
+la \textbf{física real del sistema}: un motor sin escobillas (BLDC) que arrastra
+una cápsula agitadora a través de un acople magnético dentro de un vaso con
+fluido, regulado en velocidad sin sensor mecánico en el eje.
+
+\section*{El «síndrome de la página en negro»}
+Antes, al enfrentarse a un modelado, existía el miedo a la \emph{página en
+blanco}: no saber por dónde empezar. Hoy existe el peligro opuesto, el
+\textbf{síndrome de la página en negro}: llenar páginas con ecuaciones cada vez
+más sofisticadas ---fricción dinámica de LuGre, tablas de turbulencia de tanques
+industriales, modelos térmicos acoplados, cálculos de campo magnético en tres
+dimensiones, efectos parásitos de conmutación--- simplemente porque es fácil
+escribirlos o copiarlos.
+
+Ese camino es una trampa por dos motivos:
+\begin{enumerate}
+  \item \textbf{Falsa sensación de seguridad:} si incluís un fenómeno cuyos
+        parámetros no podés medir ni justificar, tu modelo empieza a simular un
+        sistema imaginario que puede ser menos conservador que el real.
+  \item \textbf{Pérdida de dominio conceptual:} si alguien te detiene con un
+        lápiz y un papel y te pregunta \emph{«¿por qué este coeficiente lleva un
+        signo menos y este otro un factor~2?»}, y no sabés deducirlo desde la
+        física, el modelo dejó de ser tuyo.
+\end{enumerate}
+
+Por eso adoptamos aquí la regla de oro del modelado honesto: \textbf{preferimos
+un modelo más simple, del que podamos explicar cada término, cada signo y cada
+unidad con lápiz y papel, antes que un modelo recargado que no comprendamos por
+completo}. Lo que no se modela se declara explícitamente, y siempre que hay
+duda se toma una postura conservadora.
+
+\section*{Las únicas cuatro leyes que vas a necesitar}
+Todo el sistema ---desde la tensión de la fuente hasta la cápsula girando en el
+líquido--- se deduce aplicando únicamente cuatro principios clásicos que ya
+conocés de física general:
+\begin{enumerate}
+  \item \textbf{Ley de tensiones de Kirchhoff:} en una malla eléctrica, la
+        tensión aplicada se reparte entre resistencia, inductancia y tensión
+        inducida.
+  \item \textbf{Ley de inducción de Faraday:} un imán moviéndose frente a una
+        bobina induce una tensión proporcional a la velocidad de giro.
+  \item \textbf{Conservación de la energía:} la potencia eléctrica que no se
+        pierde en calor ni se guarda en el campo magnético \emph{tiene que}
+        convertirse en potencia mecánica en el eje. Esta ley ata para siempre
+        los dominios eléctrico y mecánico.
+  \item \textbf{Segunda y tercera ley de Newton para rotación:} la suma de
+        torques sobre cada cuerpo rígido iguala a su inercia por su aceleración
+        angular ($\sum T = J\,\dot\omega$), y todo torque que un cuerpo ejerce
+        sobre otro aparece en sentido opuesto sobre el primero.
+\end{enumerate}
+
+A esas cuatro leyes físicas sólo le sumaremos dos herramientas matemáticas de la
+materia de control: la \textbf{aproximación lineal de Taylor} (reemplazar una
+curva por su recta tangente cerca del punto de trabajo) y la
+\textbf{transformada de Laplace} (para pasar de ecuaciones diferenciales a
+funciones de transferencia y analizar un controlador PI).
+
+\section*{Mapa del recorrido}
+La figura siguiente resume la cadena física completa que vamos a ir armando
+capítulo por capítulo. Cada caja corresponde a un capítulo del libro: primero
+entendemos cada pieza aislada (Capítulos~\ref{cap:motor} a~\ref{cap:sensorless}),
+luego las ensamblamos en un único modelo no lineal (Capítulo~\ref{cap:ensamble}),
+lo linealizamos paso a paso (Capítulo~\ref{cap:linealizacion}) y finalmente
+vemos cómo diseñamos un control lineal y en qué fronteras físicas exactas ese
+modelo lineal deja de valer (Capítulo~\ref{cap:control_validez}).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  node distance=1.05cm and 0.95cm,
+  blk/.style={draw=inkblue, fill=slatebg, rounded corners=3pt,
+              align=center, minimum height=1.22cm, minimum width=2.25cm,
+              font=\footnotesize, inner sep=4pt},
+  nlblk/.style={draw=amberwarn, fill=amberbg, rounded corners=3pt,
+                align=center, minimum height=1.22cm, minimum width=2.25cm,
+                font=\footnotesize, inner sep=4pt},
+  >={Stealth[length=5pt]}
+]
+  \node[blk] (pi) {\textbf{Controlador PI}\\+ saturación $V$\\(Cap.~\ref{cap:control_validez})};
+  \node[blk, right=of pi] (mot) {\textbf{Motor eléctrico}\\$V \to I \to T_e$\\(Cap.~\ref{cap:motor})};
+  \node[blk, right=of mot] (rot) {\textbf{Rotor ($J_1$)}\\Newton rotacional\\(Cap.~\ref{cap:mecanica})};
+  \node[nlblk, right=of rot] (acp) {\textbf{Acople no lineal}\\$T_c(\delta)$\\(Cap.~\ref{cap:acople})};
+  \node[blk, below=1.25cm of acp] (ag) {\textbf{Agitador ($J_2$)}\\+ fricción + fluido\\(Caps.~\ref{cap:mecanica} y~\ref{cap:cargas})};
+  \node[nlblk, below=1.25cm of rot] (sen) {\textbf{Sensor BEMF}\\ceguera + retardo $1/n$\\(Cap.~\ref{cap:sensorless})};
+
+  \node[left=0.45cm of pi, font=\footnotesize\bfseries, inkblue] (ref) {$\omega^\ast$};
+  \draw[->, thick, inkblue] (ref) -- (pi);
+  \draw[->, thick, inkblue] (pi) -- node[above, font=\scriptsize]{$d$} node[below, font=\tiny, mutedgray]{$[d_{\min},1]$} (mot);
+  \draw[->, thick, inkblue] (mot) -- node[above, font=\scriptsize]{$T_e$} (rot);
+  \draw[->, thick, amberwarn] (rot) -- node[above, font=\scriptsize]{$\theta_1,\omega_1$} (acp);
+  \draw[->, thick, amberwarn] (acp) -- node[right, font=\scriptsize]{$T_c(\delta)$} (ag);
+  \draw[->, dashed, inkblue] (rot.south) -- node[left, font=\scriptsize]{$\omega_1$} (sen.north);
+  \draw[->, dashed, amberwarn] (sen.west) -| node[pos=0.28, below, font=\scriptsize]{$\hat\omega_1$ (atrasada o nula)} (pi.south);
+  \draw[->, dotted, mutedgray] ($(acp.south)+(-0.45,0)$) -- ++(0,-0.45) -| node[pos=0.25, below, font=\tiny]{reacción $-T_c$} ($(rot.east)+(0,-0.25)$);
+\end{tikzpicture}
+\caption{Arquitectura física del sistema completo y guía de lectura por capítulos. En tono cálido se resaltan los bloques donde residen las no linealidades dominantes.}
+\end{figure}
+
+\tableofcontents
+
+% =====================================================================
+\mainmatter
+% =====================================================================
+
+% =====================================================================
+\chapter{El motor eléctrico desde cero}\label{cap:motor}
+% =====================================================================
+
+\begin{ideafisica}
+Un motor eléctrico no es una caja mágica: es simplemente una \textbf{bobina de
+cobre colocada cerca de un imán}. Si le hacés pasar corriente, aparece un torque
+que hace girar el imán. A la inversa, cuando el imán gira frente a la bobina,
+induce una tensión que se opone a la que vos aplicás. Toda la dinámica eléctrica
+del motor nace de esa doble relación.
+\end{ideafisica}
+
+Empecemos haciendo un experimento mental que podés comprobar con cualquier
+motorcito de imán permanente sobre una mesa. Si lo desconectás de la fuente y
+girás el eje con los dedos midiendo sus terminales con un voltímetro, aparece
+una tensión. Cuanto más rápido lo girás, mayor es esa tensión. Ahora hacé lo
+contrario: trabá el eje con la mano y conectale una tensión pequeña. Sentís un
+esfuerzo de giro (un torque) proporcional a la corriente que circula por el
+cable.
+
+Esa simetría perfecta entre \emph{girar para generar tensión} y \emph{inyectar
+corriente para generar torque} es el corazón de cualquier motor de imán
+permanente, sea de corriente continua con escobillas o sin escobillas (BLDC).
+Vamos a ponerla en ecuaciones despacio y sin saltarnos un solo paso.
+
+% ---------------------------------------------------------------------
+\section{Las dos leyes electromecánicas fundamentales}
+% ---------------------------------------------------------------------
+
+Consideremos primero un motor idealizado con un único circuito eléctrico
+equivalente recorrido por una corriente $I(t)$, cuyo eje gira con velocidad
+angular mecánica $\omega_1(t)$ (en \si{rad/s}).
+
+\paragraph{1. Generación de tensión al girar (ley de Faraday).}
+Cuando los imanes del rotor giran frente a las espiras del estator, el flujo
+magnético que atraviesa las bobinas cambia con el tiempo. Según la ley de
+Faraday, la tensión inducida es proporcional a la tasa de cambio del flujo, que
+a su vez es proporcional a la velocidad angular $\omega_1$. A esa tensión
+inducida la llamamos \textbf{fuerza contraelectromotriz} o \textbf{BEMF}
+(\emph{Back Electromotive Force}), y la escribimos:
+\begin{equation}
+  e(t) = K\,\omega_1(t).
+  \label{eq:bemf_gen}
+\end{equation}
+La constante $K$ depende sólo de la geometría del motor, la intensidad de sus
+imanes y la cantidad de vueltas de cobre; por ahora no necesitamos saber qué
+hay dentro del motor para usarla: nos dice \emph{cuántos volts genera el motor
+por cada radián por segundo de giro}.
+
+\paragraph{2. Generación de torque al circular corriente (fuerza de Lorentz).}
+Cuando una corriente $I(t)$ circula por los conductores sumergidos en el campo
+magnético fijo de los imanes permanentes, cada conductor siente una fuerza de
+Lorentz proporcional al campo magnético y a la corriente. Como el campo de los
+imanes es constante y el radio del rotor es fijo, el torque electromagnético
+resultante es directamente proporcional a la corriente:
+\begin{equation}
+  T_e(t) = K_t\,I(t).
+  \label{eq:torque_gen}
+\end{equation}
+
+En principio escribimos dos símbolos distintos, $K$ en~\eqref{eq:bemf_gen} y
+$K_t$ en~\eqref{eq:torque_gen}, porque vienen de dos fenómenos distintos
+(Faraday y Lorentz). Pero en física dos dominios acoplados nunca son
+independientes: están unidos por la \textbf{conservación de la energía}.
+
+% ---------------------------------------------------------------------
+\section{Conservación de la energía: por qué \texorpdfstring{$K_t$ y $K$}{Kt y K} son la misma constante}
+% ---------------------------------------------------------------------
+
+Imaginemos nuestro motor ideal (sin pérdidas internas en la conversión entre
+electricidad y movimiento) girando a velocidad $\omega_1$ mientras circula una
+corriente $I$:
+\begin{itemize}
+  \item Desde el lado \textbf{eléctrico}, la fuente debe vencer la tensión
+        inducida $e$ empujando la corriente $I$. La potencia eléctrica que se
+        transfiere al mecanismo de conversión es:
+        \[
+          P_{\text{em}} = e\cdot I = \big(K\,\omega_1\big)\,I.
+        \]
+  \item Desde el lado \textbf{mecánico}, el eje recibe un torque $T_e$ mientras
+        gira a velocidad angular $\omega_1$. La potencia mecánica entregada al
+        rotor es:
+        \[
+          P_{\text{mec}} = T_e\cdot \omega_1 = \big(K_t\,I\big)\,\omega_1.
+        \]
+\end{itemize}
+Si no se crea ni se destruye energía en el entrehierro magnético, ambas
+potencias deben ser idénticas para \emph{cualquier} corriente $I$ y
+\emph{cualquier} velocidad $\omega_1$:
+\begin{equation}
+  P_{\text{em}} = P_{\text{mec}}
+  \quad\Longrightarrow\quad
+  K\,\omega_1\,I = K_t\,I\,\omega_1
+  \quad\Longrightarrow\quad
+  \boxed{\;K_t = K\;.}
+  \label{eq:kt_igual_k}
+\end{equation}
+
+\begin{unidades}
+Comprobemos que las unidades de $K$ y $K_t$ en el Sistema Internacional son
+exactamente las mismas. Recordemos que $\SI{1}{V} = \SI{1}{J/C}$,
+$\SI{1}{J} = \SI{1}{N.m}$, $\SI{1}{A} = \SI{1}{C/s}$ y que el radián es
+adimensional:
+\[
+  [K] = \frac{\si{V}}{\si{rad/s}}
+      = \frac{\si{J/C}}{\si{s^{-1}}}
+      = \frac{\si{N.m}}{\si{C/s}}
+      = \frac{\si{N.m}}{\si{A}}
+      = [K_t].
+\]
+\textbf{Cuidado práctico:} la igualdad numérica $K_t = K$ vale \emph{sólo} en
+unidades SI (\si{rad/s}, \si{V}, \si{N.m}, \si{A}). Si expresás la velocidad en
+rpm o el voltaje en \si{mV/rpm}, aparece el factor de conversión $\pi/30$, y
+olvidar esa conversión al pasar de un dominio a otro es uno de los errores más
+graves de modelado. Por eso en física siempre derivamos en \si{rad/s} y recién
+al final convertimos a rpm usando $n = \frac{30}{\pi}\omega_1$.
+\end{unidades}
+
+% ---------------------------------------------------------------------
+\section{La ecuación eléctrica del motor paso a paso}
+% ---------------------------------------------------------------------
+
+Un bobinado real de cobre no sólo tiene tensión inducida $e(t)$: también opone
+resistencia eléctrica al paso de corriente (calentándose por efecto Joule) y
+almacena energía en su propio campo magnético (autoinductancia). Podemos
+representar entonces el circuito eléctrico del motor como tres elementos en
+serie conectados a la tensión aplicada $V(t)$, tal como se muestra en la
+Figura~\ref{fig:circuito_motor}.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  >={Stealth[length=5pt]},
+  thick
+]
+  % Fuente V(t)
+  \draw (0,0) -- (0,1.0);
+  \draw (0,1.5) circle (0.5cm);
+  \node at (0,1.68) {\scriptsize $+$};
+  \node at (0,1.30) {\scriptsize $-$};
+  \node[left=0.6cm] at (0,1.5) {$V(t)$};
+  \draw (0,2.0) -- (0,3.0) -- (1.3,3.0);
+
+  % Flecha de corriente
+  \draw[->, crimson, very thick] (0.45,3.25) -- (1.25,3.25) node[midway, above, font=\small]{$I(t)$};
+
+  % Resistencia R_eq
+  \draw[inkblue] (1.3,3.0) -- (1.6,3.0)
+    -- (1.72,3.22) -- (1.96,2.78) -- (2.20,3.22) -- (2.44,2.78)
+    -- (2.68,3.22) -- (2.92,2.78) -- (3.04,3.0) -- (3.5,3.0);
+  \node[above=0.3cm, inkblue] at (2.35,3.0) {$R_{\text{eq}}$};
+
+  % Inductancia L_eq
+  \draw[inkblue] (3.5,3.0) -- (3.8,3.0)
+    arc (180:0:0.18) arc (180:0:0.18) arc (180:0:0.18) arc (180:0:0.18)
+    -- (5.8,3.0) -- (6.8,3.0) -- (6.8,2.15);
+  \node[above=0.3cm, inkblue] at (4.55,3.0) {$L_{\text{eq}}$};
+
+  % BEMF e(t) = K omega_1
+  \draw[tealaccent, fill=tealbg] (6.8,1.5) circle (0.65cm);
+  \node[tealaccent, font=\small\bfseries] at (6.8,1.5) {M};
+  \node[left=0.72cm, tealaccent, font=\scriptsize] at (6.8,1.9) {$+$};
+  \node[left=0.72cm, tealaccent, font=\scriptsize] at (6.8,1.1) {$-$};
+  \node[left=1.12cm, align=right, tealaccent, font=\small] at (6.8,1.5) {$e(t) = K\,\omega_1$\\(BEMF)};
+
+  % Retorno
+  \draw (6.8,0.85) -- (6.8,0) -- (0,0);
+
+  % Eje mecánico saliendo a la derecha
+  \draw[double distance=2pt, inkblue] (7.45,1.5) -- (9.35,1.5);
+  \draw[->, inkblue, thick] (8.55,1.95) arc (60:-60:0.45cm);
+  \node[above, inkblue, font=\small] at (8.85,2.02) {$\omega_1,\, T_e$};
+\end{tikzpicture}
+\caption{Circuito eléctrico equivalente de un motor de imán permanente. La tensión aplicada $V(t)$ se equilibra con la caída óhmica, la autoinductancia y la BEMF generada por el giro.}
+\label{fig:circuito_motor}
+\end{figure}
+
+Aplicando la \textbf{ley de tensiones de Kirchhoff} a la malla de la
+Figura~\ref{fig:circuito_motor} (la suma de caídas iguala a la tensión aplicada):
+\begin{ecuacionclave}
+\begin{equation}
+  V(t) = R_{\text{eq}}\,I(t) + L_{\text{eq}}\,\frac{\dd I(t)}{\dd t} + K\,\omega_1(t),
+  \qquad
+  T_e(t) = K\,I(t).
+  \label{eq:motor_eq_general}
+\end{equation}
+\end{ecuacionclave}
+
+\begin{lectura}
+Imaginemos la tensión $V(t)$ como el «presupuesto de empuje eléctrico» que
+entregamos al motor. Ese presupuesto se gasta en tres cosas muy concretas:
+\begin{itemize}
+  \item $R_{\text{eq}}\,I$: lo que se pierde en vencer la resistencia del cobre
+        (se transforma en calor, $P_{\text{Joule}} = R_{\text{eq}} I^2$).
+  \item $L_{\text{eq}}\,\dot I$: lo que cuesta \emph{cambiar} la corriente
+        rápidamente (la inductancia actúa como una «inercia eléctrica» que
+        almacena energía magnética $E_{\text{mag}} = \tfrac{1}{2}L_{\text{eq}}I^2$).
+  \item $K\,\omega_1$: la oposición generada por el propio movimiento del rotor
+        (BEMF). Cuanto más rápido gira el motor, más «empuja hacia atrás» su
+        tensión inducida, reduciendo la corriente automáticamente.
+\end{itemize}
+Podemos verificar el balance de potencia multiplicando la primera ecuación
+de~\eqref{eq:motor_eq_general} por $I$:
+\[
+  \underbrace{V\,I}_{\text{potencia fuente}}
+  = \underbrace{R_{\text{eq}}\,I^2}_{\text{calor}}
+  + \underbrace{\frac{\dd}{\dd t}\!\left(\frac{1}{2}L_{\text{eq}} I^2\right)}_{\text{energía magnética}}
+  + \underbrace{T_e\,\omega_1}_{\text{potencia al eje}}.
+\]
+Cada término tiene un destino físico exacto; nada sobra ni falta.
+\end{lectura}
+
+% ---------------------------------------------------------------------
+\section{¿Por qué un motor BLDC trifásico obedece esta misma ecuación?}
+% ---------------------------------------------------------------------
+
+Hasta aquí hablamos de un motor de corriente continua con dos bornes. Pero
+nuestro agitador usa un \textbf{motor BLDC trifásico} (sin escobillas, como el
+de un disco rígido). ¿Hace falta entonces modelar tres fases, seis transistores
+y ángulos de conmutación para entender su dinámica de velocidad? La respuesta es
+\textbf{no}, y entender \emph{por qué} es clave para no complicarse de más.
+
+\subsection{Ángulo mecánico y ángulo eléctrico}
+En un motor BLDC los imanes permanentes están pegados al rotor y las tres
+bobinas ($a, b, c$, conectadas en estrella con un punto neutro interno $n$)
+están fijas en el estator. Un motor puede tener $p = 1$ par de polos magnéticos
+(un Norte y un Sur en el rotor), o bien $p = 2, 3, \dots$ pares de polos
+distribuidos alrededor de la circunferencia.
+
+Cada vez que el rotor gira una vuelta mecánica completa ($\theta_1 = 2\pi$),
+frente a una misma bobina pasan $p$ polos Norte y $p$ polos Sur. Es decir, el
+patrón electromagnético se repite $p$ veces por vuelta mecánica. Por eso
+definimos el \textbf{ángulo eléctrico} y la \textbf{velocidad eléctrica}:
+\begin{equation}
+  \theta_e = p\,\theta_1, \qquad \omega_e = p\,\omega_1, \qquad f_e = \frac{\omega_e}{2\pi} = \frac{p\,\omega_1}{2\pi} = \frac{p\,n}{60}.
+  \label{eq:angulo_electrico}
+\end{equation}
+Por ejemplo, si $p = 2$ pares de polos y el rotor da una vuelta mecánica por
+segundo ($n = \SI{60}{rpm}$), cada bobina ve dos ciclos magnéticos completos por
+segundo ($f_e = \SI{2}{Hz}$).
+
+\subsection{Conmutación en seis pasos (\emph{six-step}): dos fases en serie y una libre}
+En un motor DC tradicional, las escobillas mecánicas se encargan de ir
+cambiando qué bobinas reciben corriente a medida que el rotor gira, para que el
+campo del estator siempre esté a \SI{90}{\degree} eléctricos del rotor (torque
+máximo). En un BLDC operado en \textbf{conmutación trapezoidal de seis pasos},
+esa misma tarea la hacen seis interruptores electrónicos (un inversor
+trifásico):
+\begin{quote}
+  \emph{En cada sector de \SI{60}{\degree} eléctricos, el inversor conecta una
+  fase al positivo de la fuente, otra fase al negativo y deja la tercera fase
+  completamente desconectada (flotante).}
+\end{quote}
+
+Miremos la Figura~\ref{fig:bldc_estrella} en un sector cualquiera, por ejemplo
+cuando conducen la fase~$a$ (hacia el neutro) y la fase~$b$ (desde el neutro),
+mientras la fase~$c$ queda abierta ($i_c = 0$).
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  >={Stealth[length=5pt]},
+  thick
+]
+  % Neutro
+  \coordinate (N) at (0,0);
+  \fill[inkblue] (N) circle (2.2pt) node[below left=2pt, font=\small]{$n$};
+
+  % Fase A (izquierda-arriba)
+  \draw[inkblue, very thick] (-3.2,1.6) -- (-1.6,0.8) -- (N);
+  \node[fill=slatebg, draw=inkblue, rounded corners=2pt, font=\scriptsize, inner sep=3pt] at (-2.0,1.0) {$R,\, L_s,\, e_a$};
+  \node[left, inkblue, font=\small\bfseries] at (-3.2,1.6) {$+V$ (Fase $a$)};
+  \draw[->, crimson, very thick] (-2.9,1.8) -- (-2.1,1.4) node[midway, above right, font=\scriptsize]{$I$};
+
+  % Fase B (derecha-arriba)
+  \draw[inkblue, very thick] (N) -- (1.6,0.8) -- (3.2,1.6);
+  \node[fill=slatebg, draw=inkblue, rounded corners=2pt, font=\scriptsize, inner sep=3pt] at (2.0,1.0) {$R,\, L_s,\, e_b$};
+  \node[right, inkblue, font=\small\bfseries] at (3.2,1.6) {$0\text{ V}$ (Fase $b$)};
+  \draw[->, crimson, very thick] (2.1,1.4) -- (2.9,1.8) node[midway, above left, font=\scriptsize]{$I$};
+
+  % Fase C (abajo, flotante)
+  \draw[mutedgray, dashed, thick] (N) -- (0,-1.85);
+  \node[fill=white, draw=mutedgray, dashed, rounded corners=2pt, font=\scriptsize, inner sep=3pt, text=mutedgray] at (0,-1.0) {$R,\, L_s,\, e_c$};
+  \node[below, tealaccent, font=\small] at (0,-1.85) {Fase $c$ flotante ($i_c = 0$, sirve para medir BEMF)};
+\end{tikzpicture}
+\caption{En conmutación de seis pasos siempre hay dos fases en serie llevando la misma corriente $I$ y una tercera fase abierta ($i_c=0$).}
+\label{fig:bldc_estrella}
+\end{figure}
+
+Hagamos las cuentas directamente sobre la Figura~\ref{fig:bldc_estrella}. Como
+$i_c = 0$, por conservación de carga en el nodo neutro $n$ la corriente que
+entra por la fase~$a$ debe salir íntegra por la fase~$b$:
+\[
+  i_a = +I, \qquad i_b = -I, \qquad i_c = 0.
+\]
+Ahora sumemos las tres propiedades de las dos fases en serie:
+\begin{enumerate}
+  \item \textbf{Resistencia equivalente:} la corriente atraviesa dos bobinas de
+        resistencia por fase $R$ en serie $\implies$
+        \[
+          R_{\text{eq}} = R + R = 2R.
+        \]
+  \item \textbf{Inductancia equivalente:} en cada fase, el flujo magnético
+        propio vale $L\,i_k$ y además el acoplamiento mutuo con la otra fase
+        activa aporta $M\,i_{\text{otra}}$. Como $i_b = -I$, el flujo en la
+        fase~$a$ es $L I + M(-I) = (L - M)I \equiv L_s I$ (a $L_s = L - M$ se la
+        llama \emph{inductancia síncrona por fase}). Sumando las dos fases en
+        serie resulta:
+        \[
+          L_{\text{eq}} = 2 L_s.
+        \]
+        Lo más práctico es que, si apoyás las puntas de un multímetro o medidor
+        LCR entre dos terminales cualesquiera del motor, medís \emph{directamente}
+        $R_{LL} = 2R$ y $L_{LL} = 2L_s$.
+  \item \textbf{BEMF y constante de torque:} si la conmutación está sincronizada
+        con el rotor, mientras conducen $a$ y $b$ sus tensiones inducidas están
+        en la meseta de signo opuesto: $e_a = +k_e\,\omega_1$ y
+        $e_b = -k_e\,\omega_1$, donde $k_e$ es la constante de BEMF \emph{por
+        fase}. La tensión inducida total entre terminales es:
+        \[
+          e_{ab} = e_a - e_b = (+k_e\omega_1) - (-k_e\omega_1) = 2k_e\,\omega_1.
+        \]
+        Por conservación de energía ($P_{\text{em}} = e_{ab}\,I = 2k_e\omega_1 I = T_e\omega_1$),
+        la constante de torque equivalente queda fijada sin ambigüedad:
+        \[
+          K = k_t = 2k_e \qquad\Longrightarrow\qquad T_e = 2k_e\,I.
+        \]
+\end{enumerate}
+
+Reemplazando $R_{\text{eq}}=2R$, $L_{\text{eq}}=2L_s$ y $K=2k_e$ en nuestra
+ecuación general~\eqref{eq:motor_eq_general}, obtenemos exactamente el modelo
+eléctrico del BLDC en conmutación de seis pasos:
+\begin{ecuacionclave}
+\begin{equation}
+  V = 2R\,I + 2L_s\,\frac{\dd I}{\dd t} + 2k_e\,\omega_1,
+  \qquad
+  T_e = 2k_e\,I.
+  \label{eq:bldc_sixstep}
+\end{equation}
+\end{ecuacionclave}
+
+Observá que \emph{no hubo que adivinar ningún factor 2}: cada 2 proviene
+físicamente de que siempre conducen exactamente dos fases en serie. Y si
+preferís escribir $R_{LL}$, $L_{LL}$ y $K$ (medidos de línea a línea), la
+ecuación es indistinguible de un motor DC clásico.
+
+% ---------------------------------------------------------------------
+\section{Modulación PWM y la primera no linealidad: saturación de tensión}
+% ---------------------------------------------------------------------
+
+En la práctica no variamos la tensión $V$ con una fuente analógica regulable,
+sino con una fuente fija de tensión de bus $V_{dc}$ (por ejemplo \SI{12}{V})
+conmutada rápidamente mediante \textbf{modulación por ancho de pulso (PWM)} a
+una frecuencia $f_{\text{PWM}}$ del orden de decenas de kilohercios (típicamente
+15--\SI{20}{kHz}).
+
+Durante una fracción $d \in [0, 1]$ de cada período PWM (el \textbf{ciclo de
+trabajo} o \emph{duty cycle}), el puente aplica $V_{dc}$; durante el resto
+$(1-d)$, la corriente circula por el camino de rueda libre con tensión aplicada
+nula. Como el período del PWM ($T_{\text{PWM}} \sim \SI{50}{\micro s}$) es mucho
+más rápido que las constantes de tiempo eléctrica y mecánica del motor, las
+bobinas actúan como un filtro pasabajos natural que «promedia» los pulsos y ve
+una tensión efectiva continua:
+\begin{equation}
+  V(t) = d(t)\,V_{dc}.
+  \label{eq:pwm_avg}
+\end{equation}
+
+Sin embargo, el sentido común nos impone inmediatamente una restricción física
+ineludible: \textbf{el inversor jamás puede aplicar más tensión que la que tiene
+la fuente}. En operación unidireccional a lazo cerrado, además suele imponerse un
+piso técnico $d_{\min} > 0$ (p.\,ej.\ $d_{\min} = 0{,}05$) para mantener
+actividad mínima de conmutación. Así aparece nuestra \textbf{primera no
+linealidad dominante}:
+\begin{equation}
+  \boxed{\;d \in [d_{\min},\, 1] \quad\Longleftrightarrow\quad V \in [d_{\min}V_{dc},\, V_{dc}]\;.}
+  \label{eq:sat_tension}
+\end{equation}
+Un controlador lineal ideal podría pedir $d = 2{,}5$ (o sea \SI{30}{V} a una
+fuente de \SI{12}{V}) frente a un escalón grande de consigna o una traba. La
+planta real simplemente se queda pegada al techo $V_{dc}$. Omitir esta
+saturación sería un error de sentido común grave: haría creer que el motor
+dispone de torque y aceleración infinitos.
+
+% ---------------------------------------------------------------------
+\section{Intuición de régimen permanente: curva torque--velocidad y amortiguamiento eléctrico}
+% ---------------------------------------------------------------------
+
+Antes de pasar a la mecánica, detengámonos un momento en~\eqref{eq:bldc_sixstep}
+cuando la corriente ya se estabilizó ($\dd I/\dd t = 0$). Despejando $I$ y
+sustituyendo en $T_e = 2k_e I$:
+\begin{align}
+  I &= \frac{d\,V_{dc} - 2k_e\,\omega_1}{2R}, \\[4pt]
+  T_e(\omega_1) &= 2k_e\,I
+                 = \underbrace{\frac{k_e}{R}\,d\,V_{dc}}_{T_{\text{arranque}}(d)}
+                 - \underbrace{\frac{2k_e^2}{R}}_{B_e}\,\omega_1.
+  \label{eq:curva_tw}
+\end{align}
+
+Esta recta, dibujada en la Figura~\ref{fig:curva_tw}, encierra casi toda la
+intuición física de cómo «siente» un motor eléctrico la carga:
+\begin{itemize}
+  \item \textbf{A rotor trabado ($\omega_1 = 0$):} no hay BEMF ($e = 0$), la
+        corriente sólo está limitada por la resistencia del cobre
+        ($I_{\text{traba}} = d\,V_{dc}/(2R)$) y el motor entrega su \textbf{torque
+        máximo} para ese ciclo de trabajo, $T_{\text{traba}} = \frac{k_e}{R}d\,V_{dc}$.
+  \item \textbf{En vacío ideal ($T_e = 0$, $I = 0$):} el motor acelera hasta que
+        su propia BEMF iguala exactamente a la tensión aplicada ($2k_e\omega_1 = d\,V_{dc}$),
+        alcanzando la \textbf{velocidad de vacío}:
+        \[
+          \omega_{\text{vacío}}(d) = \frac{d\,V_{dc}}{2k_e}.
+        \]
+  \item \textbf{Amortiguamiento eléctrico $B_e = 2k_e^2/R$:} mirá el segundo
+        término de~\eqref{eq:curva_tw}, $-B_e\,\omega_1$. Tiene exactamente la
+        forma matemática de una fricción viscosa proporcional a la velocidad.
+        Físicamente, aunque no haya rozamiento mecánico, la BEMF hace que si la
+        velocidad sube, el torque baje automáticamente; y si la velocidad cae
+        por una carga, la BEMF cae, entra más corriente y el torque sube solo.
+        El motor eléctrico se \textbf{auto-estabiliza} en velocidad!
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=10.8cm, height=5.8cm,
+  axis lines=left,
+  xlabel={Velocidad angular $\omega_1$},
+  ylabel={Torque electromagnético $T_e$},
+  xmin=0, xmax=1.15, ymin=0, ymax=1.15,
+  xtick={0.5, 1.0},
+  xticklabels={$\frac{0{,}5\,V_{dc}}{2k_e}$, $\frac{V_{dc}}{2k_e}$},
+  ytick={0.5, 1.0},
+  yticklabels={$0{,}5\,\frac{k_e V_{dc}}{R}$, $\frac{k_e V_{dc}}{R}$},
+  tick label style={font=\footnotesize},
+  label style={font=\small},
+  clip=false
+]
+  % Zona inalcanzable por saturación d > 1
+  \fill[crimson!8] (axis cs:0,1.0) -- (axis cs:1.0,0) -- (axis cs:1.15,0) -- (axis cs:1.15,1.15) -- (axis cs:0,1.15) -- cycle;
+  \node[crimson, font=\scriptsize, align=center] at (axis cs:0.86,0.84) {Zona prohibida\\por saturación ($d>1$)};
+
+  % Rectas para d = 1 y d = 0.5
+  \addplot[inkblue, very thick, domain=0:1] {1 - x};
+  \node[inkblue, font=\footnotesize, rotate=-24] at (axis cs:0.25,0.83) {$d = 1$ (techo $V_{dc}$)};
+
+  \addplot[tealaccent, thick, dashed, domain=0:0.5] {0.5 - x};
+  \node[tealaccent, font=\footnotesize, rotate=-24] at (axis cs:0.22,0.34) {$d = 0{,}5$};
+
+  % Anotación pendiente
+  \draw[inkblue!75, thin] (axis cs:0.46,0.54) -- (axis cs:0.66,0.54) -- (axis cs:0.66,0.34);
+  \node[right, inkblue, font=\scriptsize] at (axis cs:0.68,0.45) {pendiente $-B_e = -\dfrac{2k_e^2}{R}$};
+\end{axis}
+\end{tikzpicture}
+\caption{Característica estática torque--velocidad del motor eléctrico para dos ciclos de trabajo. La recta $d=1$ marca el límite físico duro impuesto por la tensión de bus $V_{dc}$.}
+\label{fig:curva_tw}
+\end{figure}
+
+% ---------------------------------------------------------------------
+\section{Escalas de tiempo: cuándo la inductancia es «rápida»}
+% ---------------------------------------------------------------------
+
+Si aplicamos un escalón de tensión con el rotor quieto ($\omega_1=0$), la
+ecuación $2L_s\dot I + 2R I = V$ es una ecuación diferencial de primer orden
+cuya corriente alcanza el régimen en una \textbf{constante de tiempo eléctrica}:
+\begin{equation}
+  \tau_e = \frac{L_{\text{eq}}}{R_{\text{eq}}} = \frac{2L_s}{2R} = \frac{L_s}{R}.
+  \label{eq:tau_e}
+\end{equation}
+En motores pequeños como el de un disco rígido, $R$ suele estar en el orden de
+unos pocos ohms y $L_s$ en el orden de fracciones de milihenry o pocos
+milihenrys, por lo que $\tau_e$ está típicamente entre \SI{0,2}{ms} y
+\SI{1}{ms}. En cambio, como veremos en los próximos capítulos, acelerar la masa
+del rotor y del agitador toma decenas o cientos de milisegundos
+($\tau_{\text{mec}} \sim 50\text{--}\SI{200}{ms}$).
+
+Esa separación de escalas ($\tau_e \ll \tau_{\text{mec}}$) es una bendición:
+\begin{itemize}
+  \item en el modelo completo de simulación podemos conservar $L_s$ sin
+        esfuerzo (es sólo un integrador más);
+  \item pero cuando hagamos \textbf{análisis a mano con lápiz y papel}
+        (Capítulo~\ref{cap:linealizacion}), podremos suponer que la corriente se
+        acomoda casi instantáneamente ($2L_s\dot I \approx 0$) y usar
+        directamente~\eqref{eq:curva_tw}, simplificando enormemente las cuentas
+        sin perder precisión en la dinámica lenta de velocidad.
+\end{itemize}
+
+\begin{antidoto}
+En este capítulo dejamos afuera deliberadamente:
+\begin{itemize}
+  \item \textbf{Conmutación transistor por transistor y rizado PWM:} ocurre a
+        \SI{18}{kHz}, órdenes de magnitud más rápido que el movimiento mecánico.
+  \item \textbf{Torque de \emph{cogging} (efecto de ranuras del estator):} es un
+        rizado magnético periódico sin corriente que requeriría medir armónicos
+        espaciales con torquímetro; a velocidades de giro continuas su promedio
+        en una vuelta es cero.
+  \item \textbf{Dinámica térmica del bobinado ($R(T)$):} requeriría identificar
+        resistencias y capacitancias térmicas que no medimos; operar lejos de la
+        corriente límite nos mantiene conservadores sin inventar constantes.
+  \item \textbf{Forma exacta no ideal de la BEMF:} aunque un motor real tenga
+        una BEMF intermedia entre trapezoidal y senoidal, en operación six-step
+        el modelo de constante media efectiva $2k_e$ captura fielmente el balance
+        energético global.
+\end{itemize}
+\end{antidoto}
+
+\begin{lapizypapel}
+\begin{enumerate}[leftmargin=1.5em]
+  \item Dibujá el circuito equivalente del motor eléctrico y escribí su ecuación
+        diferencial explicando el significado físico y las unidades de cada uno
+        de los cuatro términos.
+  \item Demostrá en tres líneas, usando conservación de energía, por qué en
+        unidades SI la constante de torque y la de BEMF deben ser iguales
+        ($K_t = K$). ¿Qué pasa si alguien mezcla rpm con \si{N.m/A}?
+  \item Explicá por qué en un BLDC trifásico con conmutación six-step aparecen
+        los factores~2 en $2R$, $2L_s$ y $2k_e$.
+  \item ¿Qué significa físicamente el término $- \frac{2k_e^2}{R}\omega_1$ en la
+        curva torque--velocidad, y cuál es la no linealidad más evidente de la
+        etapa eléctrica?
+\end{enumerate}
+\end{lapizypapel}
+
+% =====================================================================
+\chapter{Dinámica rotacional: dos cuerpos sin eje rígido}\label{cap:mecanica}
+% =====================================================================
+
+\begin{ideafisica}
+En un motor conectado rígidamente a un ventilador, motor y carga son un solo
+bloque sólido que gira siempre al mismo ángulo. En un agitador magnético eso es
+falso: abajo gira el rotor con un imán impulsor, y arriba, separado por el fondo
+de vidrio del vaso, gira una cápsula magnética libre. \textbf{Son dos cuerpos
+independientes}, y cada uno obedece por separado la segunda ley de Newton.
+\end{ideafisica}
+
+Cuando uno intenta modelar un sistema mecánico sin dibujar los diagramas de
+cuerpo libre por separado, es facilísimo equivocarse en los signos o olvidar una
+reacción. Vamos a aplicar el método más seguro que existe en mecánica: aislar
+cada cuerpo rígido, dibujar todas las flechas de torque que actúan sobre él y
+escribir $\sum T = J\,\dot\omega$.
+
+% ---------------------------------------------------------------------
+\section{La segunda ley de Newton en rotación}
+% ---------------------------------------------------------------------
+
+En movimiento rectilíneo, la segunda ley de Newton dice $\sum F = m\,\dot v$: la
+masa $m$ mide cuánto se resiste un cuerpo a cambiar su velocidad lineal. En
+rotación alrededor de un eje fijo, la ley análoga es exactamente igual:
+\begin{equation}
+  \sum T = J\,\frac{\dd\omega}{\dd t} = J\,\dot\omega,
+  \label{eq:newton_rot}
+\end{equation}
+donde:
+\begin{itemize}
+  \item $\omega = \dot\theta$ es la velocidad angular [\si{rad/s}] y
+        $\dot\omega = \ddot\theta$ es la aceleración angular [\si{rad/s^2}];
+  \item $\sum T$ es la suma algebraica de todos los torques externos aplicados
+        al cuerpo [\si{N.m}], positivos si empujan en el sentido de giro elegido
+        y negativos si lo frenan;
+  \item $J$ es el \textbf{momento de inercia} respecto del eje de giro
+        [\si{kg.m^2}]. Físicamente, cada trocito de masa $\dd m$ a distancia $r$
+        del eje aporta $r^2\,\dd m$ a la inercia ($J = \int r^2\,\dd m$): cuanto
+        más masa hay y más lejos del centro está distribuida, más torque cuesta
+        acelerarla. Por ejemplo, una barra delgada de masa $m$ y longitud $L$
+        girando por su centro tiene $J = \frac{1}{12}m L^2$, y un cilindro
+        macizo de radio $r$ tiene $J = \frac{1}{2}m r^2$.
+\end{itemize}
+
+\begin{unidades}
+Comprobemos que $\sum T = J\,\dot\omega$ es dimensionalmente consistente:
+\[
+  [J\,\dot\omega] = (\si{kg.m^2})\cdot\left(\frac{\si{rad}}{\si{s^2}}\right)
+                  = \left(\si{kg.\frac{m}{s^2}}\right)\cdot\si{m}
+                  = \si{N.m} = [T].
+\]
+\end{unidades}
+
+% ---------------------------------------------------------------------
+\section{Diagramas de cuerpo libre y principio de acción y reacción}
+% ---------------------------------------------------------------------
+
+Separamos nuestro sistema mecánico en sus dos cuerpos rotantes (Figura~\ref{fig:dcl_dos_inercias}):
+\begin{enumerate}
+  \item \textbf{Cuerpo~1 (lado motor):} conjunto rígido formado por el rotor del
+        BLDC, el soporte y el imán impulsor inferior. Su inercia total es $J_1$,
+        su ángulo mecánico es $\theta_1$ y su velocidad angular es $\omega_1 = \dot\theta_1$.
+  \item \textbf{Cuerpo~2 (lado agitador):} la cápsula o píldora magnética que
+        gira dentro del vaso. Su inercia es $J_2$, su ángulo es $\theta_2$ y su
+        velocidad angular es $\omega_2 = \dot\theta_2$.
+\end{enumerate}
+
+Definimos la convención de giro positivo (por ejemplo, sentido antihorario visto
+desde arriba) y preguntamos qué torques siente cada cuerpo:
+
+\begin{itemize}
+  \item \textbf{Sobre el Cuerpo~1 (motor + imán inferior):}
+        \begin{itemize}
+          \item el campo del estator lo impulsa hacia adelante con el torque
+                eléctrico $+T_e$;
+          \item sus propios rodamientos lo frenan con la fricción mecánica
+                $-T_{f1}(\omega_1)$;
+          \item la cápsula de arriba, al ir ligeramente atrasada respecto del
+                imán inferior, lo \emph{tira hacia atrás} a través del acople
+                magnético con un torque $-T_c$.
+        \end{itemize}
+  \item \textbf{Sobre el Cuerpo~2 (cápsula agitadora):}
+        \begin{itemize}
+          \item el imán de abajo la arrastra hacia adelante a través del acople
+                con el torque $+T_c$ (\textbf{tercera ley de Newton}: igual en
+                magnitud y opuesto en signo al que frena al rotor);
+          \item el fluido del vaso se opone a su movimiento con el torque de
+                carga $-T_L(\omega_2)$;
+          \item el rozamiento de la cápsula contra el fondo del vaso la frena
+                con $-T_{f2}(\omega_2)$.
+        \end{itemize}
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  >={Stealth[length=5pt]},
+  thick
+]
+  % ---- Cuerpo 1: Rotor + imán ----
+  \begin{scope}[shift={(0,0)}]
+    \draw[fill=slatebg, draw=inkblue, very thick] (0,0) ellipse (1.45cm and 0.50cm);
+    \node[inkblue, font=\small\bfseries] at (0,0) {Cuerpo 1 ($J_1$)};
+    \node[below=0.68cm, font=\footnotesize, align=center] at (0,0) {Rotor + imán impulsor\\$(\theta_1,\,\omega_1)$};
+
+    % Eje vertical
+    \draw[dashed, mutedgray] (0,-0.6) -- (0,1.25);
+
+    % Flecha +T_e
+    \draw[->, tealaccent, very thick] (-1.65,-0.15) to[bend left=35] (-0.85,0.72);
+    \node[above left, tealaccent, font=\small] at (-1.35,0.45) {$+T_e$};
+
+    % Flechas opositoras -T_c y -T_f1
+    \draw[->, crimson, very thick] (0.85,0.72) to[bend left=35] (1.65,-0.15);
+    \node[above, crimson, font=\scriptsize, align=center] at (1.30,0.68) {$-T_c(\delta)$\\$-T_{f1}(\omega_1)$};
+  \end{scope}
+
+  % ---- Conexión acción-reacción ----
+  \draw[<->, amberwarn, very thick, decorate, decoration={snake, amplitude=1.6pt, segment length=7pt}]
+    (2.35,0.0) -- (6.05,0.0);
+  \node[above=0.22cm, amberwarn, font=\footnotesize\bfseries, align=center] at (4.20,0.08) {Acople magnético\\$\delta = \theta_1 - \theta_2$};
+  \node[below=0.20cm, amberwarn, font=\scriptsize, align=center] at (4.20,-0.06) {Acción y reacción:\\$-T_c$ en 1, $+T_c$ en 2};
+
+  % ---- Cuerpo 2: Cápsula agitadora ----
+  \begin{scope}[shift={(8.4,0)}]
+    \draw[fill=amberbg, draw=amberwarn, very thick] (0,0) ellipse (1.40cm and 0.48cm);
+    \node[amberwarn, font=\small\bfseries] at (0,0) {Cuerpo 2 ($J_2$)};
+    \node[below=0.68cm, font=\footnotesize, align=center] at (0,0) {Cápsula agitadora\\$(\theta_2,\,\omega_2)$};
+
+    % Eje vertical
+    \draw[dashed, mutedgray] (0,-0.6) -- (0,1.25);
+
+    % Flecha +T_c
+    \draw[->, amberwarn, very thick] (-1.60,-0.15) to[bend left=35] (-0.80,0.70);
+    \node[above, amberwarn, font=\scriptsize\bfseries] at (-1.20,0.72) {$+T_c(\delta)$};
+
+    % Flechas opositoras -T_L y -T_f2
+    \draw[->, crimson, very thick] (0.80,0.70) to[bend left=35] (1.60,-0.15);
+    \node[above right, crimson, font=\scriptsize, align=left] at (1.28,0.40) {$-T_L(\omega_2)$\\$-T_{f2}(\omega_2)$};
+  \end{scope}
+\end{tikzpicture}
+\caption{Diagramas de cuerpo libre separados del rotor ($J_1$) y la cápsula ($J_2$). Aislar cada cuerpo garantiza no equivocarse con el signo de acción y reacción del acople $T_c$.}
+\label{fig:dcl_dos_inercias}
+\end{figure}
+
+Escribimos ahora $\sum T = J\dot\omega$ para cada cuerpo. Además, lo único que le
+importa al acople magnético no es el ángulo absoluto $\theta_1$ ni $\theta_2$
+(que crecen sin límite al dar miles de vueltas), sino cuánto se adelantó el
+imán inferior respecto de la cápsula. Definimos entonces el \textbf{desfase
+angular} $\delta = \theta_1 - \theta_2$, cuya derivada temporal es simplemente
+la diferencia de velocidades $\dot\delta = \dot\theta_1 - \dot\theta_2 = \omega_1 - \omega_2$.
+
+Reuniendo las tres ecuaciones mecánicas obtenemos el esqueleto rotacional de
+todo el sistema:
+\begin{ecuacionclave}
+\begin{align}
+  J_1\,\dot\omega_1 &= T_e - T_c(\delta) - T_{f1}(\omega_1), \label{eq:newton1}\\
+  J_2\,\dot\omega_2 &= T_c(\delta) - T_L(\omega_2) - T_{f2}(\omega_2), \label{eq:newton2}\\
+  \dot\delta        &= \omega_1 - \omega_2. \label{eq:cinematica_delta}
+\end{align}
+\end{ecuacionclave}
+
+% ---------------------------------------------------------------------
+\section{Comprobación energética y límite de eje rígido}
+% ---------------------------------------------------------------------
+
+Dos comprobaciones rápidas nos confirman que los signos
+de~\eqref{eq:newton1}--\eqref{eq:cinematica_delta} son impecables:
+
+\paragraph{1. ¿Qué pasa si los dos cuerpos giran trabados como un solo bloque?}
+Si el acople fuese infinitamente rígido ($\delta \equiv 0$, $\omega_1 = \omega_2 = \omega$),
+basta sumar~\eqref{eq:newton1} y~\eqref{eq:newton2}: el torque interno $T_c$
+aparece con signo menos en una y signo más en la otra, así que \textbf{se cancela
+exactamente}:
+\[
+  (J_1 + J_2)\,\dot\omega = T_e - T_{f1}(\omega) - T_{f2}(\omega) - T_L(\omega).
+\]
+Recuperamos de inmediato la ecuación de un solo cuerpo con inercia total
+$J_{\text{tot}} = J_1 + J_2$. Si hubiéramos puesto mal el signo de $T_c$, no se
+habría cancelado.
+
+\paragraph{2. Balance de energía mecánica.}
+Multipliquemos~\eqref{eq:newton1} por $\omega_1$, \eqref{eq:newton2} por
+$\omega_2$ y sumemos ambas ecuaciones. Recordando que
+$J\omega\dot\omega = \frac{\dd}{\dd t}(\tfrac{1}{2}J\omega^2)$ y que
+$\omega_1 - \omega_2 = \dot\delta$:
+\[
+  \frac{\dd}{\dd t}\!\left(\frac{1}{2}J_1\omega_1^2 + \frac{1}{2}J_2\omega_2^2\right)
+  + \underbrace{T_c(\delta)\,\dot\delta}_{\dd U_c / \dd t}
+  = \underbrace{T_e\,\omega_1}_{\text{potencia entrante}}
+  - \underbrace{\big(T_{f1}\omega_1 + T_{f2}\omega_2 + T_L\omega_2\big)}_{\text{potencia disipada}}.
+\]
+El término $T_c(\delta)\dot\delta$ es la tasa de cambio de la energía potencial
+$U_c(\delta) = \int_0^\delta T_c(\alpha)\,\dd\alpha$ almacenada al «retorcer» el
+acople. Igual que en el circuito eléctrico, el acople no inventa ni pierde
+energía: la guarda cuando se estira y la devuelve cuando se relaja.
+
+\begin{antidoto}
+En este capítulo modelamos exclusivamente la rotación en torno al eje vertical.
+Dejamos afuera el cabeceo (\emph{wobble}), el desplazamiento radial de la
+cápsula hacia las paredes del vaso y los rebotes por excentricidad: son
+fenómenos tridimensionales de contacto que no agregan claridad al problema de
+control de velocidad y no pueden parametrizarse sin instrumentación óptica o
+dinámica de sólidos 3D.
+\end{antidoto}
+
+\begin{lapizypapel}
+\begin{enumerate}[leftmargin=1.5em]
+  \item Dibujá los diagramas de cuerpo libre de $J_1$ y $J_2$ por separado y
+        escribí las tres ecuaciones~\eqref{eq:newton1}--\eqref{eq:cinematica_delta}.
+  \item ¿Por qué conviene usar $\delta = \theta_1 - \theta_2$ como variable de
+        estado en lugar de integrar $\theta_1$ y $\theta_2$ y restarlos después?
+  \item Comprobá sumando ambas ecuaciones que cuando $\omega_1 = \omega_2$ el
+        torque interno $T_c$ desaparece y las inercias se suman.
+\end{enumerate}
+\end{lapizypapel}
+
+% =====================================================================
+\chapter{El acople magnético: un resorte no lineal que se suelta}\label{cap:acople}
+% =====================================================================
+
+\begin{ideafisica}
+No hace falta resolver ecuaciones de Maxwell en tres dimensiones para modelar un
+acople magnético. Pensalo como un \textbf{problema mecánico y cinemático}: un
+resorte torsional que transmite cada vez más torque a medida que lo torcés,
+\emph{pero sólo hasta un ángulo crítico}. Si lo torcés más allá de ese ángulo,
+los polos se desencuentran, el torque cae y la cápsula se desengancha.
+\end{ideafisica}
+
+Hasta ahora dejamos el símbolo $T_c(\delta)$ sin fórmula explícita. En este
+capítulo vamos a darle forma a partir de un experimento mental sumamente simple
+y descubrir una de las no linealidades más ricas e importantes del sistema: el
+\textbf{desacople} (o desincronización) de la cápsula agitadora.
+
+% ---------------------------------------------------------------------
+\section{El experimento mental: girar un imán mientras trabás el otro}
+% ---------------------------------------------------------------------
+
+Imaginá que sacás el vaso, dejás fija con los dedos la cápsula de arriba
+($\theta_2 = 0$) y empezás a girar muy despacio con la otra mano el imán de
+abajo ($\theta_1 = \delta$), sintiendo el torque $T_c(\delta)$ con el que el
+imán superior intenta seguirte. Para una cápsula magnética típica (un imán
+recto con un polo Norte y un polo Sur, es decir $N_a = 1$ par de polos):
+\begin{itemize}
+  \item \textbf{En $\delta = \SI{0}{\degree}$:} Norte queda enfrentado a Sur y
+        Sur a Norte. Es la posición de mínimo reposo: no sentís ningún torque
+        ($T_c = 0$).
+  \item \textbf{Entre $\SI{0}{\degree}$ y $\SI{90}{\degree}$:} a medida que
+        desfasás los imanes, la atracción entre polos opuestos tira con fuerza
+        creciente intentando alinearlos de nuevo. El torque crece hasta alcanzar
+        un valor pico $T_{\max}$ justo en el \textbf{ángulo crítico}
+        $\delta_{\text{crit}} = \SI{90}{\degree}$ ($\pi/2\;\si{rad}$).
+  \item \textbf{Entre $\SI{90}{\degree}$ y $\SI{180}{\degree}$:} si seguís
+        girando pasado los \SI{90}{\degree}, los polos iguales empiezan a
+        acercarse entre sí y la componente de arrastre \emph{disminuye}, hasta
+        anularse nuevamente en $\delta = \SI{180}{\degree}$ (Norte frente a
+        Norte: equilibrio completamente inestable).
+  \item \textbf{Pasados los \SI{180}{\degree}:} el torque cambia de signo: ahora
+        el imán superior prefiere «saltar» hacia adelante para alinearse con el
+        polo opuesto siguiente ($\SI{360}{\degree}$). El acoplamiento se perdió.
+\end{itemize}
+
+Si el acople tuviera $N_a$ pares de polos equiespaciados (por ejemplo, 4 imanes
+alternados N--S--N--S, es decir $N_a = 2$), todo este ciclo se repite $N_a$
+veces por vuelta mecánica, de modo que el ángulo crítico donde ocurre el pico de
+torque es:
+\begin{equation}
+  \delta_{\text{crit}} = \frac{\pi}{2 N_a}
+  \qquad
+  \begin{cases}
+    N_a = 1 \;\Longrightarrow\; \delta_{\text{crit}} = \SI{90}{\degree},\\
+    N_a = 2 \;\Longrightarrow\; \delta_{\text{crit}} = \SI{45}{\degree}.
+  \end{cases}
+  \label{eq:delta_crit}
+\end{equation}
+
+¿Cuál es la función matemática más simple, suave y periódica que vale $0$ en
+$\delta=0$, sube monótonamente hasta un máximo $T_{\max}$ en
+$\delta_{\text{crit}} = \pi/(2N_a)$, vuelve a $0$ en $2\delta_{\text{crit}}$ y
+cambia de signo al cruzarlo? El seno:
+\begin{ecuacionclave}
+\begin{equation}
+  T_c(\delta) = T_{\max}\,\sin(N_a\,\delta)
+              = T_{\max}\,\sin\!\left(\frac{\pi}{2}\,\frac{\delta}{\delta_{\text{crit}}}\right).
+  \label{eq:acople_seno}
+\end{equation}
+\end{ecuacionclave}
+
+\paragraph{¿Por qué justamente un seno y no otra curva parecida?}
+Además de ser la ley cinemática más limpia que describe el experimento mental,
+tiene un respaldo físico elemental: la energía potencial de un dipolo magnético
+en un campo uniforme es $U_c(\delta) = -U_1\cos(N_a\delta)$ (mínima en
+$\delta=0$, máxima en $\delta=\pi/N_a$). Por conservación de energía, el torque
+necesario para sostener un desfase $\delta$ es la derivada de esa energía
+respecto del ángulo:
+\[
+  T_c(\delta) = \frac{\dd U_c}{\dd\delta} = N_a U_1\sin(N_a\delta) \equiv T_{\max}\sin(N_a\delta).
+\]
+No hace falta calcular $U_1$ a partir de integrales volumétricas de campo:
+$T_{\max}$ (el \emph{torque de desenganche} o \emph{pull-out torque}) es un
+único número físico medible en un banco (por ejemplo, midiendo qué fuerza en un
+brazo de palanca despega el imán) y $N_a$ se conoce mirando la geometría del
+imán. Dos parámetros concretos, cero misterios.
+
+% ---------------------------------------------------------------------
+\section{Equilibrio estático, estabilidad y desenganche}
+% ---------------------------------------------------------------------
+
+Supongamos que motor y cápsula giran sincronizados a una velocidad constante
+$\omega_1 = \omega_2 = \omega_0$. Entonces $\dot\omega_2 = 0$ y $\dot\delta = 0$.
+Llamemos $T_{L,\text{tot}}(\omega_0) = T_L(\omega_0) + T_{f2}(\omega_0)$ a toda
+la carga que frena a la cápsula. De la ecuación~\eqref{eq:newton2} del Cuerpo~2
+resulta la condición de equilibrio:
+\begin{equation}
+  T_{\max}\,\sin(N_a\,\delta^\ast) = T_{L,\text{tot}}(\omega_0).
+  \label{eq:eq_acople_cap3}
+\end{equation}
+
+Miremos la Figura~\ref{fig:curva_acople}: resolver~\eqref{eq:eq_acople_cap3}
+equivale a buscar dónde la recta horizontal de carga $T_{L,\text{tot}}$ corta a
+la curva senoidal $T_c(\delta)$. Aparecen inmediatamente dos regímenes
+radicalmente distintos:
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=11.6cm, height=6.6cm,
+  axis lines=middle,
+  xlabel={Desfase angular $N_a\delta$},
+  xlabel style={at={(ticklabel* cs:1.0)}, anchor=north east, yshift=-18pt},
+  ylabel={$T_c(\delta)$},
+  ylabel style={at={(ticklabel* cs:1.02)}, anchor=south},
+  xmin=-0.3, xmax=3.65, ymin=-0.45, ymax=1.38,
+  xtick={0, 0.5236, 1.5708, 2.6180, 3.1416},
+  xticklabels={$0$, $N_a\delta^\ast$, $\frac{\pi}{2}$ ($\delta_{\text{crit}}$), $N_a\delta_u$, $\pi$},
+  ytick={0.5, 1.0},
+  yticklabels={$T_{L,\text{tot}}$, $T_{\max}$},
+  tick label style={font=\footnotesize},
+  label style={font=\small},
+  clip=false
+]
+  % Zona estable sombreada
+  \fill[tealaccent!8] (axis cs:0,0) rectangle (axis cs:1.5708,1.08);
+  \fill[crimson!7] (axis cs:1.5708,0) rectangle (axis cs:3.1416,1.08);
+
+  \node[tealaccent, font=\scriptsize\bfseries, align=center] at (axis cs:0.82,1.22) {Rama estable\\(resorte rígido $\to$ blando)};
+  \node[crimson, font=\scriptsize\bfseries, align=center] at (axis cs:2.38,1.22) {Rama inestable\\(desenganche)};
+
+  % Curva senoidal T_max sin(x)
+  \addplot[inkblue, very thick, domain=-0.25:3.5, samples=120] {sin(deg(x))};
+
+  % Techo T_max
+  \draw[crimson, dashed, thin] (axis cs:0,1.0) -- (axis cs:3.4,1.0);
+  \draw[mutedgray, dotted] (axis cs:1.5708,0) -- (axis cs:1.5708,1.0);
+
+  % Línea de carga T_L,tot = 0.5
+  \draw[amberwarn, thick, dashed] (axis cs:0,0.5) -- (axis cs:3.3,0.5);
+
+  % Tangente linealizada en delta* = pi/6 (cos(pi/6)=0.866)
+  \addplot[tealaccent, thick, domain=0.05:1.10] {0.5 + 0.866*(x - 0.5236)};
+  \node[tealaccent, font=\scriptsize, left] at (axis cs:0.88,0.88) {pendiente $K_{\text{eff}}$};
+
+  % Puntos de equilibrio
+  \fill[tealaccent] (axis cs:0.5236,0.5) circle (3pt);
+  \draw[tealaccent, dotted] (axis cs:0.5236,0) -- (axis cs:0.5236,0.5);
+  \node[below right, tealaccent, font=\scriptsize\bfseries] at (axis cs:0.56,0.46) {Equil. estable};
+
+  \fill[crimson] (axis cs:2.6180,0.5) circle (3pt);
+  \draw[crimson, dotted] (axis cs:2.6180,0) -- (axis cs:2.6180,0.5);
+  \node[above right, crimson, font=\scriptsize\bfseries] at (axis cs:2.65,0.54) {Equil. inestable};
+\end{axis}
+\end{tikzpicture}
+\caption{Curva torque--desfase del acople magnético $T_c(\delta) = T_{\max}\sin(N_a\delta)$. Para cualquier carga $T_{L,\text{tot}} < T_{\max}$ existen dos intersecciones: sólo la primera ($\delta^\ast < \delta_{\text{crit}}$) es estable. La recta tangente verde muestra la rigidez linealizada $K_{\text{eff}}$.}
+\label{fig:curva_acople}
+\end{figure}
+
+\paragraph{Caso 1: Carga admisible ($T_{L,\text{tot}} < T_{\max}$).}
+La recta horizontal corta al seno en \textbf{dos puntos}:
+\[
+  \delta^\ast = \frac{1}{N_a}\arcsin\!\left(\frac{T_{L,\text{tot}}}{T_{\max}}\right) < \delta_{\text{crit}},
+  \qquad\text{y}\qquad
+  \delta_u = \frac{\pi}{N_a} - \delta^\ast > \delta_{\text{crit}}.
+\]
+¿Por qué sólo $\delta^\ast$ es estable y $\delta_u$ no lo es? Hagamos la prueba
+física más sencilla del mundo: \emph{empuje pequeño} $\delta = \delta_{\text{eq}} + \tilde\delta$
+(con $\tilde\delta > 0$, es decir, la cápsula se atrasó un poquito más):
+\begin{itemize}
+  \item \textbf{Alrededor de $\delta^\ast$ (pendiente positiva):} al aumentar
+        $\delta$, el torque del acople \emph{aumenta} ($T_c > T_{L,\text{tot}}$).
+        Ese exceso de torque acelera la cápsula ($\dot\omega_2 > 0$), haciendo
+        que alcance al motor y reduzca $\delta$ de vuelta hacia $\delta^\ast$.
+        \textbf{El equilibrio se corrige solo: es estable.}
+  \item \textbf{Alrededor de $\delta_u$ (pendiente negativa):} al aumentar
+        $\delta$, el torque del acople \emph{disminuye} ($T_c < T_{L,\text{tot}}$).
+        Como ahora la carga gana al acople, la cápsula se frena aún más
+        ($\dot\omega_2 < 0$), lo que hace crecer todavía más $\delta$.
+        \textbf{El error se amplifica solo: es inestable.}
+\end{itemize}
+
+\paragraph{Caso 2: Sobrecarga ($T_{L,\text{tot}} > T_{\max}$).}
+La recta horizontal queda por encima del pico $T_{\max}$: \textbf{no existe
+ninguna intersección}. No hay ningún ángulo capaz de sostener la carga.
+Entonces $\omega_2$ cae por debajo de $\omega_1$, el desfase $\delta(t)$ crece
+sin cota y $T_c(\delta) = T_{\max}\sin(N_a\delta)$ pasa a oscilar rápidamente
+entre $+T_{\max}$ y $-T_{\max}$ con \textbf{valor medio temporal nulo}. Al no
+recibir torque medio neto, la cápsula se frena hasta detenerse ($\omega_2 \to 0$)
+o vibrar erráticamente en el fondo del vaso, aunque el motor siga girando rápido
+abajo.
+
+% ---------------------------------------------------------------------
+\section{Rigidez local y «ablandamiento» del resorte magnético}
+% ---------------------------------------------------------------------
+
+Si el sistema trabaja cerca de un equilibrio estable $\delta^\ast$ y sufre
+pequeñas perturbaciones $\tilde\delta = \delta - \delta^\ast$, la curva
+senoidal se parece localmente a su recta tangente (Figura~\ref{fig:curva_acople}).
+Su pendiente local es la \textbf{rigidez torsional equivalente}:
+\begin{equation}
+  K_{\text{eff}}(\delta^\ast)
+  = \left.\frac{\dd T_c}{\dd\delta}\right|_{\delta^\ast}
+  = N_a\,T_{\max}\,\cos(N_a\,\delta^\ast).
+  \label{eq:keff_cos}
+\end{equation}
+Usando la identidad $\cos\alpha = \sqrt{1 - \sin^2\alpha}$ y sustituyendo
+$\sin(N_a\delta^\ast) = T_{L,\text{tot}}/T_{\max}$ de~\eqref{eq:eq_acople_cap3},
+la podemos expresar directamente en función de la carga:
+\begin{ecuacionclave}
+\begin{equation}
+  K_{\text{eff}}(\delta^\ast)
+  = N_a\,T_{\max}\,\cos(N_a\,\delta^\ast)
+  = N_a\,\sqrt{T_{\max}^2 - T_{L,\text{tot}}^2}.
+  \label{eq:keff_carga}
+\end{equation}
+\end{ecuacionclave}
+
+\begin{lectura}
+Mirá qué enseñanza física tan fuerte da~\eqref{eq:keff_carga}:
+\begin{itemize}
+  \item \textbf{En vacío ($T_{L,\text{tot}} = 0$, $\delta^\ast = 0$):} el acople
+        está en su punto más rígido, $K_{\text{eff}} = N_a T_{\max}$.
+  \item \textbf{Al aumentar la carga ($T_{L,\text{tot}} \to T_{\max}$):} la
+        raíz cuadrada se achica y el «resorte magnético» se vuelve cada vez
+        \textbf{más blando}, hasta que en $\delta^\ast = \delta_{\text{crit}}$
+        su rigidez cae a cero ($K_{\text{eff}} = 0$).
+\end{itemize}
+Por eso, linealizar el acople en $\delta = 0$ sólo sirve en vacío; con carga en
+el vaso, la dinámica torsional cambia con el punto de operación.
+\end{lectura}
+
+\paragraph{Frecuencia natural de oscilación torsional.}
+Cuando dos inercias $J_1$ y $J_2$ están unidas por un resorte de rigidez
+$K_{\text{eff}}$, pueden oscilar una contra la otra (como dos volantes unidos
+por una barra elástica). Para hallar esa frecuencia natural, perturbemos
+ligeramente el equilibrio dejando de lado por un instante los torques externos
+y las fricciones:
+\[
+  J_1\,\dot{\tilde\omega}_1 = -K_{\text{eff}}\,\tilde\delta,
+  \qquad
+  J_2\,\dot{\tilde\omega}_2 = +K_{\text{eff}}\,\tilde\delta.
+\]
+Derivando $\dot{\tilde\delta} = \tilde\omega_1 - \tilde\omega_2$ respecto del
+tiempo y sustituyendo ambas aceleraciones:
+\[
+  \ddot{\tilde\delta}
+  = \dot{\tilde\omega}_1 - \dot{\tilde\omega}_2
+  = -\frac{K_{\text{eff}}}{J_1}\tilde\delta - \frac{K_{\text{eff}}}{J_2}\tilde\delta
+  = -K_{\text{eff}}\left(\frac{1}{J_1} + \frac{1}{J_2}\right)\tilde\delta
+  = -\frac{K_{\text{eff}}}{J_{\text{eq}}}\,\tilde\delta,
+\]
+donde definimos la \textbf{inercia reducida} (equivalente serie):
+\begin{equation}
+  J_{\text{eq}} = \frac{J_1\,J_2}{J_1 + J_2},
+  \qquad\Longrightarrow\qquad
+  \omega_{n,\text{tors}}(\delta^\ast) = \sqrt{\frac{K_{\text{eff}}(\delta^\ast)}{J_{\text{eq}}}}.
+  \label{eq:wn_torsional}
+\end{equation}
+Verificación de sentido común: si el rotor es mucho más pesado que la cápsula
+($J_1 \gg J_2$), entonces $J_{\text{eq}} \approx J_2$: la cápsula liviana vibra
+contra un rotor casi inamovible a frecuencia $\sqrt{K_{\text{eff}}/J_2}$. Y a
+medida que la carga acerca $\delta^\ast$ a $\delta_{\text{crit}}$, $K_{\text{eff}}$
+baja y esa vibración torsional se vuelve más lenta y floja antes de soltarse.
+
+% ---------------------------------------------------------------------
+\section{Desacople dinámico: por qué un acelerón suelta la barra aunque \texorpdfstring{$T_{L,\text{tot}} < T_{\max}$}{TL,tot < Tmax}}
+% ---------------------------------------------------------------------
+
+Hay un fenómeno que cualquiera que haya usado un agitador magnético vio en el
+laboratorio: la carga del líquido está bien por debajo de $T_{\max}$ (en régimen
+permanente el agitador podría girar sin problema), pero si le pegás un salto
+brusco de velocidad al motor, \textbf{la cápsula se suelta igual}. ¿Por qué?
+
+Podemos explicarlo en cinco líneas con lápiz y papel. Supongamos que el motor
+da un salto repentino de velocidad y se queda girando a una velocidad constante
+$\omega_1$ ($\dot\omega_1 = 0$), mientras la cápsula todavía viene más lenta
+($\dot\delta = \omega_1 - \omega_2 > 0$). Tomando $T_{L,\text{tot}}$ casi
+constante durante ese breve instante, como $\ddot\delta = \dot\omega_1 - \dot\omega_2 = -\dot\omega_2$,
+multiplicamos la ecuación~\eqref{eq:newton2} por $-1$:
+\begin{equation}
+  J_2\,\ddot\delta = -T_{\max}\,\sin(N_a\,\delta) + T_{L,\text{tot}}.
+  \label{eq:pendulo_acople}
+\end{equation}
+¡Es matemáticamente idéntica a la ecuación de un \textbf{péndulo} empujado por
+un torque constante! Para ver cuándo la cápsula «da la vuelta» (se desengancha),
+buscamos su conservación de energía multiplicando ambos lados por $\dot\delta$:
+\[
+  J_2\,\dot\delta\,\ddot\delta + T_{\max}\sin(N_a\delta)\,\dot\delta - T_{L,\text{tot}}\,\dot\delta = 0.
+\]
+Cada término es una derivada exacta respecto del tiempo:
+\[
+  \frac{\dd}{\dd t}\!\left[
+    \underbrace{\frac{1}{2}\,J_2\,\dot\delta^2}_{\text{energía cinética relativa}}
+    + \underbrace{\left(-\frac{T_{\max}}{N_a}\cos(N_a\delta) - T_{L,\text{tot}}\,\delta\right)}_{U_{\text{eff}}(\delta)}
+  \right] = 0.
+\]
+Por lo tanto, durante el transitorio se conserva la energía total
+$E = \frac{1}{2}J_2\dot\delta^2 + U_{\text{eff}}(\delta)$.
+
+La Figura~\ref{fig:pozo_potencial} dibuja esa energía potencial efectiva
+$U_{\text{eff}}(\delta)$: es un \textbf{pozo de potencial inclinado} (como una
+chapa ondulada puesta en bajada). El fondo del valle está justo en el equilibrio
+estable $\delta^\ast$, y la cima de la colina siguiente está justo en el
+equilibrio inestable $\delta_u$:
+\begin{itemize}
+  \item Si el salto de velocidad aporta una energía cinética relativa
+        $\frac{1}{2}J_2\dot\delta^2$ \textbf{menor} que la altura de la barrera
+        $\Delta U = U_{\text{eff}}(\delta_u) - U_{\text{eff}}(\delta^\ast)$, la
+        cápsula oscila dentro del pozo y vuelve a estabilizarse en $\delta^\ast$.
+  \item Si aporta energía \textbf{mayor} que $\Delta U$, la bolita pasa por
+        encima de la colina $\delta_u$ y cae indefinidamente cuesta abajo:
+        \textbf{la cápsula se desacopla}.
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=11.5cm, height=5.8cm,
+  axis lines=left,
+  xlabel={Desfase angular $N_a\delta$},
+  ylabel={Potencial efectivo $U_{\text{eff}}(\delta)$ (norm.)},
+  xmin=-0.6, xmax=5.2, ymin=-2.8, ymax=0.9,
+  xtick={0.5236, 2.6180},
+  xticklabels={$N_a\delta^\ast$ (valle), $N_a\delta_u$ (barrera)},
+  ytick=\empty,
+  tick label style={font=\footnotesize},
+  label style={font=\small},
+  clip=false
+]
+  % U_eff(x) = -cos(x) - 0.5*x (para T_L/T_max = 0.5)
+  \addplot[inkblue, very thick, domain=-0.5:5.0, samples=140] {-cos(deg(x)) - 0.5*x};
+
+  % Niveles del valle y la barrera
+  % En x* = pi/6 = 0.5236: -cos(30) - 0.2618 = -0.866 - 0.262 = -1.128
+  % En xu = 5pi/6 = 2.6180: -cos(150) - 1.309 = +0.866 - 1.309 = -0.443
+  \draw[tealaccent, dashed] (axis cs:-0.2,-1.128) -- (axis cs:1.8,-1.128);
+  \draw[crimson, dashed] (axis cs:0.5236,-0.443) -- (axis cs:3.4,-0.443);
+
+  % Altura de barrera Delta U
+  \draw[<->, amberwarn, very thick] (axis cs:0.5236,-1.128) -- (axis cs:0.5236,-0.443)
+    node[midway, right, font=\footnotesize\bfseries]{$\Delta U$};
+
+  % Puntos
+  \fill[tealaccent] (axis cs:0.5236,-1.128) circle (3pt);
+  \fill[crimson] (axis cs:2.6180,-0.443) circle (3pt);
+
+  % Trayectorias conceptuales
+  \node[tealaccent, font=\scriptsize, align=center] at (axis cs:1.45,-1.65) {Energía $< \Delta U$:\\oscila y queda enganchada};
+  \draw[->, crimson, thick] (axis cs:2.85,-0.35) to[bend left=18] (axis cs:4.1,-1.55);
+  \node[crimson, font=\scriptsize, align=left] at (axis cs:4.15,-0.25) {Energía $> \Delta U$:\\escapa y desacopla!};
+\end{axis}
+\end{tikzpicture}
+\caption{Energía potencial efectiva del acople bajo carga constante ($T_{L,\text{tot}} = 0{,}5\,T_{\max}$). Cuanto mayor es la carga, más inclinada queda la curva y más baja se vuelve la barrera $\Delta U$ que impide el desenganche.}
+\label{fig:pozo_potencial}
+\end{figure}
+
+Incluso en vacío ($T_{L,\text{tot}} = 0$), donde $\delta^\ast = 0$ y
+$\delta_u = \pi/N_a$, la barrera mide $\Delta U = \frac{2T_{\max}}{N_a}$. Por
+ende, el mayor salto instantáneo de velocidad que la cápsula puede soportar sin
+soltarse es:
+\[
+  \frac{1}{2}J_2\,(\Delta\omega_{\max})^2 = \frac{2T_{\max}}{N_a}
+  \quad\Longrightarrow\quad
+  \Delta\omega_{\max} = 2\sqrt{\frac{T_{\max}}{N_a\,J_2}}.
+\]
+Con esta sola línea se entiende por qué una \textbf{rampa suave} de arranque
+mantiene siempre a la cápsula cerca del fondo del valle, mientras que un escalón
+brusco la expulsa por encima de la barrera.
+
+\begin{antidoto}
+Dejamos afuera intencionalmente:
+\begin{itemize}
+  \item \textbf{Cálculo magnetostático 3D de $T_{\max}$ en función de la
+        geometría y el entrehierro:} requiere conocer la remanencia exacta $B_r$
+        de imanes comerciales sin hoja de datos y resolver integrales de dipolos.
+        En cambio, $T_{\max}$ es una única magnitud mecánica medible o acotable
+        conservadoramente.
+  \item \textbf{Amortiguamiento magnético interno ($c\,\dot\delta$) por
+        corrientes parásitas:} en un vaso de vidrio y una cápsula recubierta en
+        PTFE es despreciable, y no agregar amortiguamiento no medido vuelve al
+        modelo más conservador frente a oscilaciones y desenganche.
+\end{itemize}
+\end{antidoto}
+
+\begin{lapizypapel}
+\begin{enumerate}[leftmargin=1.5em]
+  \item Dibujá la curva $T_c(\delta) = T_{\max}\sin(N_a\delta)$ junto a una
+        carga $T_{L,\text{tot}} < T_{\max}$. Señalá $\delta_{\text{crit}}$,
+        $\delta^\ast$ y $\delta_u$, y justificá físicamente por qué uno es
+        estable y el otro inestable.
+  \item Deducí la rigidez linealizada $K_{\text{eff}} = N_a\sqrt{T_{\max}^2 - T_{L,\text{tot}}^2}$
+        y explicá qué le pasa al «resorte magnético» al acercarse a $T_{\max}$.
+  \item Explicá, sin usar fórmulas complicadas, por qué un escalón agresivo de
+        velocidad puede desacoplar la cápsula aun cuando $T_{L,\text{tot}} < T_{\max}$.
+\end{enumerate}
+\end{lapizypapel}
+
+% =====================================================================
+\chapter{Las fuerzas que frenan: fricción mecánica y arrastre del fluido}\label{cap:cargas}
+% =====================================================================
+
+\begin{ideafisica}
+Si no existieran rozamientos ni fluido, un motor al que le cortás la corriente
+giraría eternamente. En la realidad dos cosas disipan energía mecánica y exigen
+torque permanente para mantener la velocidad: el \textbf{rozamiento sólido}
+(rodamientos y contacto de la cápsula con el vaso) y la \textbf{resistencia del
+fluido} que la cápsula tiene que empujar y revolver.
+\end{ideafisica}
+
+En los diagramas del Capítulo~\ref{cap:mecanica} aparecieron tres torques
+resistivos: $T_{f1}(\omega_1)$, $T_{f2}(\omega_2)$ y $T_L(\omega_2)$. Veamos
+cómo se modelan de la manera más sencilla, físicamente clara y fácil de
+identificar.
+
+% ---------------------------------------------------------------------
+\section{Fricción mecánica: seca (Coulomb) más viscosa}
+% ---------------------------------------------------------------------
+
+Al mover cualquier pieza mecánica sobre un apoyo o rodamiento aparecen dos
+contribuciones clásicas:
+\begin{enumerate}
+  \item \textbf{Fricción seca o de Coulomb ($T_C$):} es un torque de magnitud
+        constante que siempre se opone al sentido del movimiento, sin importar
+        qué tan rápido gire el eje ($T_C\,\sgn(\omega)$). Físicamente proviene
+        del rozamiento sólido entre superficies (bolillas y pistas del
+        rodamiento, o la cápsula apoyada por su propio peso sobre el fondo de
+        vidrio del vaso).
+  \item \textbf{Fricción viscosa ($b\,\omega$):} es un torque proporcional a la
+        velocidad angular, debido al cizallamiento de películas de lubricante o
+        aire en el rodamiento y el apoyo.
+\end{enumerate}
+
+Combinando ambas para cada cuerpo $i \in \{1, 2\}$:
+\begin{ecuacionclave}
+\begin{equation}
+  T_{f,i}(\omega_i) = T_{C,i}\,\tanh\!\left(\frac{\omega_i}{\omega_{0,f}}\right) + b_i\,\omega_i,
+  \qquad i \in \{1, 2\}.
+  \label{eq:friccion_cap4}
+\end{equation}
+\end{ecuacionclave}
+
+\paragraph{¿Por qué escribimos $\tanh(\omega_i/\omega_{0,f})$ en lugar de $\sgn(\omega_i)$?}
+No es ningún fenómeno físico oculto ni misterioso: la función signo $\sgn(\omega)$
+pega un salto vertical discontinuo en $\omega = 0$ que hace «vibrar» a los
+métodos numéricos de integración cuando el cuerpo se frena. La tangente
+hiperbólica $\tanh(\omega/\omega_{0,f})$, eligiendo una banda pequeña
+$\omega_{0,f}$ frente a las velocidades de trabajo (por ejemplo
+$\omega_{0,f} \approx \SI{5}{rad/s}$), vale prácticamente $+1$ para toda
+velocidad positiva normal ($\tanh(3) \approx 0{,}995$), vale $-1$ para
+velocidad negativa y cruza suavemente por $0$ en reposo. En todo el rango de
+operación del motor, $T_{C,i}\tanh(\omega_i/\omega_{0,f}) \approx T_{C,i}$.
+
+\begin{unidades}
+Verificamos las unidades de ambos parámetros:
+\[
+  [T_{C,i}] = \si{N.m}, \qquad
+  [b_i] = \frac{[T]}{[\omega]} = \frac{\si{N.m}}{\si{rad/s}} = \si{N.m.s/rad}.
+\]
+\end{unidades}
+
+% ---------------------------------------------------------------------
+\section{Cómo separar \texorpdfstring{$T_C$ y $b$}{TC y b} en la práctica: ensayo de desaceleración libre}
+% ---------------------------------------------------------------------
+
+Una gran ventaja de este modelo de dos parámetros es que \textbf{no hay que
+adivinarlos}: se ven a simple vista en un ensayo de desaceleración libre
+(\emph{coast-down}). Imaginemos que llevamos el motor (en vacío, sin cápsula) a
+una velocidad $\omega_0 > 0$ y cortamos por completo la alimentación ($T_e = 0$).
+Mientras siga girando ($\omega > 0$), la ecuación de Newton queda:
+\begin{equation}
+  J\,\frac{\dd\omega}{\dd t} + b\,\omega = -T_C.
+  \label{eq:edo_coastdown}
+\end{equation}
+Resolvamos esta ecuación diferencial lineal de primer orden paso a paso:
+\begin{enumerate}
+  \item \textbf{Solución homogénea} ($J\dot\omega_h + b\omega_h = 0$):
+        $\omega_h(t) = A\,e^{-t/\tau}$, con constante de tiempo $\tau = J/b$.
+  \item \textbf{Solución particular constante} ($\dot\omega_p = 0$):
+        $b\,\omega_p = -T_C \implies \omega_p = -T_C/b$.
+  \item \textbf{Solución general:} $\omega(t) = A\,e^{-t/\tau} - \frac{T_C}{b}$.
+  \item \textbf{Condición inicial $\omega(0) = \omega_0$:}
+        $A - \frac{T_C}{b} = \omega_0 \implies A = \omega_0 + \frac{T_C}{b}$.
+\end{enumerate}
+Por lo tanto, mientras $\omega(t) \ge 0$:
+\begin{equation}
+  \boxed{\;\omega(t) = \left(\omega_0 + \frac{T_C}{b}\right)e^{-t/\tau} - \frac{T_C}{b},
+  \qquad \tau = \frac{J}{b}\;.}
+  \label{eq:sol_coastdown}
+\end{equation}
+
+Mirá los dos casos límite extremos en la Figura~\ref{fig:coastdown_fluido}
+(izquierda):
+\begin{itemize}
+  \item Si domina la \textbf{fricción seca} ($b \to 0$), la desaceleración es
+        constante ($\dot\omega = -T_C/J$) y la velocidad cae en \textbf{línea
+        recta} hasta detenerse en un tiempo finito $t_{\text{stop}} = J\omega_0/T_C$.
+  \item Si domina la \textbf{fricción viscosa} ($T_C \to 0$), la velocidad cae
+        como una \textbf{exponencial} $\omega_0 e^{-t/\tau}$ que se frena rápido
+        al principio y se achata lentamente hacia cero.
+\end{itemize}
+La curvatura de la desaceleración libre te dice directamente cuánto pesa cada
+uno!
+
+% ---------------------------------------------------------------------
+\section{El torque de carga del fluido: viscosidad frente a inercia}
+% ---------------------------------------------------------------------
+
+Ahora llenemos el vaso con líquido. ¿Qué siente la cápsula agitadora al girar a
+velocidad $\omega_2$? Pensá en revolver con una cuchara dos líquidos bien
+distintos: miel espesa despacio, frente a agua rápido. Estás sintiendo dos
+mecanismos físicos diferentes:
+
+\begin{enumerate}
+  \item \textbf{Arrastre viscoso (régimen laminar):} el líquido se adhiere a la
+        superficie de la cápsula y las capas vecinas de fluido se deslizan unas
+        sobre otras. Por la ley de viscosidad de Newton, el esfuerzo cortante es
+        proporcional a la viscosidad dinámica $\mu$ y a la velocidad de
+        deformación (proporcional a $\omega_2$). Esto produce un torque
+        \textbf{lineal en la velocidad}:
+        \[
+          T_{L,\text{visc}}(\omega_2) = b_{fl}\,\omega_2 \qquad (b_{fl} \propto \mu).
+        \]
+  \item \textbf{Arrastre inercial o de forma (régimen turbulento):} al girar más
+        rápido, la cápsula tiene que empujar y acelerar continuamente masa de
+        fluido que está en su camino. En un instante $\dd t$, la masa de fluido
+        barrida es proporcional a la densidad $\rho$ y a la velocidad lineal
+        $v \propto \omega_2$, y esa masa se acelera a una velocidad también
+        proporcional a $\omega_2$. Por variación de cantidad de movimiento (o
+        presión dinámica $\frac{1}{2}\rho v^2$), la fuerza crece como $\rho v^2$,
+        generando un torque \textbf{cuadrático en la velocidad}:
+        \[
+          T_{L,\text{iner}}(\omega_2) = c_{fl}\,\omega_2\,|\omega_2| \qquad (c_{fl} \propto \rho).
+        \]
+        \emph{Detalle de signo:} escribimos $\omega_2|\omega_2|$ y no $\omega_2^2$
+        porque $\omega_2^2$ sería siempre positivo; en cambio, $\omega_2|\omega_2|$
+        cambia de signo si la cápsula gira al revés, garantizando que el fluido
+        \textbf{siempre frene} el movimiento y nunca lo empuje.
+\end{enumerate}
+
+Sumando ambos efectos obtenemos el modelo de carga fluida:
+\begin{ecuacionclave}
+\begin{equation}
+  T_L(\omega_2) = b_{fl}\,\omega_2 + c_{fl}\,\omega_2\,|\omega_2|.
+  \label{eq:carga_fluido}
+\end{equation}
+\end{ecuacionclave}
+
+\begin{unidades}
+Comprobamos las dimensiones de ambos coeficientes efectivos del fluido:
+\[
+  [b_{fl}] = \si{N.m.s/rad}, \qquad
+  [c_{fl}] = \frac{\si{N.m}}{\si{rad^2/s^2}} = \si{N.m.s^2/rad^2} = \si{kg.m^2/rad^2}.
+\]
+Notá la consistencia física: como $c_{fl} \propto \rho\,D^5$ (densidad por
+longitud a la quinta), sus unidades son $(\si{kg/m^3})\cdot\si{m^5} = \si{kg.m^2}$!
+\end{unidades}
+
+\begin{figure}[htbp]
+\centering
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=6.6cm, height=5.0cm,
+  axis lines=left,
+  xlabel={Tiempo $t$},
+  ylabel={Velocidad $\omega(t)$},
+  xmin=0, xmax=3.2, ymin=0, ymax=1.15,
+  xtick=\empty, ytick={1}, yticklabels={$\omega_0$},
+  tick label style={font=\footnotesize},
+  label style={font=\footnotesize},
+  legend style={font=\scriptsize, at={(0.98,0.98)}, anchor=north east, draw=none, fill=white, fill opacity=0.85}
+]
+  % Pura viscosa
+  \addplot[tealaccent, thick, dashed, domain=0:3.1, samples=60] {exp(-0.7*x)};
+  \addlegendentry{Sólo viscosa ($b$)}
+  % Pura Coulomb
+  \addplot[crimson, thick, dotted, domain=0:2.0, samples=30] {1 - 0.5*x};
+  \addlegendentry{Sólo seca ($T_C$)}
+  % Combinada
+  \addplot[inkblue, very thick, domain=0:1.45, samples=60] {max(0, 1.5*exp(-0.7*x) - 0.5)};
+  \addlegendentry{Combinada ($T_C + b\omega$)}
+\end{axis}
+\end{tikzpicture}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=6.6cm, height=5.0cm,
+  axis lines=left,
+  xlabel={Velocidad $\omega_2$},
+  ylabel={Torque resistivo},
+  xmin=0, xmax=1.15, ymin=0, ymax=1.25,
+  xtick=\empty, ytick={0.18}, yticklabels={$T_{C2}$},
+  tick label style={font=\footnotesize},
+  label style={font=\footnotesize},
+  legend style={font=\scriptsize, at={(0.03,0.98)}, anchor=north west, draw=none, fill=white, fill opacity=0.85}
+]
+  % Fricción mecánica Tc + b*w
+  \addplot[tealaccent, thick, dashed, domain=0:1.1, samples=60] {0.18*tanh(12*x) + 0.25*x};
+  \addlegendentry{Fricción $T_{f2}$}
+  % Carga fluido bfl*w + cfl*w^2
+  \addplot[amberwarn, thick, domain=0:1.1, samples=60] {0.22*x + 0.55*x^2};
+  \addlegendentry{Fluido $T_L$}
+  % Total
+  \addplot[inkblue, very thick, domain=0:1.1, samples=60] {0.18*tanh(12*x) + 0.47*x + 0.55*x^2};
+  \addlegendentry{Total $T_{L,\text{tot}}$}
+\end{axis}
+\end{tikzpicture}
+\end{minipage}
+\caption{Izquierda: desaceleración libre (\emph{coast-down}) comparando fricción viscosa, seca y combinada. Derecha: suma de fricción mecánica y arrastre cuadrático del fluido sobre la cápsula.}
+\label{fig:coastdown_fluido}
+\end{figure}
+
+% ---------------------------------------------------------------------
+\section{El escenario crítico: pasar de aire a líquido y la pérdida de observabilidad}
+% ---------------------------------------------------------------------
+
+Miremos ahora qué le sucede al sistema completo cuando arrancamos el agitador
+en un vaso vacío (aire: $b_{fl}\approx 0$, $c_{fl}\approx 0$) y, estando ya en
+régimen a velocidad $\omega_0$, vertemos líquido o aumentamos bruscamente su
+viscosidad en un instante $t_0$:
+\[
+  b_{fl}(t) = b_{fl,0} + \Delta b_{fl}\,H(t - t_0),
+  \qquad
+  c_{fl}(t) = c_{fl,0} + \Delta c_{fl}\,H(t - t_0),
+\]
+donde $H(t - t_0)$ es la función escalón unitario ($0$ para $t < t_0$ y $1$ para $t \ge t_0$).
+
+Sigamos las ecuaciones~\eqref{eq:newton1}--\eqref{eq:newton2} línea por línea:
+\begin{enumerate}
+  \item Al ingresar el líquido en $t = t_0$, la carga $T_L(\omega_2)$ pega un
+        salto repentino. La cápsula se frena, $\omega_2$ baja y el desfase
+        $\delta = \theta_1 - \theta_2$ empieza a crecer.
+  \item Si la nueva carga supera el techo del acople ($T_{L,\text{tot}}(\omega_0) > T_{\max}$),
+        o si el salto dinámico alcanza para superar la barrera $\Delta U$ de la
+        Figura~\ref{fig:pozo_potencial}, la cápsula se desengancha: $\delta$
+        gira libremente, el promedio temporal $\langle T_c(\delta)\rangle \to 0$
+        y la cápsula se detiene ($\omega_2 \to 0$).
+  \item \textbf{¿Qué ve el motor?} Volvé a mirar la ecuación del Cuerpo~1:
+        \[
+          J_1\,\dot\omega_1 = T_e - \underbrace{T_c(\delta)}_{\langle T_c\rangle \to 0} - T_{f1}(\omega_1).
+        \]
+        Al desaparecer el torque de reacción del acople, \textbf{el motor queda
+        mecánicamente desconectado de la cápsula}. Un controlador que sólo
+        mide la velocidad del rotor $\omega_1$ (sin medir corriente ni ver la
+        cápsula) mantiene felizmente $\omega_1 \approx \omega^\ast$ y
+        \textbf{jamás se entera de que el agitador dejó de agitar}.
+\end{enumerate}
+
+Este fenómeno ---capturable por el modelo aunque invisible para el sensor de
+velocidad del motor--- es exactamente una de las conclusiones de ingeniería más
+valiosas que el modelado permite demostrar antes de tocar el hardware.
+
+\begin{antidoto}
+En este capítulo dejamos afuera deliberadamente:
+\begin{itemize}
+  \item \textbf{Fricción de Stribeck y modelo dinámico de LuGre:} describen el
+        pico de fricción estática y microdesplazamientos cerca de $\omega = 0$
+        (\emph{stick-slip}). Como el sensor de velocidad está ciego a bajas rpm
+        y el arranque se hace a lazo abierto, esos parámetros adicionales son
+        inidentificables con la instrumentación real y no intervienen en régimen.
+  \item \textbf{Tablas industriales de número de potencia $N_p(\mathrm{Re})$:}
+        esas correlaciones están tabuladas para tanques normalizados con
+        deflectores (\emph{baffles}) y turbinas Rushton, no para una cápsula
+        magnética en un vaso de precipitados liso (donde además se forma un
+        vórtice central). Tratar $b_{fl}$ y $c_{fl}$ como dos parámetros globales
+        efectivos evita importar números ajenos a nuestra geometría.
+\end{itemize}
+\end{antidoto}
+
+\begin{lapizypapel}
+\begin{enumerate}[leftmargin=1.5em]
+  \item Resolvé paso a paso la ecuación de desaceleración libre
+        $J\dot\omega + b\omega = -T_C$ y explicá cómo distinguir gráficamente si
+        domina la fricción seca o la viscosa.
+  \item Justificá físicamente por qué la carga del fluido tiene un término
+        proporcional a $\omega_2$ y otro proporcional a $\omega_2|\omega_2|$
+        (y por qué lleva valor absoluto).
+  \item Explicá, mirando las ecuaciones de $J_1$ y $J_2$, por qué un sensor
+        que sólo mide $\omega_1$ no detecta que la cápsula se desacopló.
+\end{enumerate}
+\end{lapizypapel}
+
+% =====================================================================
+\chapter{Medición sin sensores, zona ciega, arranque ciego y retardo}\label{cap:sensorless}
+% =====================================================================
+
+\begin{ideafisica}
+En un motor BLDC \emph{sensorless} no hay ningún tacómetro ni encoder en el eje.
+La velocidad se estima «escuchando» cuándo la tensión inducida (BEMF) de la fase
+desconectada cruza por cero. De ese principio físico nacen dos limitaciones
+enormes que condicionan todo el control: \textbf{por debajo de cierta velocidad
+el sensor queda completamente ciego} (lo que obliga a arrancar a lazo abierto),
+y \textbf{por encima de ella la medición siempre llega atrasada} en proporción
+inversa a la velocidad.
+\end{ideafisica}
+
+En los capítulos anteriores construimos la planta física (motor + dos inercias +
+acople + fluido). Ahora debemos modelar con la misma honestidad \emph{cómo
+medimos la velocidad} y \emph{cómo logramos poner el motor en marcha desde el
+reposo}.
+
+% ---------------------------------------------------------------------
+\section{Cómo se mide velocidad sin encoder: los cruces por cero}
+% ---------------------------------------------------------------------
+
+Recordemos la Figura~\ref{fig:bldc_estrella} del Capítulo~\ref{cap:motor}: en
+conmutación de seis pasos, en todo momento hay dos fases llevando corriente y
+una tercera fase abierta ($i_k = 0$). ¿Qué tensión aparece en el borne de esa
+fase abierta respecto del neutro $n$? Como $i_k = 0$ y $\dot i_k = 0$, tanto la
+caída resistiva $R\,i_k$ como la inductiva $L_s\dot i_k$ valen cero, y queda
+limpia únicamente la BEMF:
+\[
+  v_{kn}(t) = e_k(t).
+\]
+
+Durante esa ventana de \SI{60}{\degree} eléctricos en que la fase queda libre,
+su BEMF pasa de positiva a negativa (o de negativa a positiva), atravesando el
+cero justo en el punto medio de la ventana. En cada ciclo eléctrico completo
+($2\pi$ radianes eléctricos), una misma fase cruza por cero \textbf{dos veces}
+(una subiendo y una bajando), separadas exactamente medio ciclo eléctrico
+($\Delta\theta_e = \pi$).
+
+Como $\theta_e = p\,\theta_1$, el tiempo $T_{ZC}$ entre dos cruces por cero
+consecutivos de una misma fase es:
+\begin{equation}
+  p\,\omega_1\,T_{ZC} = \pi
+  \quad\Longrightarrow\quad
+  T_{ZC} = \frac{\pi}{p\,\omega_1} = \frac{30}{p\,n}\qquad [\si{s}],
+  \label{eq:tzc}
+\end{equation}
+donde usamos $\omega_1 = \frac{\pi}{30}n$ para pasar de \si{rad/s} a \si{rpm}.
+Un circuito comparador detecta cada cruce y un cronómetro mide el período
+$T_{ZC}$; invirtiendo~\eqref{eq:tzc} se calcula la velocidad estimada:
+\begin{equation}
+  \hat\omega_1 = \frac{\pi}{p\,T_{ZC}},
+  \qquad\text{o bien}\qquad
+  \hat n = \frac{30}{p\,T_{ZC}}.
+  \label{eq:omega_de_tzc}
+\end{equation}
+
+% ---------------------------------------------------------------------
+\section{Segunda no linealidad dominante: la zona ciega a baja velocidad}
+% ---------------------------------------------------------------------
+
+Volvamos a la ley de Faraday del Capítulo~\ref{cap:motor}: la amplitud de la
+tensión inducida es \textbf{proporcional a la velocidad}:
+\[
+  |e_{\text{pico}}| = k_e\,\omega_1.
+\]
+¿Qué sucede cuando el motor gira muy despacio ($\omega_1 \to 0$)? La señal de
+BEMF se achica hasta volverse minúscula, mientras que el ruido eléctrico de
+conmutación PWM, las histéresis y el umbral efectivo $V_{\text{umbral}}$ del
+comparador siguen estando ahí.
+
+Por debajo de una velocidad crítica
+\begin{equation}
+  \omega_{\text{ciego}} \approx \frac{V_{\text{umbral}}}{k_e}
+  \qquad (n_{\text{ciego}} \approx 300\text{--}\SI{400}{rpm}\text{ en motores pequeños}),
+  \label{eq:zona_ciega}
+\end{equation}
+la BEMF queda enterrada bajo el ruido (Figura~\ref{fig:bemf_ceguera}). El
+comparador deja de entregar cruces válidos: \textbf{el error de medición salta
+al \SI{100}{\percent}}. No estamos ante un pequeño ruido aditivo gaussiano, sino
+ante la \textbf{desaparición total de la señal de realimentación}. Si pasa un
+tiempo límite $\tau_{\text{stall}}$ sin recibir ningún cruce válido, el sistema
+debe declarar pérdida de sincronismo (\emph{stall}) y reiniciar.
+
+\begin{figure}[htbp]
+\centering
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=6.6cm, height=4.6cm,
+  axis lines=middle,
+  xlabel={$t$}, ylabel={$e_k(t)$},
+  xmin=0, xmax=6.5, ymin=-1.3, ymax=1.3,
+  xtick=\empty, ytick=\empty,
+  label style={font=\footnotesize},
+  title={\footnotesize\bfseries Velocidad alta ($n > n_{\text{ciego}}$)},
+  title style={yshift=-4pt}
+]
+  % Banda de ruido/umbral
+  \fill[crimson!12] (axis cs:0,-0.22) rectangle (axis cs:6.5,0.22);
+  \draw[crimson, dashed, thin] (axis cs:0,0.22) -- (axis cs:6.5,0.22);
+  \draw[crimson, dashed, thin] (axis cs:0,-0.22) -- (axis cs:6.5,-0.22);
+  \node[crimson, font=\tiny, above] at (axis cs:5.2,0.28) {$\pm V_{\text{umbral}}$};
+
+  % Señal BEMF fuerte
+  \addplot[inkblue, very thick, domain=0:6.28, samples=120] {1.05*sin(deg(x))};
+  \fill[tealaccent] (axis cs:3.1416,0) circle (2.6pt);
+  \draw[->, tealaccent, thin] (axis cs:2.25,-0.70) -- (axis cs:3.04,-0.08);
+  \node[tealaccent, font=\scriptsize\bfseries, below] at (axis cs:1.85,-0.68) {Cruce claro};
+\end{axis}
+\end{tikzpicture}
+\end{minipage}
+\hfill
+\begin{minipage}[t]{0.48\linewidth}
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=6.6cm, height=4.6cm,
+  axis lines=middle,
+  xlabel={$t$}, ylabel={$e_k(t)$},
+  xmin=0, xmax=6.5, ymin=-1.3, ymax=1.3,
+  xtick=\empty, ytick=\empty,
+  label style={font=\footnotesize},
+  title={\footnotesize\bfseries Velocidad baja ($n < n_{\text{ciego}}$)},
+  title style={yshift=-4pt}
+]
+  % Banda de ruido/umbral
+  \fill[crimson!15] (axis cs:0,-0.22) rectangle (axis cs:6.5,0.22);
+  \draw[crimson, dashed, thin] (axis cs:0,0.22) -- (axis cs:6.5,0.22);
+  \draw[crimson, dashed, thin] (axis cs:0,-0.22) -- (axis cs:6.5,-0.22);
+
+  % Señal BEMF diminuta ahogada en ruido
+  \addplot[mutedgray, thick, domain=0:6.28, samples=120] {0.14*sin(deg(0.5*x))};
+  \node[crimson, font=\scriptsize\bfseries, align=center] at (axis cs:3.25,0.75) {BEMF tapada por\\umbral/ruido $\Rightarrow$ ceguera};
+\end{axis}
+\end{tikzpicture}
+\end{minipage}
+\caption{Origen físico de la zona ciega: como la amplitud de la BEMF escala con la velocidad, a bajas revoluciones queda sumergida dentro del umbral y ruido del comparador.}
+\label{fig:bemf_ceguera}
+\end{figure}
+
+% ---------------------------------------------------------------------
+\section{Física del arranque ciego a lazo abierto}
+% ---------------------------------------------------------------------
+
+La zona ciega plantea una paradoja inmediata: si en reposo ($\omega_1 = 0$) el
+sensor no ve nada, \textbf{¿cómo hacemos para que el motor empiece a girar y
+supere $n_{\text{ciego}}$?}
+
+La respuesta es operar el motor inicialmente como un \textbf{motor síncrono a
+lazo abierto}: sin mirar la posición del rotor, aplicamos a las tres bobinas del
+estator tensiones senoidales desfasadas \SI{120}{\degree} entre sí, cuya
+amplitud $V_{ph}(t)$ y frecuencia eléctrica $f_e(t)$ suben suavemente en rampa:
+\begin{equation}
+  v_a = V_{ph}(t)\cos(\theta_s), \quad
+  v_b = V_{ph}(t)\cos\!\left(\theta_s - \tfrac{2\pi}{3}\right), \quad
+  v_c = V_{ph}(t)\cos\!\left(\theta_s + \tfrac{2\pi}{3}\right),
+  \label{eq:tensiones_arranque}
+\end{equation}
+donde $\theta_s(t) = 2\pi\int_0^t f_e(\tau)\,\dd\tau$ es el ángulo del campo
+magnético rotante que estamos creando artificialmente en el estator.
+
+\begin{ideafisica}[La asombrosa unidad física: dos acoples magnéticos en serie]
+Mirá la Figura~\ref{fig:campo_rotante}. Durante el arranque ciego, el campo
+magnético giratorio del estator (en el ángulo $\theta_s$) arrastra a los imanes
+del rotor (en el ángulo eléctrico $\theta_e = p\theta_1$) mediante el
+\textbf{exactamente mismo principio físico} con el que el imán inferior arrastra
+a la cápsula agitadora! En ambos casos hay un ángulo de desfase y un torque
+restaurador proporcional al seno de ese desfase.
+\end{ideafisica}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  >={Stealth[length=5pt]},
+  thick
+]
+  % Círculo del estator
+  \draw[inkblue!35, very thick] (0,0) circle (2.0cm);
+  \draw[mutedgray, dashed] (-2.3,0) -- (2.3,0);
+  \draw[mutedgray, dashed] (0,-2.3) -- (0,2.3);
+
+  % Vector rotor (ángulo theta_e = 25 deg)
+  \draw[->, tealaccent, ultra thick] (0,0) -- (22:1.65cm)
+    node[below right, font=\small\bfseries]{Rotor ($\theta_e = p\theta_1$)};
+
+  % Vector campo estator (ángulo theta_s = 72 deg)
+  \draw[->, inkblue, ultra thick] (0,0) -- (72:1.95cm)
+    node[above right, font=\small\bfseries]{Campo estator ($\theta_s$)};
+
+  % Arco de ángulo de carga gamma = theta_s - theta_e
+  \draw[->, amberwarn, very thick] (22:1.05cm) arc (22:72:1.05cm);
+  \node[amberwarn, font=\small\bfseries] at (47:1.35cm) {$\gamma$};
+
+  % Leyenda al costado
+  \node[right, align=left, font=\footnotesize] at (4.4,0.35) {
+    Ángulo de carga eléctrico:\\[2pt]
+    $\gamma = \theta_s(t) - p\,\theta_1(t)$\\[6pt]
+    $\bullet\; 0 < \gamma < 90^\circ$: torque arrastra al rotor.\\[2pt]
+    $\bullet\; \gamma > 90^\circ$: pierde sincronismo!
+  };
+\end{tikzpicture}
+\caption{Durante el arranque ciego, el campo giratorio del estator ($\theta_s$) tira del imán del rotor ($\theta_e = p\theta_1$) con un torque proporcional a $\sin(\theta_s - p\theta_1)$.}
+\label{fig:campo_rotante}
+\end{figure}
+
+\subsection{Deducción limpia del torque de arranque (en 6 líneas)}
+Para que la fórmula del arranque no aparezca nunca «de la galera», deduzcámosla
+paso a paso. A las frecuencias muy bajas del arranque ($f_e < \SI{10}{Hz}$), la
+reactancia inductiva es despreciable ($2\pi f_e L_s \ll R$), de modo que en cada
+fase $k \in \{0,1,2\}$ (con ángulos $\phi_k = \frac{2\pi k}{3}$) vale simplemente
+la ley de Ohm con BEMF senoidal:
+\[
+  e_k = -k_e\,\omega_1\,\sin(\theta_e - \phi_k),
+  \qquad
+  i_k = \frac{v_k - e_k}{R}
+      = \frac{V_{ph}\cos(\theta_s - \phi_k) + k_e\,\omega_1\sin(\theta_e - \phi_k)}{R}.
+\]
+(El signo menos en $e_k$ proviene de la ley de Faraday $e_k = \frac{\dd}{\dd t}[\psi_m\cos(\theta_e - \phi_k)] = -p\psi_m\omega_1\sin(\theta_e-\phi_k)$).
+Por conservación de energía, la potencia electromecánica total de las tres fases
+es $P_{\text{em}} = \sum_{k=0}^2 e_k i_k = T_{e,\text{arr}}\,\omega_1$.
+Dividiendo por $\omega_1$:
+\[
+  T_{e,\text{arr}}
+  = -\frac{k_e}{R}\sum_{k=0}^{2}
+    \Big[V_{ph}\sin(\theta_e - \phi_k)\cos(\theta_s - \phi_k)
+       + k_e\omega_1\sin^2(\theta_e - \phi_k)\Big].
+\]
+Usamos dos identidades trigonométricas elementales y el hecho de que tres
+vectores iguales separados \SI{120}{\degree} suman cero:
+\begin{align*}
+  \sum_{k=0}^2 \sin(\theta_e-\phi_k)\cos(\theta_s-\phi_k)
+  &= \frac{1}{2}\sum_{k=0}^2\Big[\sin(\theta_e-\theta_s) + \underbrace{\sin(\theta_e+\theta_s-2\phi_k)}_{\text{suma}=0}\Big]
+   = -\frac{3}{2}\sin(\theta_s - \theta_e), \\
+  \sum_{k=0}^2 \sin^2(\theta_e-\phi_k)
+  &= \sum_{k=0}^2 \frac{1 - \overbrace{\cos(2\theta_e - 2\phi_k)}^{\text{suma}=0}}{2}
+   = \frac{3}{2}.
+\end{align*}
+Reemplazando ambas sumas obtenemos sin ningún misterio:
+\begin{ecuacionclave}
+\begin{equation}
+  T_{e,\text{arr}}(t) \approx \frac{3\,k_e}{2R}
+  \Big(V_{ph}(t)\,\sin\!\big(\theta_s(t) - p\,\theta_1\big) - k_e\,\omega_1\Big).
+  \label{eq:torque_arranque_deducido}
+\end{equation}
+\end{ecuacionclave}
+
+\begin{lectura}
+Mirá qué clara resulta~\eqref{eq:torque_arranque_deducido} ahora que sabés de
+dónde salió cada letra:
+\begin{itemize}
+  \item El factor $\frac{3}{2}$ viene simplemente de sumar tres fases senoidales
+        desfasadas \SI{120}{\degree}.
+  \item El primer término, $\frac{3k_e V_{ph}}{2R}\sin(\theta_s - p\theta_1)$,
+        es un \textbf{torque de enganche síncrono}: mientras $|\theta_s - p\theta_1| < \pi/2$,
+        arrastra al rotor para que siga al campo rotante a velocidad
+        $\omega_1 \approx 2\pi f_e(t)/p$.
+  \item El segundo término, $-\frac{3k_e^2}{2R}\omega_1$, vuelve a ser nuestro
+        viejo conocido \textbf{amortiguamiento eléctrico por BEMF}.
+  \item \textbf{Por qué la rampa debe subir a la vez frecuencia y amplitud ($V/f$):}
+        el torque máximo disponible (en $\sin = 1$) vale
+        $\frac{3k_e}{2R}(V_{ph} - k_e\omega_1)$. A medida que el rotor acelera,
+        la BEMF $k_e\omega_1$ crece y le «come» tensión a $V_{ph}$; si no
+        subiéramos $V_{ph}(t)$ junto con la frecuencia $f_e(t)$, el torque
+        disponible se desplomaría antes de salir de la zona ciega.
+  \item \textbf{Cuándo falla el arranque:} si la rampa acelera demasiado rápido
+        o la carga mecánica exige más que el torque máximo disponible, el ángulo
+        $\theta_s - p\theta_1$ pasa de \SI{90}{\degree} y el rotor pierde el paso.
+\end{itemize}
+\end{lectura}
+
+Una vez que la rampa (eventualmente ayudada por un escalón breve de ciclo de
+trabajo al pasar a seis pasos) logra empujar al rotor por encima de
+$n_{\text{ciego}}$, el comparador comienza a entregar cruces por cero limpios y
+consistentes: recién ahí se realiza la \textbf{transición (\emph{handoff}) al
+lazo cerrado} y el controlador PI toma el mando.
+
+% ---------------------------------------------------------------------
+\section{Tercera no linealidad dominante: retardo variable con la velocidad (\texorpdfstring{$\tau \propto 1/n$}{tau proporcional a 1/n})}
+% ---------------------------------------------------------------------
+
+Supongamos que ya superamos la zona ciega ($n > n_{\text{ciego}}$) y el sensor
+funciona bien. ¿Significa eso que conocemos la velocidad $\omega_1(t)$ en tiempo
+real? \textbf{No.} Medir velocidad cronometrando el período entre eventos
+introducirá siempre un \textbf{retardo de tiempo} que empeora a medida que baja
+la velocidad.
+
+Observemos la línea de tiempo de la Figura~\ref{fig:retardo_zc}. Existen tres
+fuentes de atraso acumulativas:
+\begin{enumerate}
+  \item \textbf{Ventana de promedio móvil ($M$ períodos):} para suavizar pequeñas
+        asimetrías entre fases o ruido, suele promediarse el tiempo de los
+        últimos $M$ semiciclos eléctricos (duración total $M\,T_{ZC}$). La
+        velocidad promediada corresponde en realidad al \emph{punto medio} de
+        esa ventana pasada, es decir, ya nace atrasada $\frac{M}{2}T_{ZC}$.
+  \item \textbf{Retención entre cruces (ZOH por eventos):} entre un cruce por
+        cero y el siguiente no entra información nueva; el controlador sigue
+        leyendo un valor congelado en escalera. En promedio, ese congelamiento
+        agrega medio período más: $\frac{1}{2}T_{ZC}$.
+  \item \textbf{Muestreo del controlador discreto:} si el controlador ejecuta
+        cada $\Delta t_c$ segundos, su retención de orden cero aporta en promedio
+        $\frac{1}{2}\Delta t_c$.
+\end{enumerate}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[>={Stealth[length=5pt]}, thick]
+  % Ejes
+  \draw[->] (0,0) -- (11.2,0) node[right, font=\footnotesize]{$t$};
+  \draw[->] (0,0) -- (0,3.3) node[above, font=\footnotesize]{Velocidad};
+
+  % Velocidad real creciendo
+  \draw[inkblue, very thick] (0.2,0.7) .. controls (3.0,1.0) and (6.5,2.1) .. (10.5,2.75);
+  \node[inkblue, font=\footnotesize\bfseries] at (9.6,3.05) {$\omega_1(t)$ real};
+
+  % Cruces por cero (más espaciados al principio, más juntos después)
+  \foreach \x in {0.8, 3.0, 4.9, 6.5, 7.8, 8.9, 9.9} {
+    \draw[mutedgray, dotted] (\x,0) -- (\x,2.85);
+    \fill[amberwarn] (\x,0) circle (2.2pt);
+  }
+  \node[below, amberwarn, font=\scriptsize] at (1.9,-0.08) {$T_{ZC}$ largo (baja rpm)};
+  \node[below, amberwarn, font=\scriptsize] at (8.35,-0.08) {$T_{ZC}$ corto (alta rpm)};
+
+  % Señal medida escalonada y atrasada
+  \draw[crimson, very thick]
+    (0.8,0.72) -- (3.0,0.72) -- (3.0,0.85) -- (4.9,0.85) -- (4.9,1.18)
+    -- (6.5,1.18) -- (6.5,1.58) -- (7.8,1.58) -- (7.8,1.95)
+    -- (8.9,1.95) -- (8.9,2.25) -- (9.9,2.25) -- (9.9,2.48) -- (10.6,2.48);
+  \node[crimson, font=\footnotesize\bfseries] at (9.4,1.65) {$\hat\omega_1(t)$ medida};
+
+  % Flecha de retardo tau
+  \draw[<->, amberwarn, very thick] (4.9,1.38) -- (6.05,1.38);
+  \node[fill=white, inner sep=1.2pt, text=amberwarn, font=\scriptsize\bfseries] at (5.48,1.08) {$\tau(n)$};
+\end{tikzpicture}
+\caption{Efecto del muestreo por eventos de cruce por cero: la velocidad estimada $\hat\omega_1$ forma una escalera atrasada respecto de $\omega_1(t)$. Al bajar la velocidad, $T_{ZC}$ se alarga y el retardo $\tau$ crece como $1/n$.}
+\label{fig:retardo_zc}
+\end{figure}
+
+Sumando las tres contribuciones y sustituyendo $T_{ZC} = \frac{\pi}{p\,\omega_1} = \frac{30}{p\,n}$:
+\begin{ecuacionclave}
+\begin{equation}
+  \tau(n) \approx \frac{M + 1}{2}\,T_{ZC} + \frac{\Delta t_c}{2}
+          = \frac{(M + 1)\,\pi}{2\,p\,\omega_1} + \frac{\Delta t_c}{2}
+          = \frac{15\,(M + 1)}{p\,n} + \frac{\Delta t_c}{2}.
+  \label{eq:retardo_cap5}
+\end{equation}
+\end{ecuacionclave}
+
+\paragraph{Por qué un retardo desestabiliza un lazo de control.}
+En el dominio de la frecuencia, un retardo puro de tiempo $\tau$ tiene función
+de transferencia $e^{-s\tau}$. Evaluado en $s = j\omega$:
+\[
+  \big|e^{-j\omega\tau}\big| = 1,
+  \qquad
+  \arg\!\big(e^{-j\omega\tau}\big) = -\omega\,\tau \quad [\si{rad}].
+\]
+Un retardo \textbf{no atenúa la ganancia} en ninguna frecuencia, pero \textbf{roba
+margen de fase} proporcionalmente a $\omega\,\tau$. Si tu lazo cerrado, diseñado
+a una velocidad nominal alta, tiene una frecuencia de cruce $\omega_c$ y dispone
+de un margen de fase $\Delta\phi$ (en radianes) antes de volverse oscilatorio,
+al bajar la consigna de velocidad $n$ el retardo $\tau(n)$ se agranda como
+$1/n$. El lazo pierde estabilidad en cuanto $\omega_c\,\tau(n) \approx \Delta\phi$,
+es decir, aproximadamente por debajo de:
+\begin{equation}
+  n_{\min,\text{estab}} \approx \frac{15\,(M + 1)\,\omega_c}{p\,\Delta\phi}.
+  \label{eq:n_min_estab}
+\end{equation}
+Esto explica un hecho muy importante en la práctica: \textbf{un controlador PI
+con ganancias fijas que funciona perfecto a \SI{2000}{rpm} puede empezar a
+oscilar al bajar la consigna a \SI{500}{rpm}}, incluso antes de tocar la zona
+ciega.
+
+\begin{antidoto}
+En este capítulo capturamos las dos propiedades que realmente dominan el sensor
+(ceguera debajo de $n_{\text{ciego}}$ y retardo $\tau \propto 1/n$). Dejamos
+afuera efectos de segundo orden como la cuantización entera del contador de
+tiempo (error $\propto n^2$, despreciable a velocidades de agitador), el
+\emph{jitter} fino por ruido térmico, el retardo de fase de los filtros RC
+analógicos a muy alta velocidad y los tiempos de enmascaramiento
+(\emph{blanking}).
+\end{antidoto}
+
+\begin{lapizypapel}
+\begin{enumerate}[leftmargin=1.5em]
+  \item Explicá físicamente por qué en un BLDC \emph{sensorless} existe una
+        velocidad mínima $n_{\text{ciego}}$ por debajo de la cual el error de
+        medición es del \SI{100}{\percent}.
+  \item En la ecuación del arranque ciego~\eqref{eq:torque_arranque_deducido},
+        ¿qué significa el ángulo $(\theta_s - p\theta_1)$ y por qué la rampa
+        tiene que subir simultáneamente frecuencia y amplitud de tensión?
+  \item Deducí la fórmula del retardo $\tau(n) \approx \frac{15(M+1)}{p\,n} + \frac{\Delta t_c}{2}$
+        sumando sus tres contribuciones, y explicá con margen de fase por qué un
+        PI estable a alta velocidad puede oscilar a baja velocidad.
+\end{enumerate}
+\end{lapizypapel}
+
+% =====================================================================
+\chapter{Ensamble del modelo no lineal y punto de equilibrio}\label{cap:ensamble}
+% =====================================================================
+
+\begin{ideafisica}
+Llegó el momento de juntar en una sola hoja las cuatro piezas que construimos
+por separado. No vamos a introducir ninguna ley nueva: sólo vamos a escribir
+juntas las ecuaciones de Kirchhoff, Newton, acople y cargas, y aprender a
+calcular el \textbf{punto de equilibrio} siguiendo la cadena física desde el
+fluido hacia la fuente.
+\end{ideafisica}
+
+% ---------------------------------------------------------------------
+\section{El sistema completo de ecuaciones diferenciales}
+% ---------------------------------------------------------------------
+
+Una vez superado el arranque ciego, en operación normal a lazo cerrado el estado
+físico continuo del sistema queda completamente descripto por \textbf{cuatro
+variables de estado}:
+\[
+  x = \begin{bmatrix} I & \omega_1 & \omega_2 & \delta \end{bmatrix}^{\mathsf{T}},
+\]
+que son respectivamente la corriente eléctrica $I$, la velocidad del motor
+$\omega_1$, la velocidad de la cápsula agitadora $\omega_2$ y el desfase angular
+$\delta = \theta_1 - \theta_2$ en el acople magnético. La entrada de control es
+el ciclo de trabajo saturado $d \in [d_{\min}, 1]$ (que impone la tensión media
+$V = d\,V_{dc}$), y la única variable accesible al sensor \emph{sensorless} es
+$\omega_1$ (a través de cruces por cero, con zona ciega y retardo).
+
+Reuniendo~\eqref{eq:bldc_sixstep}, \eqref{eq:newton1}--\eqref{eq:cinematica_delta},
+\eqref{eq:acople_seno}, \eqref{eq:friccion_cap4} y~\eqref{eq:carga_fluido}:
+\begin{ecuacionclave}
+\begin{align}
+  2L_s\,\frac{\dd I}{\dd t}        &= d\,V_{dc} - 2R\,I - 2k_e\,\omega_1,
+  &&\text{(malla eléctrica)} \label{eq:nl_1}\\[3pt]
+  J_1\,\frac{\dd\omega_1}{\dd t}   &= 2k_e\,I - T_{\max}\sin(N_a\delta)
+                                    - T_{C1}\tanh\!\left(\frac{\omega_1}{\omega_{0,f}}\right) - b_1\omega_1,
+  &&\text{(rotor)} \label{eq:nl_2}\\[3pt]
+  J_2\,\frac{\dd\omega_2}{\dd t}   &= T_{\max}\sin(N_a\delta) - b_{fl}\omega_2 - c_{fl}\omega_2|\omega_2|
+                                    - T_{C2}\tanh\!\left(\frac{\omega_2}{\omega_{0,f}}\right) - b_2\omega_2,
+  &&\text{(agitador)} \label{eq:nl_3}\\[3pt]
+  \frac{\dd\delta}{\dd t}          &= \omega_1 - \omega_2.
+  &&\text{(cinemática)} \label{eq:nl_4}
+\end{align}
+\end{ecuacionclave}
+Si hace falta generar los cruces por cero del sensor virtual o el ángulo del
+arranque ciego, se agrega la relación trivial $\dot\theta_1 = \omega_1$.
+
+Observá qué compacto es todo el sistema: \textbf{cuatro ecuaciones diferenciales
+acopladas}, cada una con significado físico transparente. El cuadro~\ref{tab:resumen_nl}
+resume dónde aparecen las cuatro no linealidades dominantes del problema.
+
+\begin{table}[htbp]
+\centering
+\small
+\begin{tabular}{@{}cl>{\raggedright\arraybackslash}p{6.8cm}@{}}
+\toprule
+\# & No linealidad dominante & Dónde vive y qué hace físicamente \\
+\midrule
+1 & Saturación de tensión & $d \in [d_{\min}, 1]$ en~\eqref{eq:nl_1}: limita corriente y aceleración máximas. \\
+2 & Acople magnético no lineal & $T_{\max}\sin(N_a\delta)$ en~\eqref{eq:nl_2}--\eqref{eq:nl_3}: ablandamiento y desenganche al superar $T_{\max}$ o $\delta_{\text{crit}}$. \\
+3 & Arrastre cuadrático y fricción seca & $c_{fl}\omega_2|\omega_2|$ y $T_{C,i}\tanh(\cdot)$ en~\eqref{eq:nl_2}--\eqref{eq:nl_3}: la carga crece cuadráticamente con la velocidad. \\
+4 & Sensor BEMF (ceguera + retardo) & Ceguera para $n_1 < n_{\text{ciego}}$ (obliga a arranque ciego) y retardo $\tau \propto 1/n_1$ en la realimentación. \\
+\bottomrule
+\end{tabular}
+\caption{Resumen de las no linealidades dominantes incluidas en el modelo.}
+\label{tab:resumen_nl}
+\end{table}
+
+% ---------------------------------------------------------------------
+\section{Cálculo del punto de equilibrio (de la carga hacia la fuente)}
+% ---------------------------------------------------------------------
+
+Antes de linealizar cualquier sistema no lineal hay que encontrar un
+\textbf{punto de equilibrio} (o punto de operación): un estado estacionario en
+el que el sistema gira acoplado a una velocidad deseada constante $\omega_0 > 0$
+(por encima de la zona ciega y con $\omega_0 \gg \omega_{0,f}$, de modo que
+$\tanh(\omega_0/\omega_{0,f}) \approx 1$).
+
+Por definición, en equilibrio \textbf{todas las derivadas temporales valen cero}:
+$\dot I = 0$, $\dot\omega_1 = 0$, $\dot\omega_2 = 0$ y $\dot\delta = 0$. El
+secreto para resolverlo a mano sin enredarse es avanzar \textbf{de atrás para
+adelante}, desde el fluido hacia la fuente eléctrica:
+
+\begin{enumerate}
+  \item \textbf{De la cinemática~\eqref{eq:nl_4} ($\dot\delta = 0$):}
+        el motor y la cápsula giran a la misma velocidad:
+        \begin{equation}
+          \omega_1 = \omega_2 = \omega_0.
+          \label{eq:eq_w}
+        \end{equation}
+  \item \textbf{Del agitador~\eqref{eq:nl_3} ($\dot\omega_2 = 0$):}
+        el acople debe compensar exactamente la carga total sobre la cápsula
+        $T_{L,\text{tot}}(\omega_0) = b_{fl}\omega_0 + c_{fl}\omega_0^2 + T_{C2} + b_2\omega_0$:
+        \begin{equation}
+          T_{\max}\sin(N_a\delta^\ast) = T_{L,\text{tot}}(\omega_0)
+          \quad\Longrightarrow\quad
+          \delta^\ast = \frac{1}{N_a}\arcsin\!\left(\frac{T_{L,\text{tot}}(\omega_0)}{T_{\max}}\right).
+          \label{eq:eq_delta}
+        \end{equation}
+        \emph{Primera condición de existencia:} sólo existe equilibrio acoplado
+        si $T_{L,\text{tot}}(\omega_0) < T_{\max}$ (y elegimos la rama estable
+        $0 \le \delta^\ast < \delta_{\text{crit}}$).
+  \item \textbf{Del rotor~\eqref{eq:nl_2} ($\dot\omega_1 = 0$):}
+        el motor debe proveer el torque que se lleva el acople ($T_{L,\text{tot}}$)
+        más su propia fricción ($T_{f1}(\omega_0) = T_{C1} + b_1\omega_0$):
+        \begin{equation}
+          2k_e\,I_0 = T_{L,\text{tot}}(\omega_0) + T_{C1} + b_1\omega_0
+          \quad\Longrightarrow\quad
+          I_0 = \frac{T_{L,\text{tot}}(\omega_0) + T_{C1} + b_1\omega_0}{2k_e}.
+          \label{eq:eq_I}
+        \end{equation}
+  \item \textbf{De la malla eléctrica~\eqref{eq:nl_1} ($\dot I = 0$):}
+        la tensión aplicada debe cubrir la caída óhmica y la BEMF:
+        \begin{equation}
+          d_0\,V_{dc} = 2R\,I_0 + 2k_e\,\omega_0
+          \quad\Longrightarrow\quad
+          d_0 = \frac{2R\,I_0 + 2k_e\,\omega_0}{V_{dc}}.
+          \label{eq:eq_d}
+        \end{equation}
+        \emph{Segunda condición de existencia:} sólo es alcanzable si
+        $d_0 \in [d_{\min},\, 1]$.
+\end{enumerate}
+
+Fijate qué natural resulta: no hubo que resolver ningún sistema de ecuaciones
+enredado. Cada ecuación se despeja en cascada a partir de la anterior, y en el
+camino saltan a la vista las dos fronteras físicas estáticas del sistema
+($T_{L,\text{tot}} < T_{\max}$ y $d_0 \le 1$).
+
+% ---------------------------------------------------------------------
+\section{Ejemplo numérico ilustrativo hecho a mano}\label{sec:ejemplo_numerico}
+% ---------------------------------------------------------------------
+
+Para fijar los órdenes de magnitud reales de un agitador pequeño con motor de
+disco rígido (sin depender de ninguna medición definitiva del prototipo, sino
+usando valores típicos físicamente consistentes), hagamos una cuenta completa a
+mano. Supongamos:
+\begin{itemize}
+  \item \textbf{Motor y fuente:} $V_{dc} = \SI{12}{V}$, $p = 2$,
+        $R = \SI{2,0}{\ohm}$ ($2R = \SI{4,0}{\ohm}$),
+        $L_s = \SI{1,0}{mH}$ ($2L_s = \SI{2,0}{mH}$),
+        $k_e = \SI{0,012}{V.s/rad}$ ($2k_e = \SI{0,024}{N.m/A}$).
+  \item \textbf{Inercias y fricciones:}
+        $J_1 = \SI{2,0e-5}{kg.m^2}$, $J_2 = \SI{2,0e-6}{kg.m^2}$;
+        $T_{C1} = \SI{0,50}{mN.m}$, $b_1 = \SI{2,0e-6}{N.m.s/rad}$;
+        $T_{C2} = \SI{0,30}{mN.m}$, $b_2 = \SI{1,0e-6}{N.m.s/rad}$.
+  \item \textbf{Acople y fluido (agua):}
+        $N_a = 1$ ($\delta_{\text{crit}} = \SI{90}{\degree}$),
+        $T_{\max} = \SI{6,0}{mN.m}$,
+        $b_{fl} = \SI{8,0e-6}{N.m.s/rad}$,
+        $c_{fl} = \SI{1,5e-7}{N.m.s^2/rad^2}$.
+\end{itemize}
+
+Calculemos el punto de equilibrio para una consigna de
+$n_0 = \SI{1000}{rpm}$, es decir:
+\[
+  \omega_0 = \frac{\pi}{30}\cdot 1000 \approx \SI{104,7}{rad/s}.
+\]
+\begin{enumerate}
+  \item \textbf{Carga total sobre la cápsula:}
+        \begin{align*}
+          b_{fl}\,\omega_0 + b_2\,\omega_0 &= (8{,}0 + 1{,}0)\times 10^{-6}\times 104{,}7 = \SI{0,94}{mN.m},\\
+          c_{fl}\,\omega_0^2 &= 1{,}5\times 10^{-7}\times (104{,}7)^2 = \SI{1,65}{mN.m},\\
+          T_{L,\text{tot}}(\omega_0) &= 0{,}94 + 1{,}65 + 0{,}30 = \SI{2,89}{mN.m}.
+        \end{align*}
+        Como $\SI{2,89}{mN.m} < T_{\max} = \SI{6,0}{mN.m}$ (casi la mitad del
+        máximo), la cápsula gira acoplada con buen margen.
+  \item \textbf{Desfase del acople:}
+        \[
+          \delta^\ast = \arcsin\!\left(\frac{2{,}89}{6{,}0}\right)
+                      = \arcsin(0{,}481)
+                      \approx \SI{0,502}{rad} \approx \SI{28,8}{\degree}.
+        \]
+  \item \textbf{Corriente estacionaria:} sumamos la fricción del rotor
+        $T_{f1}(\omega_0) = 0{,}50 + 2{,}0\times 10^{-6}\times 104{,}7 = \SI{0,71}{mN.m}$:
+        \[
+          T_{e,0} = 2{,}89 + 0{,}71 = \SI{3,60}{mN.m}
+          \quad\Longrightarrow\quad
+          I_0 = \frac{3{,}60\times 10^{-3}}{0{,}024} = \SI{0,150}{A} = \SI{150}{mA}.
+        \]
+  \item \textbf{Tensión y ciclo de trabajo:}
+        \[
+          V_0 = \underbrace{4{,}0\times 0{,}150}_{\SI{0,60}{V}\text{ (cobre)}}
+              + \underbrace{0{,}024\times 104{,}7}_{\SI{2,51}{V}\text{ (BEMF)}}
+              = \SI{3,11}{V}
+          \quad\Longrightarrow\quad
+          d_0 = \frac{3{,}11}{12{,}0} \approx 0{,}259 \;\; (\SI{25,9}{\percent}).
+        \]
+\end{enumerate}
+
+Mirá toda la información física que sacamos en cuatro renglones: a \SI{1000}{rpm},
+el \SI{81}{\percent} de la tensión se va en BEMF y sólo el \SI{19}{\percent} en
+resistencia; el motor consume \SI{150}{mA}, tiene mucho margen de tensión
+($d_0 \approx 0{,}26$), y la cápsula va atrasada unos \SI{29}{\degree} respecto
+del imán inferior. En cambio, si subiéramos la velocidad hasta alrededor de
+\SI{1600}{rpm} ($\omega \approx \SI{167}{rad/s}$), el término cuadrático
+$c_{fl}\omega^2$ llevaría $T_{L,\text{tot}}$ hasta \SI{6,0}{mN.m} y la cápsula
+se desacoplaría aunque el motor todavía tuviese tensión de sobra ($d < 0{,}45$).
+
+\begin{lapizypapel}
+\begin{enumerate}[leftmargin=1.5em]
+  \item Escribí sin mirar el texto las cuatro ecuaciones diferenciales
+        \eqref{eq:nl_1}--\eqref{eq:nl_4} y verificá el signo de cada término.
+  \item Si fijás una velocidad de equilibrio $\omega_0$, explicá en qué orden se
+        despejan $\delta^\ast$, $I_0$ y $d_0$, y qué dos desigualdades físicas
+        deben cumplirse para que ese equilibrio exista.
+\end{enumerate}
+\end{lapizypapel}
+
+% =====================================================================
+\chapter{Linealización paso a paso: de las ecuaciones no lineales a \texorpdfstring{$G(s)$}{G(s)}}\label{cap:linealizacion}
+% =====================================================================
+
+\begin{ideafisica}
+Las herramientas clásicas de control (polos, ceros, lugar de raíces, Bode,
+diseño analítico de un PI) funcionan sobre sistemas \textbf{lineales}.
+Linealizar no es «hacer trampa»: es poner una lupa sobre un punto de operación
+$(I_0, \omega_0, \delta^\ast, d_0)$ y reemplazar cada curva suave por su
+\textbf{recta tangente} en ese punto, sabiendo de antemano que la aproximación
+sólo vale para desviaciones pequeñas alrededor de él.
+\end{ideafisica}
+
+En este capítulo vamos a derivar \textbf{término por término y coeficiente por
+coeficiente} tanto la representación en espacio de estados $(A, B, C)$ como las
+funciones de transferencia $G_2(s)$ (dos inercias) y $G_1(s)$ (acople rígido).
+El objetivo es que, si alguien te señala cualquier casilla de la matriz $A$,
+puedas decirle al instante de qué ley física proviene y por qué lleva ese signo.
+
+% ---------------------------------------------------------------------
+\section{Qué significa linealizar: variables incrementales y serie de Taylor}
+% ---------------------------------------------------------------------
+
+Si una función no lineal suave $f(x)$ se evalúa muy cerca de un punto de
+equilibrio $x_0$, definimos la \textbf{variable incremental} (la desviación
+pequeña respecto del equilibrio):
+\[
+  \tilde x(t) = x(t) - x_0 \qquad\Longleftrightarrow\qquad x(t) = x_0 + \tilde x(t).
+\]
+Como $x_0$ es constante, su derivada temporal es nula y resulta
+$\dot{\tilde x} = \dot x$. Aplicando el desarrollo de Taylor de primer orden
+(la ecuación de la recta tangente, Figura~\ref{fig:taylor}):
+\begin{equation}
+  f(x_0 + \tilde x) \approx f(x_0) + \underbrace{\left.\frac{\dd f}{\dd x}\right|_{x_0}}_{\text{pendiente local}}\tilde x.
+  \label{eq:taylor_1}
+\end{equation}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=9.2cm, height=4.8cm,
+  axis lines=left,
+  xlabel={Variable $x$},
+  ylabel={$f(x)$},
+  xmin=0, xmax=2.3, ymin=0, ymax=2.3,
+  xtick={1.1}, xticklabels={$x_0$},
+  ytick={0.85}, yticklabels={$f(x_0)$},
+  tick label style={font=\footnotesize},
+  label style={font=\small},
+  clip=false
+]
+  % Entorno de validez (dibujado primero para quedar de fondo)
+  \fill[tealaccent!11] (axis cs:0.85,0) rectangle (axis cs:1.35,2.25);
+  \node[text=tealaccent, font=\scriptsize, align=center] at (axis cs:1.10,1.98) {Entorno pequeño\\$|\tilde x|$ chico};
+
+  % Curva no lineal (ej. 0.70*x^2)
+  \addplot[inkblue, very thick, domain=0:1.8, samples=80] {0.70*x^2};
+  \node[text=inkblue, font=\footnotesize\bfseries, right] at (axis cs:1.82,2.20) {Curva real $f(x)$};
+
+  % Recta tangente en x0=1.1: f(1.1)=0.847, f'(1.1)=1.54
+  \addplot[tealaccent, very thick, dashed, domain=0.45:1.95] {0.847 + 1.54*(x - 1.1)};
+  \node[text=tealaccent, font=\footnotesize\bfseries, right] at (axis cs:1.96,1.88) {Aprox. lineal};
+
+  \fill[crimson] (axis cs:1.1,0.847) circle (2.8pt);
+  \draw[mutedgray, dotted] (axis cs:1.1,0) -- (axis cs:1.1,0.847) -- (axis cs:0,0.847);
+\end{axis}
+\end{tikzpicture}
+\caption{Interpretación geométrica de la linealización: cerca de $x_0$ la curva $f(x)$ se confunde con su recta tangente; lejos de $x_0$ el error crece.}
+\label{fig:taylor}
+\end{figure}
+
+Ahora apliquemos~\eqref{eq:taylor_1} a los \textbf{únicos tres términos no
+lineales} de nuestras ecuaciones~\eqref{eq:nl_1}--\eqref{eq:nl_4} alrededor de
+$(I_0, \omega_0, \omega_0, \delta^\ast, d_0)$ (con $\omega_0 \gg \omega_{0,f}$):
+
+\begin{enumerate}
+  \item \textbf{Acople magnético $T_c(\delta) = T_{\max}\sin(N_a\delta)$:}
+        su derivada respecto de $\delta$ es $N_a T_{\max}\cos(N_a\delta)$, por
+        lo que:
+        \[
+          T_{\max}\sin\big(N_a(\delta^\ast + \tilde\delta)\big)
+          \approx T_{\max}\sin(N_a\delta^\ast)
+          + \underbrace{N_a\,T_{\max}\cos(N_a\delta^\ast)}_{K_{\text{eff}}(\delta^\ast)}\,\tilde\delta.
+        \]
+  \item \textbf{Arrastre cuadrático del fluido $c_{fl}\omega_2|\omega_2|$:}
+        como estamos girando hacia adelante ($\omega_0 > 0$), cerca del
+        equilibrio $\omega_2|\omega_2| = \omega_2^2$, cuya derivada es
+        $2\omega_2$:
+        \[
+          c_{fl}(\omega_0 + \tilde\omega_2)^2
+          \approx c_{fl}\omega_0^2 + \underbrace{2\,c_{fl}\,\omega_0}_{\text{amort.\ incremental}}\,\tilde\omega_2.
+        \]
+        \emph{Atención al factor~2:} la pendiente de la parábola $c_{fl}\omega^2$
+        es $2c_{fl}\omega_0$ (el doble que el cociente $c_{fl}\omega_0$). Cuanto
+        más rápido gira el agitador, más «duro» siente el fluido ante pequeños
+        cambios de velocidad.
+  \item \textbf{Fricción seca $T_{C,i}\tanh(\omega_i/\omega_{0,f})$:}
+        para $\omega_0 \gg \omega_{0,f}$, $\tanh$ está en su meseta plana igual
+        a $+1$ con derivada prácticamente nula:
+        \[
+          T_{C,i}\tanh\!\left(\frac{\omega_0 + \tilde\omega_i}{\omega_{0,f}}\right)
+          \approx T_{C,i} + 0\cdot\tilde\omega_i.
+        \]
+        \emph{Consecuencia clave:} la fricción seca $T_{C,i}$ \textbf{desaparece
+        de las ecuaciones linealizadas} (su derivada es cero), aunque sí alteró
+        el punto de equilibrio $(I_0, d_0, \delta^\ast)$!
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section{Construcción de las matrices de estado \texorpdfstring{$(A, B, C)$}{(A, B, C)} fila por fila}
+% ---------------------------------------------------------------------
+
+Sustituimos $I = I_0 + \tilde I$, $\omega_1 = \omega_0 + \tilde\omega_1$,
+$\omega_2 = \omega_0 + \tilde\omega_2$, $\delta = \delta^\ast + \tilde\delta$ y
+$d = d_0 + \tilde d$ en las cuatro ecuaciones~\eqref{eq:nl_1}--\eqref{eq:nl_4}.
+Veamos cómo ocurre la cancelación en la ecuación del agitador~\eqref{eq:nl_3}
+(en las otras tres sucede exactamente lo mismo):
+\begin{align*}
+  J_2\,\dot{\tilde\omega}_2
+  &\approx \Big[T_{\max}\sin(N_a\delta^\ast) + K_{\text{eff}}\tilde\delta\Big]
+         - b_{fl}(\omega_0 + \tilde\omega_2)
+         - \Big[c_{fl}\omega_0^2 + 2c_{fl}\omega_0\tilde\omega_2\Big]
+         - T_{C2} - b_2(\omega_0 + \tilde\omega_2) \\[4pt]
+  &= \underbrace{\Big(T_{\max}\sin(N_a\delta^\ast) - b_{fl}\omega_0 - c_{fl}\omega_0^2 - T_{C2} - b_2\omega_0\Big)}_{=\,0\text{ por equilibrio~\eqref{eq:eq_delta}!}}
+   + K_{\text{eff}}\,\tilde\delta
+   - \underbrace{(b_2 + b_{fl} + 2c_{fl}\omega_0)}_{B_{2,\text{eq}}(\omega_0)}\,\tilde\omega_2.
+\end{align*}
+
+¡Todos los términos constantes de equilibrio se cancelan exactamente! Definiendo
+los coeficientes de amortiguamiento incremental equivalentes:
+\begin{equation}
+  B_{1,\text{eq}} = b_1,
+  \qquad
+  B_{2,\text{eq}}(\omega_0) = b_2 + b_{fl} + 2\,c_{fl}\,\omega_0,
+  \qquad
+  K_{\text{eff}}(\delta^\ast) = N_a\,T_{\max}\cos(N_a\delta^\ast),
+  \label{eq:coefs_lin}
+\end{equation}
+las cuatro ecuaciones diferenciales lineales en variables incrementales quedan:
+\begin{align}
+  \dot{\tilde I}        &= -\frac{R}{L_s}\,\tilde I - \frac{k_e}{L_s}\,\tilde\omega_1 + \frac{V_{dc}}{2L_s}\,\tilde d, \label{eq:lin_1}\\
+  \dot{\tilde\omega}_1  &= \frac{2k_e}{J_1}\,\tilde I - \frac{B_{1,\text{eq}}}{J_1}\,\tilde\omega_1 - \frac{K_{\text{eff}}}{J_1}\,\tilde\delta, \label{eq:lin_2}\\
+  \dot{\tilde\omega}_2  &= -\frac{B_{2,\text{eq}}}{J_2}\,\tilde\omega_2 + \frac{K_{\text{eff}}}{J_2}\,\tilde\delta, \label{eq:lin_3}\\
+  \dot{\tilde\delta}    &= \tilde\omega_1 - \tilde\omega_2. \label{eq:lin_4}
+\end{align}
+
+Escribiendo el vector de estado incremental
+$\tilde x = [\tilde I,\ \tilde\omega_1,\ \tilde\omega_2,\ \tilde\delta]^{\mathsf{T}}$
+en la forma estándar $\dot{\tilde x} = A\,\tilde x + B\,\tilde d$ y salida de
+velocidad medida $\tilde\omega_1 = C\,\tilde x$ (en \si{rad/s}; si se desea en
+\si{rpm}, el único elemento no nulo de $C$ pasa de $1$ a $30/\pi$):
+\begin{ecuacionclave}
+\begin{equation}
+  A = \begin{bmatrix}
+    -\dfrac{R}{L_s} & -\dfrac{k_e}{L_s} & 0 & 0 \\[8pt]
+    \dfrac{2k_e}{J_1} & -\dfrac{B_{1,\text{eq}}}{J_1} & 0 & -\dfrac{K_{\text{eff}}}{J_1} \\[8pt]
+    0 & 0 & -\dfrac{B_{2,\text{eq}}}{J_2} & \dfrac{K_{\text{eff}}}{J_2} \\[8pt]
+    0 & 1 & -1 & 0
+  \end{bmatrix},
+  \qquad
+  B = \begin{bmatrix}
+    \dfrac{V_{dc}}{2L_s} \\[8pt] 0 \\[6pt] 0 \\[6pt] 0
+  \end{bmatrix},
+  \qquad
+  C = \begin{bmatrix} 0 & 1 & 0 & 0 \end{bmatrix}.
+  \label{eq:ss_cap7}
+\end{equation}
+\end{ecuacionclave}
+
+\begin{lectura}[Mapa de defensa oral: por qué cada entrada de $A$ es exactamente esa]
+Si te detienen en un examen y te señalan cualquier entrada de $A$, leé fila
+como \emph{«¿qué hace cambiar a esta variable?»} y columna como \emph{«por culpa
+de cuál otra?»}:
+\begin{itemize}
+  \item \textbf{Fila~1 ($\dot{\tilde I}$):} $A_{11} = -R/L_s$ (la resistencia frena
+        la corriente; el factor 2 de $2R$ y $2L_s$ se cancela); $A_{12} = -k_e/L_s$
+        (la BEMF $2k_e\omega_1$ dividida por $2L_s$ se opone a la corriente);
+        $A_{13} = A_{14} = 0$ (la bobina no «ve» directamente a la cápsula).
+  \item \textbf{Fila~2 ($\dot{\tilde\omega}_1$):} $A_{21} = +2k_e/J_1$ (más corriente
+        acelera al rotor); $A_{22} = -B_{1,\text{eq}}/J_1$ (rozamiento frena al
+        rotor); $A_{23} = 0$ (sin amortiguamiento interno $c\dot\delta$, $\omega_2$
+        no aparece directo); $A_{24} = -K_{\text{eff}}/J_1$ (si el rotor se
+        adelanta, $\tilde\delta > 0$, el acople lo \textbf{tira hacia atrás}).
+  \item \textbf{Fila~3 ($\dot{\tilde\omega}_2$):} $A_{33} = -B_{2,\text{eq}}/J_2$
+        (fluido y rozamiento frenan la cápsula); $A_{34} = +K_{\text{eff}}/J_2$
+        (si $\tilde\delta > 0$, el acople \textbf{empuja hacia adelante} a la
+        cápsula: signo opuesto a $A_{24}$ por acción y reacción!).
+  \item \textbf{Fila~4 ($\dot{\tilde\delta}$):} $A_{42} = +1$ y $A_{43} = -1$
+        porque $\delta = \theta_1 - \theta_2 \implies \dot\delta = \omega_1 - \omega_2$.
+  \item \textbf{Matriz $B$:} la tensión $\tilde d\,V_{dc}$ sólo entra en la
+        malla eléctrica, dividida por $2L_s$: $B_{11} = V_{dc}/(2L_s)$.
+\end{itemize}
+\end{lectura}
+
+% ---------------------------------------------------------------------
+\section{Reducción para análisis a mano: de 4.º orden a \texorpdfstring{$G_2(s)$ y $G_1(s)$}{G2(s) y G1(s)}}
+% ---------------------------------------------------------------------
+
+Una matriz $4\times 4$ es comodísima para la computadora, pero incómoda para
+pensar con lápiz y papel. Recordemos del Capítulo~\ref{cap:motor} que la
+constante de tiempo eléctrica $\tau_e = L_s/R$ es cientos de veces menor que las
+constantes mecánicas. Veamos cuánto vale en nuestro ejemplo del
+Capítulo~\ref{cap:ensamble}:
+\[
+  \tau_e = \frac{L_s}{R} = \frac{\SI{1,0}{mH}}{\SI{2,0}{\ohm}} = \SI{0,50}{ms}.
+\]
+Si despreciamos $2L_s\dot{\tilde I} \approx 0$ en~\eqref{eq:lin_1}, la corriente
+responde instantáneamente:
+\begin{equation}
+  \tilde I \approx \frac{V_{dc}\,\tilde d - 2k_e\,\tilde\omega_1}{2R}
+  \quad\Longrightarrow\quad
+  \tilde T_e = 2k_e\,\tilde I = \frac{k_e V_{dc}}{R}\,\tilde d - \underbrace{\frac{2k_e^2}{R}}_{B_e}\,\tilde\omega_1.
+  \label{eq:cuasiestatica}
+\end{equation}
+Al sustituir $\tilde T_e$ en~\eqref{eq:lin_2}, el amortiguamiento eléctrico
+$B_e = 2k_e^2/R$ se suma directamente al rozamiento mecánico del rotor. Llamando
+$B_1' = B_{1,\text{eq}} + \frac{2k_e^2}{R}$, el sistema se reduce a tres
+ecuaciones puramente mecánicas:
+\begin{align*}
+  J_1\,\dot{\tilde\omega}_1 + B_1'\,\tilde\omega_1 &= \frac{k_e V_{dc}}{R}\,\tilde d - K_{\text{eff}}\,\tilde\delta, \\
+  J_2\,\dot{\tilde\omega}_2 + B_{2,\text{eq}}\,\tilde\omega_2 &= K_{\text{eff}}\,\tilde\delta, \\
+  \dot{\tilde\delta} &= \tilde\omega_1 - \tilde\omega_2.
+\end{align*}
+
+\subsection{Paso a Laplace y obtención de \texorpdfstring{$G_2(s)$}{G2(s)} sin saltar ningún renglón}
+Tomamos transformada de Laplace con condiciones iniciales nulas (reemplazando
+cada derivada $\dd/\dd t$ por multiplicar por $s$):
+\begin{align}
+  (J_1 s + B_1')\,\Omega_1(s) &= \frac{k_e V_{dc}}{R}\,D(s) - K_{\text{eff}}\,\Delta(s), \label{eq:lap_1}\\
+  (J_2 s + B_{2,\text{eq}})\,\Omega_2(s) &= K_{\text{eff}}\,\Delta(s), \label{eq:lap_2}\\
+  s\,\Delta(s) &= \Omega_1(s) - \Omega_2(s). \label{eq:lap_3}
+\end{align}
+Ahora eliminamos $\Omega_2(s)$ y $\Delta(s)$ en tres pasos algebraicos limpios:
+\begin{enumerate}
+  \item De~\eqref{eq:lap_3} despejamos $\Delta(s) = \frac{\Omega_1(s) - \Omega_2(s)}{s}$
+        y lo sustituimos en~\eqref{eq:lap_2}:
+        \[
+          (J_2 s + B_{2,\text{eq}})\,\Omega_2(s) = \frac{K_{\text{eff}}}{s}\big(\Omega_1(s) - \Omega_2(s)\big).
+        \]
+  \item Multiplicamos por $s$ y agrupamos $\Omega_2(s)$ a la izquierda:
+        \[
+          (J_2 s^2 + B_{2,\text{eq}} s + K_{\text{eff}})\,\Omega_2(s) = K_{\text{eff}}\,\Omega_1(s)
+          \;\Longrightarrow\;
+          \Omega_2(s) = \frac{K_{\text{eff}}}{J_2 s^2 + B_{2,\text{eq}} s + K_{\text{eff}}}\,\Omega_1(s).
+        \]
+  \item Reemplazamos esa expresión de $\Omega_2(s)$ en $\Delta(s) = (\Omega_1 - \Omega_2)/s$:
+        \[
+          \Delta(s)
+          = \frac{1}{s}\left(1 - \frac{K_{\text{eff}}}{J_2 s^2 + B_{2,\text{eq}} s + K_{\text{eff}}}\right)\Omega_1(s)
+          = \frac{J_2 s + B_{2,\text{eq}}}{J_2 s^2 + B_{2,\text{eq}} s + K_{\text{eff}}}\,\Omega_1(s).
+        \]
+        (Fijate cómo el $K_{\text{eff}}$ del numerador se cancela y el factor $s$
+        se simplifica limpiamente!).
+  \item Finalmente sustituimos $\Delta(s)$ en~\eqref{eq:lap_1}, sacamos
+        denominador común y despejamos $G_2(s) = \Omega_1(s)/D(s)$:
+\end{enumerate}
+
+\begin{ecuacionclave}
+\begin{equation}
+  G_2(s) = \frac{\Omega_1(s)}{D(s)}
+         = \frac{\dfrac{k_e V_{dc}}{R}\,\big(J_2 s^2 + B_{2,\text{eq}} s + K_{\text{eff}}\big)}
+                {(J_1 s + B_1')(J_2 s^2 + B_{2,\text{eq}} s + K_{\text{eff}}) + K_{\text{eff}}(J_2 s + B_{2,\text{eq}})}.
+  \label{eq:g2s_cap7}
+\end{equation}
+\end{ecuacionclave}
+
+% ---------------------------------------------------------------------
+\section{Los dos casos límite reveladores de \texorpdfstring{$G_2(s)$}{G2(s)}}
+% ---------------------------------------------------------------------
+
+Una función de transferencia como~\eqref{eq:g2s_cap7} sólo se comprende de
+verdad cuando probás sus dos casos extremos físicos:
+
+\paragraph{Límite A: Acople muy rígido ($K_{\text{eff}} \to \infty$, lejos del desenganche).}
+Dividamos numerador y denominador de~\eqref{eq:g2s_cap7} por $K_{\text{eff}}$ y
+hagamos $K_{\text{eff}} \to \infty$:
+\[
+  G_2(s)
+  = \frac{\dfrac{k_e V_{dc}}{R}\left(\dfrac{J_2 s^2 + B_{2,\text{eq}}s}{K_{\text{eff}}} + 1\right)}
+         {(J_1 s + B_1')\left(\dfrac{J_2 s^2 + B_{2,\text{eq}}s}{K_{\text{eff}}} + 1\right) + (J_2 s + B_{2,\text{eq}})}
+  \;\xrightarrow{K_{\text{eff}}\to\infty}\;
+  \frac{\dfrac{k_e V_{dc}}{R}}{(J_1 + J_2)s + (B_1' + B_{2,\text{eq}})}.
+\]
+Llamando $J_{\text{tot}} = J_1 + J_2$ y $B_{\text{tot}} = B_{1,\text{eq}} + B_{2,\text{eq}}(\omega_0)$
+(recordando que $B_1' = B_{1,\text{eq}} + \frac{2k_e^2}{R}$) y normalizando el
+término independiente del denominador a~1, el sistema colapsa a una planta
+clásica de \textbf{primer orden}:
+\begin{ecuacionclave}
+\begin{equation}
+  G_1(s) = \frac{\Omega_1(s)}{D(s)} = \frac{K_{dc}}{\tau_{\text{mec}}\,s + 1},
+  \qquad
+  K_{dc} = \frac{V_{dc}/(2k_e)}{1 + \dfrac{R\,B_{\text{tot}}}{2k_e^2}},
+  \qquad
+  \tau_{\text{mec}} = \frac{J_{\text{tot}}}{B_{\text{tot}} + \dfrac{2k_e^2}{R}}.
+  \label{eq:g1s_cap7}
+\end{equation}
+\end{ecuacionclave}
+Mirá la ganancia estática $K_{dc}$: si no hubiera rozamientos ni fluido
+($B_{\text{tot}} = 0$), vale exactamente $V_{dc}/(2k_e)$, que es la velocidad de
+vacío a $d=1$ que hallamos en el Capítulo~\ref{cap:motor}. Y la constante de
+tiempo mecánica $\tau_{\text{mec}}$ es la inercia total dividida por el
+amortiguamiento total (mecánico + fluido + eléctrico $2k_e^2/R$).
+
+\paragraph{Límite B: Acople perdido ($K_{\text{eff}} \to 0$, en $\delta^\ast \to \delta_{\text{crit}}$ o tras el desenganche).}
+Pongamos ahora $K_{\text{eff}} = 0$ en~\eqref{eq:g2s_cap7}:
+\[
+  G_2(s)\Big|_{K_{\text{eff}} = 0}
+  = \frac{\dfrac{k_e V_{dc}}{R}\,\cancel{(J_2 s^2 + B_{2,\text{eq}} s)}}
+         {(J_1 s + B_1')\,\cancel{(J_2 s^2 + B_{2,\text{eq}} s)}}
+  = \frac{k_e V_{dc}/R}{J_1 s + B_1'}.
+\]
+\textbf{¡Cancelación polo--cero exacta!} El polinomio del agitador
+$(J_2 s^2 + B_{2,\text{eq}} s)$ se cancela entre numerador y denominador: en la
+teoría lineal de sistemas, eso significa literalmente \textbf{pérdida de
+observabilidad} de la dinámica de la cápsula desde la salida $\omega_1$. El
+motor queda viendo únicamente su propia inercia $J_1$ y su propio rozamiento.
+
+\paragraph{Continuación del ejemplo numérico en $n_0 = \SI{1000}{rpm}$.}
+Con los números del Capítulo~\ref{cap:ensamble}:
+\begin{itemize}
+  \item $K_{\text{eff}} = \sqrt{6{,}0^2 - 2{,}89^2}\;\si{mN.m/rad} \approx \SI{5,26}{mN.m/rad}$
+        (se ablandó un \SI{12}{\percent} respecto del vacío);
+  \item frecuencia torsional:
+        $\omega_{n,\text{tors}} = \sqrt{K_{\text{eff}}/J_{\text{eq}}}
+        = \sqrt{5{,}26\times 10^{-3}/1{,}82\times 10^{-6}} \approx \SI{53,8}{rad/s}$ ($\approx \SI{8,6}{Hz}$);
+  \item amortiguamiento incremental:
+        $B_{1,\text{eq}} = \SI{2,0e-6}{N.m.s/rad}$,
+        $B_{2,\text{eq}} = (1{,}0 + 8{,}0 + 2\cdot 0{,}15\cdot 104{,}7)\times 10^{-6} = \SI{4,04e-5}{N.m.s/rad}$,
+        $B_{\text{tot}} = \SI{4,24e-5}{N.m.s/rad}$,
+        frente al amortiguamiento eléctrico $B_e = \frac{2(0{,}012)^2}{2{,}0} = \SI{1,44e-4}{N.m.s/rad}$;
+  \item planta de primer orden $G_1(s)$:
+        \[
+          \tau_{\text{mec}} = \frac{2{,}2\times 10^{-5}}{(4{,}24 + 14{,}4)\times 10^{-5}}
+                            \approx \SI{0,118}{s} = \SI{118}{ms},
+          \qquad
+          K_{dc} = \frac{500}{1 + 4{,}24/14{,}4} \approx \SI{386}{rad/s}.
+        \]
+\end{itemize}
+Confirmamos con números la separación de escalas: $\tau_{\text{mec}} = \SI{118}{ms}$
+es \textbf{236 veces más lenta} que $\tau_e = \SI{0,50}{ms}$!
+
+\begin{lapizypapel}
+\begin{enumerate}[leftmargin=1.5em]
+  \item ¿Por qué la fricción seca $T_{C,i}$ no aparece en la matriz $A$, mientras
+        que el término cuadrático $c_{fl}\omega_2^2$ sí aparece con un factor~2
+        ($2c_{fl}\omega_0$)?
+  \item Explicá qué significa físicamente el elemento $A_{24} = -K_{\text{eff}}/J_1$
+        y por qué $A_{34} = +K_{\text{eff}}/J_2$ tiene el signo contrario.
+  \item Mostrá con dos renglones de álgebra cómo $G_2(s)$ se reduce a $G_1(s)$
+        cuando $K_{\text{eff}} \to \infty$, y qué significa físicamente la
+        cancelación polo--cero cuando $K_{\text{eff}} \to 0$.
+\end{enumerate}
+\end{lapizypapel}
+
+% =====================================================================
+\chapter{Control lineal PI y rango de validez del modelo}\label{cap:control_validez}
+% =====================================================================
+
+\begin{ideafisica}
+El objetivo de la metodología de control no es que el modelo lineal «sirva para
+todo», sino exactamente lo contrario: \textbf{diseñar un controlador sencillo
+sobre el modelo linealizado, probarlo sobre la planta no lineal y mapear con
+precisión en qué fronteras físicas el diseño lineal deja de funcionar}.
+\end{ideafisica}
+
+Con la planta reducida $G_1(s)$ y el retardo del sensor $\tau(n)$ ya sobre la
+mesa, cerremos el círculo: diseñemos el controlador PI a mano, entendamos por
+qué necesita \emph{anti-windup} al chocar contra la saturación y tracemos el
+mapa completo de validez.
+
+% ---------------------------------------------------------------------
+\section{Por qué un controlador PI (y por qué no P solo ni PID)}
+% ---------------------------------------------------------------------
+
+Definamos el error de velocidad angular $e_\omega(t) = \omega^\ast - \omega_1(t)$
+(donde $\omega^\ast$ es la consigna). Sobre la planta lineal de primer orden
+$G_1(s) = \frac{K_{dc}}{\tau_{\text{mec}}s + 1}$, comparemos tres acciones:
+
+\paragraph{1. ¿Por qué no basta un control proporcional puro ($d = k_p\,e_\omega$)?}
+Con un controlador $C(s) = k_p$, la función de transferencia de lazo cerrado es
+$\frac{k_p K_{dc}}{\tau_{\text{mec}}s + 1 + k_p K_{dc}}$. Ante un escalón de
+consigna $\omega^\ast$, aplicando el teorema del valor final, el error en
+régimen permanente nunca llega a cero:
+\[
+  e_{\omega,\text{ss}} = \frac{1}{1 + k_p K_{dc}}\,\omega^\ast \neq 0.
+\]
+Físicamente es obvio: para sostener el motor girando contra la fricción y el
+fluido hace falta un ciclo de trabajo $d_0 > 0$; si sólo multiplicás el error por
+$k_p$, necesitás que sobre algo de error permanentemente para generar ese $d_0$.
+
+\paragraph{2. Qué aporta la acción integral (controlador PI).}
+Al sumar un integrador que acumula el error en el tiempo:
+\begin{equation}
+  d(t) = k_p\,e_\omega(t) + k_i\int_0^t e_\omega(\tau)\,\dd\tau
+  \quad\Longleftrightarrow\quad
+  C_\omega(s) = k_p + \frac{k_i}{s} = \frac{k_p s + k_i}{s},
+  \label{eq:pi_continuo}
+\end{equation}
+el integrador sigue subiendo (o bajando) $d$ mientras exista la más mínima
+diferencia entre $\omega^\ast$ y $\omega_1$. Sólo deja de moverse cuando
+$e_\omega = 0$: el error estacionario frente a consignas constantes \emph{y}
+frente a cambios constantes de carga (viscosidad o fricción) es
+\textbf{exactamente cero}.
+
+\paragraph{3. ¿Por qué omitimos la acción derivativa ($k_d = 0$)?}
+Recordemos el Capítulo~\ref{cap:sensorless}: el sensor de cruces por cero
+entrega una señal escalonada y con ruido de período. Derivar una señal en
+escalera produce picos bruscos de tensión cada vez que llega un cruce nuevo,
+excitando innecesariamente el modo torsional del acople magnético. Para una
+planta predominantemente de primer orden como un motor en velocidad, un PI es la
+elección natural y robusta.
+
+% ---------------------------------------------------------------------
+\section{Diseño del PI a mano sobre \texorpdfstring{$G_1(s)$}{G1(s)}}
+% ---------------------------------------------------------------------
+
+Cerremos el lazo de $C_\omega(s) = \frac{k_p s + k_i}{s}$ con
+$G_1(s) = \frac{K_{dc}}{\tau_{\text{mec}}s + 1}$ (despreciando primero el
+retardo, que verificaremos a continuación):
+\begin{equation}
+  T(s) = \frac{C_\omega(s) G_1(s)}{1 + C_\omega(s) G_1(s)}
+       = \frac{K_{dc}(k_p s + k_i)}{\tau_{\text{mec}} s^2 + (1 + K_{dc}k_p)s + K_{dc}k_i}.
+  \label{eq:lazo_cerrado_pi}
+\end{equation}
+Dividiendo numerador y denominador por $\tau_{\text{mec}}$, el polinomio
+característico del denominador tiene la forma canónica de segundo orden
+$s^2 + 2\zeta\omega_n s + \omega_n^2$:
+\[
+  s^2 + \frac{1 + K_{dc}k_p}{\tau_{\text{mec}}}\,s + \frac{K_{dc}k_i}{\tau_{\text{mec}}}
+  = s^2 + 2\zeta\omega_n\,s + \omega_n^2.
+\]
+Igualando coeficiente a coeficiente, despejamos las dos ganancias en dos líneas:
+\begin{ecuacionclave}
+\begin{equation}
+  k_i = \frac{\tau_{\text{mec}}\,\omega_n^2}{K_{dc}},
+  \qquad
+  k_p = \frac{2\,\zeta\,\omega_n\,\tau_{\text{mec}} - 1}{K_{dc}}.
+  \label{eq:sintonia_pi}
+\end{equation}
+\end{ecuacionclave}
+\emph{Nota de unidades:} si en una implementación práctica el error se mide en
+\si{rpm} en vez de \si{rad/s} y la salida en cuentas PWM sobre $u_{\max}$ en vez
+de ciclo de trabajo $d\in[0,1]$, basta escalar $K_{dc}$ por el factor
+constante $\frac{30}{\pi}\frac{1}{u_{\max}}$; la física del diseño es idéntica.
+
+\paragraph{Aplicación al ejemplo numérico y chequeo de retardo.}
+Con nuestra planta $G_1(s) = \frac{386}{0{,}118\,s + 1}$, elegimos una respuesta
+suave y bien amortiguada ($\zeta = 0{,}85$) con ancho de banda moderado
+$\omega_n = \SI{10}{rad/s}$ (más de 5 veces por debajo de la frecuencia
+torsional $\omega_{n,\text{tors}} \approx \SI{54}{rad/s}$ para no sacudir la
+cápsula!):
+\[
+  k_i = \frac{0{,}118\times 10^2}{386} \approx \SI{0,0306}{rad^{-1}},
+  \qquad
+  k_p = \frac{2(0{,}85)(10)(0{,}118) - 1}{386} \approx \SI{0,00261}{s/rad}.
+\]
+Ahora verifiquemos el efecto del retardo del sensor $\tau(n)$ (con $M=2$, $p=2$,
+$\Delta t_c = \SI{2}{ms}$):
+\begin{itemize}
+  \item A $n_0 = \SI{1000}{rpm}$: $\tau(1000) \approx \SI{23,5}{ms}$, pérdida de
+        fase a $\omega_c \approx \SI{10}{rad/s}$ de apenas
+        $10\times 0{,}0235 = \SI{0,235}{rad} \approx \SI{13,5}{\degree}$
+        (lazo bien estable).
+  \item A $n = \SI{400}{rpm}$: $\tau(400) \approx \SI{57,3}{ms}$, la pérdida de
+        fase sube a $\SI{33}{\degree}$. Si alguien hubiera diseñado un lazo
+        agresivo con $\omega_c = \SI{25}{rad/s}$, a \SI{400}{rpm} el retardo por
+        sí solo comería \SI{82}{\degree} de margen de fase y el motor empezaría
+        a oscilar violentamente!
+\end{itemize}
+
+% ---------------------------------------------------------------------
+\section{Discretización trapezoidal y saturación (\emph{anti-windup})}
+% ---------------------------------------------------------------------
+
+Un controlador digital no integra de forma continua, sino que actualiza su
+salida cada $\Delta t_c$ segundos a partir de muestras $e_k$. La forma más limpia
+y fiel de aproximar el área bajo la curva del error entre $t_{k-1}$ y $t_k$ es
+por \textbf{trapecios} (método de Tustin):
+\begin{equation}
+  I_k = I_{k-1} + k_i\,\Delta t_c\,\frac{e_k + e_{k-1}}{2},
+  \qquad
+  d_k^{\text{lin}} = k_p\,e_k + I_k,
+  \label{eq:tustin_cap8}
+\end{equation}
+cuya función de transferencia discreta en transformada $\mathcal{Z}$ es
+$C(z) = k_p + \frac{k_i\Delta t_c}{2}\frac{z+1}{z-1}$.
+
+\paragraph{El peligro del \emph{integrator windup}.}
+Recordemos la saturación física $d_k \in [d_{\min}, 1]$ del
+Capítulo~\ref{cap:motor}. Supongamos que pedimos un escalón grande o que el eje
+se traba un instante: la salida $d_k$ pega contra el techo $d = 1$ (la fuente
+está entregando todo su voltaje $V_{dc}$), pero la velocidad todavía está por
+debajo de la consigna ($e_k > 0$). Si el integrador $I_k$ siguiera sumando error
+mientras el actuador está saturado, acumularía un valor gigantesco
+(\emph{windup} o «embalamiento integral»). Cuando finalmente el motor alcanza la
+consigna, ese integrador inflado mantiene $d_k = 1$ durante demasiado tiempo y
+produce un sobrepico enorme.
+
+La solución física es inmediata (\emph{clamping}): \textbf{recortar el estado
+integral} para que nunca empuje la salida más allá de lo que el inversor puede
+entregar:
+\begin{equation}
+  I_k \leftarrow \sat\!\big(I_k,\; d_{\min} - k_p e_k,\; 1 - k_p e_k\big),
+  \qquad
+  d_k = \sat\!\big(k_p e_k + I_k,\; d_{\min},\; 1\big).
+  \label{eq:antiwindup_cap8}
+\end{equation}
+
+% ---------------------------------------------------------------------
+\section{El mapa del rango de validez: dónde acierta y dónde miente el modelo lineal}
+% ---------------------------------------------------------------------
+
+Si aplicamos el controlador PI diseñado sobre $G_1(s)$ a la \textbf{planta no
+lineal completa}~\eqref{eq:nl_1}--\eqref{eq:nl_4} junto con el sensor BEMF y el
+acople magnético, ambos coinciden muy bien dentro de una «isla segura» de
+operación. Pero esa isla está rodeada por \textbf{cuatro paredes físicas} donde
+el modelo lineal deja de representar la realidad. La
+Figura~\ref{fig:mapa_validez} dibuja ese mapa en el plano velocidad--carga
+$(n_0, T_{L,\text{tot}})$.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=12.0cm, height=6.8cm,
+  axis lines=left,
+  xlabel={Velocidad de operación $n_0$ [rpm]},
+  ylabel={Torque de carga sobre la cápsula $T_{L,\text{tot}}$ [\si{mN.m}]},
+  xmin=0, xmax=5200, ymin=0, ymax=9.0,
+  xtick={350, 1000, 1600, 4775},
+  xticklabels={$n_{\text{ciego}}$, $1000$, $1600$, $n_{\text{vacío}}$},
+  ytick={2.89, 6.0},
+  yticklabels={$2{,}89$, $T_{\max}=6$},
+  tick label style={font=\footnotesize},
+  label style={font=\small},
+  clip=true
+]
+  % Zona 1: Ceguera del sensor (0 a 350 rpm)
+  \fill[crimson!18] (axis cs:0,0) rectangle (axis cs:350,9.0);
+  \draw[crimson, very thick] (axis cs:350,0) -- (axis cs:350,9.0);
+
+  % Zona 2: Pérdida de margen de fase por retardo (350 a ~620 rpm)
+  \fill[amberwarn!16] (axis cs:350,0) rectangle (axis cs:620,6.0);
+  \draw[amberwarn, dashed, thick] (axis cs:620,0) -- (axis cs:620,6.0);
+
+  % Zona 4: Techo del acople magnético (T > T_max = 6 mNm)
+  \fill[crimson!12] (axis cs:350,6.0) rectangle (axis cs:5200,9.0);
+  \draw[crimson, very thick] (axis cs:350,6.0) -- (axis cs:5200,6.0);
+
+  % Zona 3: Techo de tensión d = 1: T_e(w) = 72 - 0.144*w [mNm],
+  % restando T_f1 aprox 0.7 mNm -> llega a T=0 cerca de 4700 rpm y T=6 cerca de 4300 rpm
+  % Pendiente en rpm: 0.144 * pi/30 = 0.01508 mNm/rpm
+  % En n=4775 -> T_e=0; en n=4350 -> T_e = 6.4 mNm
+  \fill[inkblue!14] (axis cs:4350,6.0) -- (axis cs:4740,0) -- (axis cs:5200,0) -- (axis cs:5200,6.0) -- cycle;
+  \draw[inkblue, very thick] (axis cs:4180,9.0) -- (axis cs:4740,0);
+
+  % Isla segura (válida para modelo lineal)
+  \fill[tealaccent!10] (axis cs:620,0) -- (axis cs:4740,0) -- (axis cs:4350,6.0) -- (axis cs:620,6.0) -- cycle;
+
+  % Curva de carga de agua del ejemplo: 0.3 + 9e-6*w + 1.5e-7*w^2 [Nm] -> en mNm:
+  % w = pi/30 * n = 0.10472 * n
+  % T = 0.3 + 0.0009425*n + 1.645e-6 * n^2
+  \addplot[tealaccent, very thick, domain=0:2250, samples=80] {0.3 + 0.0009425*x + 0.000001645*x^2};
+
+  % Punto de operación nominal (1000 rpm, 2.89 mNm)
+  \fill[inkblue] (axis cs:1000,2.89) circle (3.2pt);
+  \node[below right, inkblue, font=\scriptsize\bfseries] at (axis cs:1050,2.60) {Punto nominal};
+
+  % Punto de cruce con T_max (~1600 rpm)
+  \fill[crimson] (axis cs:1600,6.0) circle (3.0pt);
+  \node[above right, crimson, font=\scriptsize\bfseries] at (axis cs:1680,6.12) {Desacople en agua};
+
+  % Etiquetas de regiones
+  \node[crimson, font=\scriptsize\bfseries, rotate=90] at (axis cs:175,4.2) {1. Zona ciega};
+  \node[amberwarn, font=\scriptsize\bfseries, rotate=90] at (axis cs:485,3.0) {2. Retardo $1/n$};
+  \node[crimson, font=\footnotesize\bfseries, fill=crimson!12, inner sep=2pt] at (axis cs:2350,7.75) {4. Desacople ($T_{L,\text{tot}} > T_{\max}$): la cápsula se frena};
+  \node[tealaccent, font=\footnotesize\bfseries, align=center] at (axis cs:3080,2.85) {Ventana de validez\\del modelo lineal};
+  \node[inkblue, font=\scriptsize\bfseries, rotate=-62] at (axis cs:4700,3.8) {3. Techo $d=1$};
+  \node[tealaccent, font=\scriptsize, right, align=left] at (axis cs:1750,4.7) {Curva de carga\\(agua)};
+\end{axis}
+\end{tikzpicture}
+\caption{Mapa de operación en el plano velocidad--carga ilustrado con los parámetros del ejemplo. El modelo linealizado y el PI diseñado a mano sólo son fieles dentro de la ventana verde delimitada por las cuatro paredes no lineales.}
+\label{fig:mapa_validez}
+\end{figure}
+
+Repasemos brevemente qué ocurre al cruzar cada una de las cuatro fronteras de la
+Figura~\ref{fig:mapa_validez}:
+\begin{enumerate}
+  \item \textbf{Pared izquierda --- Zona ciega ($n_1 < n_{\text{ciego}}$):} la
+        BEMF desaparece bajo el ruido del comparador; el lazo cerrado pierde el
+        \SI{100}{\percent} de su señal, dispara el timeout de \emph{stall} y
+        obliga a reiniciar con la rampa a lazo abierto.
+  \item \textbf{Franja de retardo ($n_{\text{ciego}} < n_1 < n_{\min,\text{estab}}$):}
+        aunque hay cruces válidos, el período $T_{ZC}$ se alarga como $1/n$,
+        roba margen de fase y vuelve oscilatorio un PI diseñado a alta velocidad.
+  \item \textbf{Pared derecha --- Saturación de tensión ($d \to 1$ ó $d \to d_{\min}$):}
+        el puente agota la tensión de bus $V_{dc}$; durante escalones grandes o
+        cargas pesadas el lazo queda temporalmente abierto y sólo el
+        \emph{anti-windup} evita sobrepicos violentos.
+  \item \textbf{Techo superior --- Desacople magnético ($T_{L,\text{tot}} > T_{\max}$
+        o salto dinámico $\delta > \delta_u$):} incluso con el motor bien lejos
+        de saturar tensión, al subir la velocidad o agregar un líquido más
+        viscoso la curva de carga cruza $T_{\max}$. El acople se ablanda
+        ($K_{\text{eff}} \to 0$) y suelta la cápsula ($\omega_2 \to 0$), mientras
+        el controlador sigue regulando $\omega_1 \approx n^\ast$ sin advertir el
+        fallo.
+\end{enumerate}
+
+% ---------------------------------------------------------------------
+\section{Síntesis final: toda la física del modelo en una sola hoja}
+% ---------------------------------------------------------------------
+
+Como cierre de este libro, la Tabla~\ref{tab:mapa_final} condensa de un vistazo
+el hilo conductor completo: desde las cuatro leyes elementales hasta las
+ecuaciones no lineales, su versión linealizada y las fronteras de validez. Si
+podés recorrer cada fila de izquierda a derecha sobre una hoja en blanco con un
+lápiz, \textbf{el modelo es completamente tuyo}.
+
+\begin{table}[htbp]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{@{}
+  >{\raggedright\arraybackslash}p{2.0cm}
+  >{\raggedright\arraybackslash}p{2.1cm}
+  >{\raggedright\arraybackslash}p{4.3cm}
+  >{\raggedright\arraybackslash}p{3.4cm}
+  >{\raggedright\arraybackslash}p{2.6cm}@{}}
+\toprule
+\textbf{Subsistema} & \textbf{Ley física} & \textbf{Ecuación no lineal} & \textbf{Aprox. lineal} & \textbf{Frontera de ruptura} \\
+\midrule
+Motor (six-step) & Kirchhoff + Faraday + Energía &
+$2L_s\dot I = d V_{dc} - 2R I - 2k_e\omega_1$,\newline $T_e = 2k_e I$,\; $d\in[d_{\min},1]$ &
+$2L_s\dot{\tilde I} = V_{dc}\tilde d - 2R\tilde I - 2k_e\tilde\omega_1$ (o $\tilde I$ cuasi-estática $\Rightarrow B_e=\frac{2k_e^2}{R}$) &
+Saturación de tensión ($d=d_{\min}$ ó $d=1$) \\
+\midrule
+Rotor ($J_1$) & 2.ª y 3.ª ley de Newton &
+$J_1\dot\omega_1 = T_e - T_c(\delta) - T_{f1}(\omega_1)$ &
+$J_1\dot{\tilde\omega}_1 = 2k_e\tilde I - K_{\text{eff}}\tilde\delta - b_1\tilde\omega_1$ &
+Desconexión cuando $\langle T_c\rangle \to 0$ \\
+\midrule
+Acople magnético & Cinemática / energía potencial &
+$T_c(\delta) = T_{\max}\sin(N_a\delta)$,\newline $\dot\delta = \omega_1 - \omega_2$,\; $\delta_{\text{crit}}=\frac{\pi}{2N_a}$ &
+$\tilde T_c = K_{\text{eff}}\,\tilde\delta$,\newline $K_{\text{eff}}=N_a\sqrt{T_{\max}^2-T_{L,\text{tot}}^2}$ &
+$T_{L,\text{tot}} > T_{\max}$ o escalón que vence $\Delta U$ \\
+\midrule
+Agitador + fluido ($J_2$) & Newton + viscosidad + inercia &
+$J_2\dot\omega_2 = T_c - T_L(\omega_2) - T_{f2}(\omega_2)$,\newline $T_L = b_{fl}\omega_2 + c_{fl}\omega_2|\omega_2|$ &
+$J_2\dot{\tilde\omega}_2 = K_{\text{eff}}\tilde\delta - B_{2,\text{eq}}\tilde\omega_2$,\newline $B_{2,\text{eq}} = b_2 + b_{fl} + 2c_{fl}\omega_0$ &
+Cambio de fluido / viscosidad que supera $T_{\max}$ \\
+\midrule
+Sensor BEMF + Arranque & Faraday (cruces por cero) &
+$T_{ZC}=\frac{\pi}{p\omega_1}$, ciego si $n_1 < n_{\text{ciego}}$;\newline arranque síncrono $\propto\sin(\theta_s-p\theta_1)$ &
+Retardo puro $e^{-s\tau(n_0)}$,\newline $\tau(n_0) \approx \frac{15(M+1)}{p\,n_0} + \frac{\Delta t_c}{2}$ &
+Ceguera ($<n_{\text{ciego}}$) y pérdida de margen de fase ($\omega_c\tau\ge\Delta\phi$) \\
+\bottomrule
+\end{tabular}
+\caption{Resumen integral del modelo físico, su linealización y las fronteras donde la aproximación lineal pierde validez.}
+\label{tab:mapa_final}
+\end{table}
+
+\begin{lapizypapel}[Prueba final de dominio completo]
+Imaginá que tenés cinco minutos de exposición y veinte minutos de preguntas con
+lápiz y papel:
+\begin{enumerate}[leftmargin=1.5em]
+  \item ¿Podés explicar en 60 segundos, sin mirar apuntes, cuál es el problema
+        físico completo y cuáles son las cuatro no linealidades más importantes?
+  \item Dado $G_1(s) = \frac{K_{dc}}{\tau_{\text{mec}}s + 1}$, ¿podés derivar
+        las fórmulas~\eqref{eq:sintonia_pi} de $k_p$ y $k_i$ y justificar por
+        qué necesitás \emph{anti-windup}?
+  \item Dibujá el mapa de la Figura~\ref{fig:mapa_validez} desde cero y explicá
+        qué pasa físicamente cuando el sistema cruza cada una de sus cuatro
+        paredes.
+  \item Si alguien te pregunta \emph{«¿por qué no modelaste cogging, temperatura
+        del bobinado ni tablas $N_p(\mathrm{Re})$?»}, ¿podés justificar en dos
+        frases por qué dejarlos afuera vuelve al modelo más honesto y
+        defendible?
+\end{enumerate}
+\end{lapizypapel}
+
+\end{document}
