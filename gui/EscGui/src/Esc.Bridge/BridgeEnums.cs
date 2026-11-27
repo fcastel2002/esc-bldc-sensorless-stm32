@@ -13,6 +13,5 @@ public enum DeviceConnectionState
 public enum ControlMode
 {
     GuiControl,
-    SimulinkControl,
     MonitorOnly,
 }

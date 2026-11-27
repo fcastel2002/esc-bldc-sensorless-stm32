@@ -51,7 +51,6 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/comm.c
     Core/Src/comm_protocol.c
     Core/Src/comm_transport.c
-    Core/Src/current_sense.c
     Core/Src/power_monitor.c
     Core/Src/hard_config.c
     Core/Src/flash_config.c
@@ -60,10 +59,10 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/rpm_pi_controller.c
     Core/Src/startup.c
     Core/Src/state_machine.c
-    Core/Src/vel_routines.c
     Core/Src/speed_sensor.c
     Core/Src/bldc_driver.c
     Core/Src/zc_diag.c
+    Core/Src/load_sweep.c
     Core/Src/utilities.c
     Core/Src/usb_device.c
     Core/Src/usbd_conf.c

@@ -55,39 +55,55 @@ public sealed class ProtocolTests
     }
 
     [Fact]
-    public void DecodeTelemetryReadsExtendedCurrentMetadata()
+    public void DecodeTelemetryReadsExtendedDutyMetadata()
     {
         byte[] payload = new byte[15];
-        payload[0] = (byte)LogParam.CurrentU;
+        payload[0] = (byte)LogParam.Duty;
         BitConverter.GetBytes(1200).CopyTo(payload, 1);
         BitConverter.GetBytes(5678u).CopyTo(payload, 5);
-        BitConverter.GetBytes((ushort)700).CopyTo(payload, 9);
-        payload[11] = (byte)(TelemetryQuality.Valid | TelemetryQuality.Calibrated);
+        BitConverter.GetBytes((ushort)4321).CopyTo(payload, 9);
+        payload[11] = (byte)TelemetryQuality.Valid;
         BitConverter.GetBytes((ushort)25).CopyTo(payload, 12);
         payload[14] = 3;
 
         byte[] raw = EscProtocol.BuildFrame(
-            2, CommOpcode.TelemetryEvent, (byte)LogParam.CurrentU,
+            2, CommOpcode.TelemetryEvent, (byte)LogParam.Duty,
             payload, CommFrameType.Event, CommStatus.Ok);
         TelemetrySample sample = EscProtocol.DecodeTelemetry(
             EscProtocol.Parse(raw), DateTimeOffset.UnixEpoch);
 
-        Assert.Equal("current_u", sample.Variable);
-        Assert.Equal("mA", sample.Unit);
+        Assert.Equal("duty", sample.Variable);
+        Assert.Equal("%", sample.Unit);
         Assert.Equal(1200, sample.RawValue);
-        Assert.Equal((ushort)700, sample.AdcRawValue);
+        Assert.Equal((ushort)4321, sample.AdcRawValue);
         Assert.True(sample.IsValid);
         Assert.Equal((ushort)25, sample.ValidSampleCount);
         Assert.Equal((sbyte)3, sample.CommutationStep);
     }
 
     [Fact]
+    public void DecodeTelemetryReportsDutyInPercent()
+    {
+        byte[] payload = new byte[15];
+        payload[0] = (byte)LogParam.Duty;
+        BitConverter.GetBytes(4567).CopyTo(payload, 1);
+        byte[] raw = EscProtocol.BuildFrame(
+            2, CommOpcode.TelemetryEvent, (byte)LogParam.Duty, payload, CommFrameType.Event, CommStatus.Ok);
+
+        TelemetrySample sample = EscProtocol.DecodeTelemetry(EscProtocol.Parse(raw), DateTimeOffset.UnixEpoch);
+
+        Assert.Equal("duty", sample.Variable);
+        Assert.Equal("%", sample.Unit);
+        Assert.Equal(45.67, sample.DisplayValue, 6);
+    }
+
+    [Fact]
     public void DecodeTelemetryRejectsPartialExtendedPayload()
     {
         byte[] payload = new byte[12];
-        payload[0] = (byte)LogParam.CurrentU;
+        payload[0] = (byte)LogParam.Duty;
         byte[] raw = EscProtocol.BuildFrame(
-            2, CommOpcode.TelemetryEvent, (byte)LogParam.CurrentU,
+            2, CommOpcode.TelemetryEvent, (byte)LogParam.Duty,
             payload, CommFrameType.Event, CommStatus.Ok);
 
         Assert.Throws<EscProtocolException>(() =>
@@ -135,12 +151,36 @@ public sealed class ProtocolTests
     {
         byte[] raw = EscProtocol.BuildFrame(3, CommOpcode.GetStatus, 0, new byte[10], CommFrameType.Response, CommStatus.Ok);
 
-        Assert.Null(EscProtocol.DecodeStatus(EscProtocol.Parse(raw)).Power);
+        EscStatus status = EscProtocol.DecodeStatus(EscProtocol.Parse(raw));
+        Assert.Null(status.Power);
+        Assert.Null(status.ReferenceRpm);
+        Assert.Null(status.DutyPercent);
+        Assert.False(status.LoadSweepActive);
+    }
+
+    [Fact]
+    public void DecodeStatusReadsReferenceDutyAndSweepExtension()
+    {
+        byte[] payload = new byte[31];
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(4, 2), 3000);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(26, 2), 2750);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(28, 2), 4321);
+        payload[30] = 1;
+        byte[] raw = EscProtocol.BuildFrame(3, CommOpcode.GetStatus, 0, payload, CommFrameType.Response, CommStatus.Ok);
+
+        EscStatus status = EscProtocol.DecodeStatus(EscProtocol.Parse(raw));
+
+        Assert.Equal((ushort)3000, status.SpeedSetpointRpm);
+        Assert.Equal((ushort)2750, status.ReferenceRpm);
+        Assert.Equal(43.21, status.DutyPercent!.Value, 6);
+        Assert.True(status.LoadSweepActive);
+        Assert.NotNull(status.Power);
     }
 
     [Theory]
     [InlineData(LogParam.BusVoltage, "bus_voltage", "mV", 12040)]
     [InlineData(LogParam.BusCurrent, "bus_current", "mA", -250)]
+    [InlineData(LogParam.Duty, "duty", "%", 5000)]
     public void DecodeTelemetryNamesIna219Channels(LogParam parameter, string name, string unit, int value)
     {
         byte[] payload = new byte[15];
@@ -363,393 +403,231 @@ public sealed class ProtocolTests
     }
 
     [Fact]
-    public void DecodeValidationReferenceReadsStructuralControllerValues()
-    {
-        byte[] payload = new byte[20];
-        payload[0] = 1;
-        payload[1] = 2;
-        BitConverter.GetBytes((ushort)18_000).CopyTo(payload, 2);
-        BitConverter.GetBytes((ushort)2_000).CopyTo(payload, 4);
-        BitConverter.GetBytes(180_000u).CopyTo(payload, 6);
-        BitConverter.GetBytes((ushort)14_000).CopyTo(payload, 10);
-        BitConverter.GetBytes((ushort)200).CopyTo(payload, 12);
-        BitConverter.GetBytes(2_000u).CopyTo(payload, 14);
-        BitConverter.GetBytes((ushort)100).CopyTo(payload, 18);
-
-        byte[] raw = EscProtocol.BuildFrame(
-            4, CommOpcode.GetValidationReference, 0, payload, CommFrameType.Response, CommStatus.Ok);
-        ValidationReference reference = EscProtocol.DecodeValidationReference(EscProtocol.Parse(raw));
-
-        Assert.Equal((ushort)18_000, reference.PwmFrequencyHz);
-        Assert.Equal((ushort)2_000, reference.PwmArrCounts);
-        Assert.Equal(180_000u, reference.SpeedTimerHz);
-        Assert.Equal(0.002, reference.ControllerDtSeconds);
-        Assert.Equal((ushort)100, reference.MinimumPwmCounts);
-    }
-
-    [Fact]
-    public void HilInputsPayloadUsesExpectedWireShape()
-    {
-        byte[] payload = EscProtocol.HilInputsPayload(new HilInputs(1500, -4, 0xA5, true));
-
-        Assert.Equal([0xDC, 0x05, 0x00, 0x00, 0xFC, 0xFF, 0xA5, 0x01], payload);
-    }
-
-    [Fact]
     public void RpmPiGainUsesNewParameterAndHundredthsPayload()
     {
         byte[] payload = EscProtocol.ConfigPayload(ConfigParam.KpRpm, 0.28);
 
         Assert.Equal((byte)0x0A, (byte)ConfigParam.KpRpm);
         Assert.Equal([0x1C, 0x00], payload);
-        Assert.Throws<ArgumentOutOfRangeException>(() => EscProtocol.ConfigPayload(ConfigParam.Kp, 0.28));
     }
 
     [Fact]
-    public void HilStartPayloadUsesLittleEndianSessionTimeout()
+    public void SpeedRampUsesAssignedParameterAndUInt16RpmPerSecond()
     {
-        byte[] payload = EscProtocol.HilStartPayload(500);
+        byte[] payload = EscProtocol.ConfigPayload(ConfigParam.SpeedRamp, 750);
 
-        Assert.Equal([0xF4, 0x01], payload);
+        Assert.Equal((byte)0x14, (byte)ConfigParam.SpeedRamp);
+        Assert.Equal([0xEE, 0x02], payload);
+        Assert.Equal((ushort)750, Assert.IsType<ushort>(EscProtocol.DecodeConfigValue(ConfigParam.SpeedRamp, payload)));
     }
 
     [Theory]
-    [InlineData(HilExecutionMode.Periodic, 0)]
-    [InlineData(HilExecutionMode.Stepped, 1)]
-    public void HilStartPayloadAppendsExecutionMode(HilExecutionMode mode, byte expectedMode)
+    [InlineData(0x03)]
+    [InlineData(0x04)]
+    [InlineData(0x05)]
+    [InlineData(0x08)]
+    [InlineData(0x09)]
+    public void RemovedConfigParametersAreNotDefined(byte value)
     {
-        byte[] payload = EscProtocol.HilStartPayload(0x1234, mode);
+        Assert.False(Enum.IsDefined(typeof(ConfigParam), value));
+    }
 
-        Assert.Equal([0x34, 0x12, expectedMode], payload);
+    [Theory]
+    [InlineData(0x14)]
+    [InlineData(0x24)]
+    [InlineData(0x40)]
+    [InlineData(0x41)]
+    [InlineData(0x42)]
+    [InlineData(0x43)]
+    [InlineData(0x44)]
+    public void RemovedOpcodesAreNotDefined(byte value)
+    {
+        Assert.False(Enum.IsDefined(typeof(CommOpcode), value));
+    }
+
+    [Theory]
+    [InlineData(0x02)]
+    [InlineData(0x03)]
+    [InlineData(0x04)]
+    [InlineData(0x05)]
+    [InlineData(0x09)]
+    public void RemovedLogParametersAreNotDefined(byte value)
+    {
+        Assert.False(Enum.IsDefined(typeof(LogParam), value));
     }
 
     [Fact]
-    public void HilStartPayloadRejectsUnknownExecutionMode()
+    public void LoadSweepUsesAssignedOpcodeAndCommands()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => EscProtocol.HilStartPayload(500, (HilExecutionMode)2));
+        Assert.Equal((byte)0x60, (byte)CommOpcode.LoadSweep);
+        Assert.Equal((byte)0, (byte)LoadSweepCommand.Start);
+        Assert.Equal((byte)1, (byte)LoadSweepCommand.Abort);
+        Assert.Equal((byte)2, (byte)LoadSweepCommand.GetStatus);
+        Assert.Equal((byte)3, (byte)LoadSweepCommand.GetPoints);
     }
 
     [Fact]
-    public void ValidatedHilInputsPayloadAppendsRunAndSourceSequence()
+    public void LoadSweepStartPayloadUsesExactLittleEndianWireShape()
     {
-        byte[] payload = EscProtocol.HilInputsPayload(new HilInputs(1500, -4, 0xA5, true, 0x10203040, 0x50607080));
+        byte[] payload = EscProtocol.LoadSweepStartPayload(new LoadSweepRequest(
+            LoadSweepMode.Ramp, 1000, 3000, 0x0102, 1500, 0x0304, LoadSweepOptions.StopAtEnd));
 
         Assert.Equal(
-            [0xDC, 0x05, 0x00, 0x00, 0xFC, 0xFF, 0xA5, 0x01, 0x40, 0x30, 0x20, 0x10, 0x80, 0x70, 0x60, 0x50],
+            [0x01, 0xE8, 0x03, 0xB8, 0x0B, 0x02, 0x01, 0xDC, 0x05, 0x04, 0x03, 0x01],
             payload);
     }
 
     [Fact]
-    public void DecodeHilOutputsReadsResponsePayload()
+    public void LoadSweepStartPayloadRejectsUnknownMode()
     {
-        byte[] payload = new byte[15];
-        BitConverter.GetBytes(1234u).CopyTo(payload, 0);
-        payload[4] = 6;
-        payload[5] = (byte)ControlRuntimeMode.HilSim;
-        BitConverter.GetBytes((ushort)2000).CopyTo(payload, 6);
-        BitConverter.GetBytes((ushort)1800).CopyTo(payload, 8);
-        BitConverter.GetBytes((ushort)900).CopyTo(payload, 10);
-        payload[12] = unchecked((byte)-1);
-        payload[13] = 3;
-        payload[14] = 0;
-
-        byte[] raw = EscProtocol.BuildFrame(4, CommOpcode.HilGetOutputs, 0, payload, CommFrameType.Response, CommStatus.Ok);
-        HilOutputs outputs = EscProtocol.DecodeHilOutputs(EscProtocol.Parse(raw));
-
-        Assert.Equal(1234u, outputs.TargetTickMs);
-        Assert.Equal(ControlRuntimeMode.HilSim, outputs.Mode);
-        Assert.Equal(1800, outputs.MeasuredRpm);
-        Assert.Equal(-1, outputs.CommutationStep);
+        Assert.Throws<ArgumentOutOfRangeException>(() => EscProtocol.LoadSweepStartPayload(
+            new LoadSweepRequest((LoadSweepMode)7, 1000, 2000, 100, 0, 500)));
     }
 
     [Fact]
-    public void DecodeHilOutputsReadsValidationProvenanceExtension()
+    public void DecodeLoadSweepStatusReadsExactPayload()
     {
-        byte[] payload = new byte[43];
-        BitConverter.GetBytes(1234u).CopyTo(payload, 0);
-        payload[5] = (byte)ControlRuntimeMode.HilSim;
-        BitConverter.GetBytes((ushort)900).CopyTo(payload, 10);
-        BitConverter.GetBytes(11u).CopyTo(payload, 15);
-        BitConverter.GetBytes(12u).CopyTo(payload, 19);
-        BitConverter.GetBytes(13u).CopyTo(payload, 23);
-        BitConverter.GetBytes(14u).CopyTo(payload, 27);
-        BitConverter.GetBytes(15u).CopyTo(payload, 31);
-        BitConverter.GetBytes(16u).CopyTo(payload, 35);
-        BitConverter.GetBytes(17u).CopyTo(payload, 39);
+        byte[] payload = new byte[29];
+        payload[0] = (byte)LoadSweepState.Measuring;
+        payload[1] = (byte)LoadSweepAbortReason.None;
+        payload[2] = (byte)LoadSweepMode.Staircase;
+        payload[3] = (byte)LoadSweepOptions.StopAtEnd;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(4, 2), 5);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(6, 2), 128);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(8, 2), 1000);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(10, 2), 3000);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(12, 2), 250);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(14, 2), 1500);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(16, 2), 1000);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(18, 2), 2250);
+        BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(20, 4), 14_500);
+        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(24, 4), 23_456);
+        payload[28] = 1;
+        byte[] raw = EscProtocol.BuildFrame(
+            5, CommOpcode.LoadSweep, (byte)LoadSweepCommand.GetStatus, payload, CommFrameType.Response, CommStatus.Ok);
 
-        byte[] raw = EscProtocol.BuildFrame(4, CommOpcode.HilGetOutputs, 0, payload, CommFrameType.Response, CommStatus.Ok);
-        HilOutputs outputs = EscProtocol.DecodeHilOutputs(EscProtocol.Parse(raw));
+        LoadSweepStatus status = EscProtocol.DecodeLoadSweepStatus(EscProtocol.Parse(raw));
 
-        Assert.True(outputs.HasValidationProvenance);
-        Assert.Equal(11u, outputs.AcceptedRunId);
-        Assert.Equal(12u, outputs.AcceptedSourceSequence);
-        Assert.Equal(13u, outputs.AcceptedGeneration);
-        Assert.Equal(14u, outputs.AppliedRunId);
-        Assert.Equal(15u, outputs.AppliedSourceSequence);
-        Assert.Equal(16u, outputs.OutputGeneration);
-        Assert.Equal(17u, outputs.PwmUpdateTickMs);
-    }
-
-    [Fact]
-    public void HilStepOpcodeHasAssignedWireValue()
-    {
-        Assert.Equal(0x44, (byte)CommOpcode.HilStep);
-    }
-
-    [Fact]
-    public void HilStepPayloadUsesExactLittleEndianWireShape()
-    {
-        var request = new HilStepRequest(
-            0x1234,
-            unchecked((short)0xFEDC),
-            0xA5,
-            true,
-            0x10203040,
-            0x50607080,
-            0x0304);
-
-        byte[] payload = EscProtocol.HilStepPayload(request);
-
-        Assert.Equal(
-            [
-                0x34, 0x12,
-                0x00, 0x00,
-                0xDC, 0xFE,
-                0xA5, 0x01,
-                0x40, 0x30, 0x20, 0x10,
-                0x80, 0x70, 0x60, 0x50,
-                0x04, 0x03
-            ],
-            payload);
+        Assert.Equal(LoadSweepState.Measuring, status.State);
+        Assert.True(status.IsActive);
+        Assert.Equal(LoadSweepOptions.StopAtEnd, status.Options);
+        Assert.Equal((ushort)5, status.PointCount);
+        Assert.Equal((ushort)128, status.Capacity);
+        Assert.Equal((ushort)1000, status.StartRpm);
+        Assert.Equal((ushort)3000, status.EndRpm);
+        Assert.Equal((ushort)250, status.StepOrRate);
+        Assert.Equal((ushort)1500, status.SettleMs);
+        Assert.Equal((ushort)1000, status.WindowMs);
+        Assert.Equal((ushort)2250, status.TargetRpm);
+        Assert.Equal(14_500, status.IdleCurrentMicroamps);
+        Assert.Equal(23_456u, status.ElapsedMs);
+        Assert.True(status.IdleCurrentValid);
     }
 
     [Theory]
-    [InlineData(0u, 1u, 1)]
-    [InlineData(1u, 0u, 1)]
-    [InlineData(1u, 1u, 0)]
-    [InlineData(1u, 1u, 1001)]
-    public void HilStepPayloadRejectsInvalidProvenanceOrStepCount(uint runId, uint sourceSequence, ushort steps)
+    [InlineData(LoadSweepState.Idle, false)]
+    [InlineData(LoadSweepState.MeasuringIdleCurrent, true)]
+    [InlineData(LoadSweepState.Measuring, true)]
+    [InlineData(LoadSweepState.Done, false)]
+    [InlineData(LoadSweepState.Aborted, false)]
+    public void LoadSweepStatusActiveCoversOnlyRunningStates(LoadSweepState state, bool active)
     {
-        var request = new HilStepRequest(1000, -1, 0, true, runId, sourceSequence, steps);
+        var status = new LoadSweepStatus(state, LoadSweepAbortReason.None, LoadSweepMode.Ramp, LoadSweepOptions.None,
+            0, 128, 1000, 2000, 50, 0, 500, 1000, 0, 0, false);
 
-        Assert.Throws<ArgumentOutOfRangeException>(() => EscProtocol.HilStepPayload(request));
+        Assert.Equal(active, status.IsActive);
+    }
+
+    [Fact]
+    public void DecodeLoadSweepStatusRejectsWrongLength()
+    {
+        byte[] raw = EscProtocol.BuildFrame(
+            5, CommOpcode.LoadSweep, (byte)LoadSweepCommand.GetStatus, new byte[28], CommFrameType.Response, CommStatus.Ok);
+
+        Assert.Throws<EscProtocolException>(() => EscProtocol.DecodeLoadSweepStatus(EscProtocol.Parse(raw)));
+    }
+
+    [Fact]
+    public void DecodeLoadSweepPointsReadsPackedPoints()
+    {
+        byte[] payload = new byte[3 + 2 * 16];
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(0, 2), 7);
+        payload[2] = 2;
+        WritePoint(payload.AsSpan(3, 16), 1000, 998, 2345, 12_040, 812, 3_100, 45, 12, LoadPointFlags.None);
+        WritePoint(payload.AsSpan(19, 16), 1250, 1249, 150, 11_990, -5, 0, 3, 2,
+            LoadPointFlags.PartialPower);
+        byte[] raw = EscProtocol.BuildFrame(
+            6, CommOpcode.LoadSweep, (byte)LoadSweepCommand.GetPoints, payload, CommFrameType.Response, CommStatus.Ok);
+
+        LoadSweepPointBatch batch = EscProtocol.DecodeLoadSweepPoints(EscProtocol.Parse(raw));
+
+        Assert.Equal((ushort)7, batch.FirstIndex);
+        Assert.Equal(2, batch.Points.Count);
+        LoadSweepPoint first = batch.Points[0];
+        Assert.Equal(7, first.Index);
+        Assert.Equal((ushort)1000, first.ReferenceRpm);
+        Assert.Equal((ushort)998, first.RpmMean);
+        Assert.Equal(23.45, first.DutyPercent, 6);
+        Assert.Equal(12.04, first.BusVolts, 6);
+        Assert.Equal(81.2, first.BusCurrentMa, 6);
+        Assert.Equal(31.0, first.DutyStdPercent, 6);
+        Assert.Equal(4.5, first.BusCurrentStdMa, 6);
+        Assert.Equal((byte)12, first.RpmStd);
+        Assert.True(first.HasPower);
+        LoadSweepPoint second = batch.Points[1];
+        Assert.Equal(8, second.Index);
+        Assert.Equal(-0.5, second.BusCurrentMa, 6);
+        Assert.True(second.HasPower);
+        Assert.Equal(LoadPointFlags.PartialPower, second.Flags);
+    }
+
+    [Fact]
+    public void DecodeLoadSweepPointsAcceptsEmptyBatch()
+    {
+        byte[] payload = [0x80, 0x00, 0x00];
+        byte[] raw = EscProtocol.BuildFrame(
+            6, CommOpcode.LoadSweep, (byte)LoadSweepCommand.GetPoints, payload, CommFrameType.Response, CommStatus.Ok);
+
+        LoadSweepPointBatch batch = EscProtocol.DecodeLoadSweepPoints(EscProtocol.Parse(raw));
+
+        Assert.Equal((ushort)128, batch.FirstIndex);
+        Assert.Empty(batch.Points);
     }
 
     [Theory]
-    [InlineData(1)]
-    [InlineData(1000)]
-    public void HilStepPayloadAcceptsStepCountBoundaries(ushort steps)
+    [InlineData(1, 18)]
+    [InlineData(2, 3 + 3 * 16)]
+    [InlineData(4, 3 + 3 * 16)]
+    public void DecodeLoadSweepPointsRejectsInconsistentLength(byte count, int length)
     {
-        byte[] payload = EscProtocol.HilStepPayload(new HilStepRequest(1000, 0, 0, true, 1, 1, steps));
-
-        Assert.Equal(18, payload.Length);
-        Assert.Equal(steps, BinaryPrimitives.ReadUInt16LittleEndian(payload.AsSpan(16, 2)));
-    }
-
-    [Fact]
-    public void HilStepPayloadRejectsDisabledInput()
-    {
-        var request = new HilStepRequest(1000, 0, 0, false, 1, 1, 10);
-
-        Assert.Throws<ArgumentException>(() => EscProtocol.HilStepPayload(request));
-    }
-
-    [Fact]
-    public void DecodeHilStepResultReadsExactExtendedResponse()
-    {
-        byte[] payload = BuildHilStepResponsePayload();
-        byte[] raw = EscProtocol.BuildFrame(9, CommOpcode.HilStep, 0, payload, CommFrameType.Response, CommStatus.Ok);
-
-        HilStepResult result = EscProtocol.DecodeHilStepResult(EscProtocol.Parse(raw));
-
-        Assert.Equal(0x10203040u, result.Outputs.TargetTickMs);
-        Assert.Equal((byte)6, result.Outputs.AppState);
-        Assert.Equal(ControlRuntimeMode.HilSim, result.Outputs.Mode);
-        Assert.Equal((ushort)0x1234, result.Outputs.SetpointRpm);
-        Assert.Equal((ushort)0x5678, result.Outputs.MeasuredRpm);
-        Assert.Equal((ushort)0x9ABC, result.Outputs.PwmCommand);
-        Assert.Equal(-2, result.Outputs.CommutationStep);
-        Assert.Equal((byte)0x5A, result.Outputs.Flags);
-        Assert.True(result.Outputs.TimedOut);
-        Assert.True(result.Outputs.HasValidationProvenance);
-        Assert.Equal(0x11121314u, result.Outputs.AcceptedRunId);
-        Assert.Equal(0x21222324u, result.Outputs.AcceptedSourceSequence);
-        Assert.Equal(0x31323334u, result.Outputs.AcceptedGeneration);
-        Assert.Equal(0x41424344u, result.Outputs.AppliedRunId);
-        Assert.Equal(0x51525354u, result.Outputs.AppliedSourceSequence);
-        Assert.Equal(0x61626364u, result.Outputs.OutputGeneration);
-        Assert.Equal(0x71727374u, result.Outputs.PwmUpdateTickMs);
-        Assert.Equal((ushort)0x0102, result.RequestedSteps);
-        Assert.Equal((ushort)0x0304, result.AppliedSteps);
-        Assert.Equal((byte)0x81, result.Flags);
-        Assert.True(result.Replayed);
-    }
-
-    [Fact]
-    public void DecodeHilStepResultClearsReplayedWhenFlagBitIsAbsent()
-    {
-        byte[] payload = BuildHilStepResponsePayload();
-        payload[47] = 0x80;
-        byte[] raw = EscProtocol.BuildFrame(9, CommOpcode.HilStep, 0, payload, CommFrameType.Response, CommStatus.Ok);
-
-        HilStepResult result = EscProtocol.DecodeHilStepResult(EscProtocol.Parse(raw));
-
-        Assert.False(result.Replayed);
-    }
-
-    [Theory]
-    [InlineData(47)]
-    [InlineData(49)]
-    public void DecodeHilStepResultRejectsNonExactPayloadLength(int length)
-    {
+        byte[] payload = new byte[length];
+        payload[2] = count;
         byte[] raw = EscProtocol.BuildFrame(
-            9,
-            CommOpcode.HilStep,
-            0,
-            new byte[length],
-            CommFrameType.Response,
-            CommStatus.Ok);
+            6, CommOpcode.LoadSweep, (byte)LoadSweepCommand.GetPoints, payload, CommFrameType.Response, CommStatus.Ok);
 
-        Assert.Throws<EscProtocolException>(() => EscProtocol.DecodeHilStepResult(EscProtocol.Parse(raw)));
+        Assert.Throws<EscProtocolException>(() => EscProtocol.DecodeLoadSweepPoints(EscProtocol.Parse(raw)));
     }
 
-    [Fact]
-    public void DecodeHilStepResultRejectsWrongOpcode()
+    private static void WritePoint(
+        Span<byte> target,
+        ushort reference,
+        ushort rpm,
+        ushort dutyE4,
+        ushort busMv,
+        short busMaX10,
+        ushort dutyStdE4,
+        ushort busStdMaX10,
+        byte rpmStd,
+        LoadPointFlags flags)
     {
-        byte[] raw = EscProtocol.BuildFrame(
-            9,
-            CommOpcode.HilGetOutputs,
-            0,
-            new byte[48],
-            CommFrameType.Response,
-            CommStatus.Ok);
-
-        Assert.Throws<EscProtocolException>(() => EscProtocol.DecodeHilStepResult(EscProtocol.Parse(raw)));
-    }
-
-    [Fact]
-    public void DecodeHilStepResultRejectsErrorStatus()
-    {
-        byte[] raw = EscProtocol.BuildFrame(
-            9,
-            CommOpcode.HilStep,
-            0,
-            new byte[48],
-            CommFrameType.Response,
-            CommStatus.InvalidState);
-
-        Assert.Throws<EscProtocolException>(() => EscProtocol.DecodeHilStepResult(EscProtocol.Parse(raw)));
-    }
-
-    [Fact]
-    public void DecodeValidationReferenceKeepsLegacyCapabilitiesDisabled()
-    {
-        byte[] payload = BuildValidationReferencePayload(20);
-        byte[] raw = EscProtocol.BuildFrame(
-            4, CommOpcode.GetValidationReference, 0, payload, CommFrameType.Response, CommStatus.Ok);
-
-        ValidationReference reference = EscProtocol.DecodeValidationReference(EscProtocol.Parse(raw));
-
-        Assert.Equal((byte)0, reference.CapabilityFlags);
-        Assert.Equal((byte)0, reference.HilStepOperationVersion);
-        Assert.Equal((ushort)0, reference.MaximumHilSteps);
-        Assert.False(reference.SupportsDeterministicHil);
-    }
-
-    [Fact]
-    public void DecodeValidationReferenceReadsDeterministicHilCapabilityExtension()
-    {
-        byte[] payload = BuildValidationReferencePayload(24);
-        payload[20] = 0x81;
-        payload[21] = 3;
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(22, 2), 1000);
-        byte[] raw = EscProtocol.BuildFrame(
-            4, CommOpcode.GetValidationReference, 0, payload, CommFrameType.Response, CommStatus.Ok);
-
-        ValidationReference reference = EscProtocol.DecodeValidationReference(EscProtocol.Parse(raw));
-
-        Assert.Equal((byte)0x81, reference.CapabilityFlags);
-        Assert.Equal((byte)3, reference.HilStepOperationVersion);
-        Assert.Equal((ushort)1000, reference.MaximumHilSteps);
-        Assert.True(reference.SupportsDeterministicHil);
-    }
-
-    [Fact]
-    public void DecodeValidationReferenceDoesNotInferCapabilityFromExtensionPresence()
-    {
-        byte[] payload = BuildValidationReferencePayload(24);
-        payload[20] = 0x80;
-        payload[21] = 1;
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(22, 2), 1000);
-        byte[] raw = EscProtocol.BuildFrame(
-            4, CommOpcode.GetValidationReference, 0, payload, CommFrameType.Response, CommStatus.Ok);
-
-        ValidationReference reference = EscProtocol.DecodeValidationReference(EscProtocol.Parse(raw));
-
-        Assert.False(reference.SupportsDeterministicHil);
-    }
-
-    [Theory]
-    [InlineData(19)]
-    [InlineData(21)]
-    [InlineData(23)]
-    [InlineData(25)]
-    public void DecodeValidationReferenceRejectsUndefinedPayloadLengths(int length)
-    {
-        byte[] raw = EscProtocol.BuildFrame(
-            4,
-            CommOpcode.GetValidationReference,
-            0,
-            new byte[length],
-            CommFrameType.Response,
-            CommStatus.Ok);
-
-        Assert.Throws<EscProtocolException>(() => EscProtocol.DecodeValidationReference(EscProtocol.Parse(raw)));
-    }
-
-    private static byte[] BuildHilStepResponsePayload()
-    {
-        var payload = new byte[48];
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(0, 4), 0x10203040);
-        payload[4] = 6;
-        payload[5] = (byte)ControlRuntimeMode.HilSim;
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(6, 2), 0x1234);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(8, 2), 0x5678);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(10, 2), 0x9ABC);
-        payload[12] = unchecked((byte)-2);
-        payload[13] = 0x5A;
-        payload[14] = 1;
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(15, 4), 0x11121314);
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(19, 4), 0x21222324);
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(23, 4), 0x31323334);
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(27, 4), 0x41424344);
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(31, 4), 0x51525354);
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(35, 4), 0x61626364);
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(39, 4), 0x71727374);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(43, 2), 0x0102);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(45, 2), 0x0304);
-        payload[47] = 0x81;
-        return payload;
-    }
-
-    private static byte[] BuildValidationReferencePayload(int length)
-    {
-        var payload = new byte[length];
-        if (length < 20)
-        {
-            return payload;
-        }
-
-        payload[0] = 1;
-        payload[1] = 2;
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(2, 2), 18_000);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(4, 2), 2_000);
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(6, 4), 180_000);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(10, 2), 14_000);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(12, 2), 200);
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(14, 4), 2_000);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(18, 2), 100);
-        return payload;
+        BinaryPrimitives.WriteUInt16LittleEndian(target.Slice(0, 2), reference);
+        BinaryPrimitives.WriteUInt16LittleEndian(target.Slice(2, 2), rpm);
+        BinaryPrimitives.WriteUInt16LittleEndian(target.Slice(4, 2), dutyE4);
+        BinaryPrimitives.WriteUInt16LittleEndian(target.Slice(6, 2), busMv);
+        BinaryPrimitives.WriteInt16LittleEndian(target.Slice(8, 2), busMaX10);
+        BinaryPrimitives.WriteUInt16LittleEndian(target.Slice(10, 2), dutyStdE4);
+        BinaryPrimitives.WriteUInt16LittleEndian(target.Slice(12, 2), busStdMaX10);
+        target[14] = rpmStd;
+        target[15] = (byte)flags;
     }
 }

@@ -44,12 +44,12 @@ public sealed class BridgeTests
     }
 
     [Fact]
-    public async Task SimulinkModeStillBlocksGuiRun()
+    public async Task MonitorOnlyModeBlocksGuiRun()
     {
         FakeEscTransport transport = new();
         var bridge = CreateBridge(transport);
         await bridge.ConnectAsync();
-        await bridge.SetModeAsync(ControlMode.SimulinkControl);
+        await bridge.SetModeAsync(ControlMode.MonitorOnly);
 
         CommandResult run = await bridge.RunAsync();
 
@@ -73,22 +73,6 @@ public sealed class BridgeTests
     }
 
     [Fact]
-    public async Task SimulinkModeAllowsExternalSetpointWhileBlockingGuiSetpoint()
-    {
-        FakeEscTransport transport = new();
-        var bridge = CreateBridge(transport);
-        await bridge.ConnectAsync();
-        await bridge.SetModeAsync(ControlMode.SimulinkControl);
-
-        CommandResult guiSetpoint = await bridge.SetSpeedRpmAsync(1400);
-        CommandResult simulinkSetpoint = await bridge.SetSpeedRpmFromSimulinkAsync(1600);
-
-        Assert.False(guiSetpoint.Success);
-        Assert.True(simulinkSetpoint.Success);
-        Assert.Single(transport.RequestedOpcodes, opcode => opcode == CommOpcode.SetSpeedRpm);
-    }
-
-    [Fact]
     public async Task TelemetryEventIsBufferedInBridge()
     {
         FakeEscTransport transport = new();
@@ -104,27 +88,39 @@ public sealed class BridgeTests
     }
 
     [Fact]
-    public async Task CurrentLoggingIsIndependentAndBuffersExtendedSample()
+    public async Task BusCurrentLoggingIsIndependentOfSpeedLogging()
     {
         FakeEscTransport transport = new();
         var bridge = CreateBridge(transport);
         await bridge.ConnectAsync();
 
-        await bridge.StartLogAsync(LogParam.CurrentU);
-        transport.EnqueueTelemetry(
-            LogParam.CurrentU, 1200, 1000, 700,
-            TelemetryQuality.Valid | TelemetryQuality.Calibrated, 25, 3);
+        await bridge.StartLogAsync(LogParam.BusCurrent);
+        transport.EnqueueTelemetry(LogParam.BusCurrent, 95, 1000);
         await bridge.ReadTelemetryOnceAsync();
 
-        TelemetrySample sample = Assert.Single(bridge.CurrentUSamples);
-        Assert.Equal((ushort)700, sample.AdcRawValue);
-        Assert.True(sample.IsValid);
-        Assert.True(bridge.Snapshot.CurrentULoggingEnabled);
+        Assert.Single(bridge.GetTelemetrySamples(LogParam.BusCurrent));
+        Assert.True(bridge.Snapshot.BusCurrentLoggingEnabled);
         Assert.False(bridge.Snapshot.SpeedLoggingEnabled);
-        Assert.Equal(1200, bridge.Snapshot.CurrentUTelemetry.LastValue);
+        Assert.Equal(95, bridge.Snapshot.BusCurrentTelemetry.LastValue);
 
-        await bridge.StopLogAsync(LogParam.CurrentU);
-        Assert.False(bridge.Snapshot.CurrentULoggingEnabled);
+        await bridge.StopLogAsync(LogParam.BusCurrent);
+        Assert.False(bridge.Snapshot.BusCurrentLoggingEnabled);
+    }
+
+    [Fact]
+    public async Task DutyTelemetryIsReportedInPercent()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+
+        await bridge.StartLogAsync(LogParam.Duty);
+        transport.EnqueueTelemetry(LogParam.Duty, 3250, 1000, 650, TelemetryQuality.Valid);
+        await bridge.ReadTelemetryOnceAsync();
+
+        Assert.True(bridge.Snapshot.DutyLoggingEnabled);
+        Assert.Equal(32.5, bridge.Snapshot.DutyTelemetry.LastValue);
+        Assert.Equal("%", bridge.Snapshot.DutyTelemetry.Unit);
     }
 
     [Fact]
@@ -374,7 +370,7 @@ public sealed class BridgeTests
         FakeEscTransport transport = new();
         var bridge = CreateBridge(transport);
         await bridge.ConnectAsync();
-        await bridge.SetModeAsync(ControlMode.SimulinkControl);
+        await bridge.SetModeAsync(ControlMode.MonitorOnly);
 
         CommandResult blocked = await bridge.SetSineDriveAsync(5, 20);
         await bridge.SetModeAsync(ControlMode.GuiControl);
@@ -429,338 +425,187 @@ public sealed class BridgeTests
     }
 
     [Fact]
-    public async Task HilInputsAndOutputsUseDedicatedOpcodes()
+    public async Task ConnectReadsControllerConfigIncludingSpeedRamp()
     {
         FakeEscTransport transport = new();
+        transport.ConfigValues[ConfigParam.SpeedRamp] = 600;
         var bridge = CreateBridge(transport);
+
         await bridge.ConnectAsync();
-        await bridge.SetModeAsync(ControlMode.SimulinkControl);
 
-        CommandResult input = await bridge.HilSetInputsAsync(new HilInputs(1800, 0, 2, true));
-        HilOutputs output = await bridge.HilGetOutputsAsync();
-
-        Assert.True(input.Success);
-        Assert.Equal(ControlRuntimeMode.HilSim, output.Mode);
-        Assert.Equal(1800, output.MeasuredRpm);
-        Assert.Contains(CommOpcode.HilSetInputs, transport.RequestedOpcodes);
-        Assert.Contains(CommOpcode.HilGetOutputs, transport.RequestedOpcodes);
+        ActiveControllerConfig? config = bridge.Snapshot.ActiveControllerConfig;
+        Assert.NotNull(config);
+        Assert.Equal(0.28, config!.Kp, 6);
+        Assert.Equal((byte)2, config.PolePairs);
+        Assert.Equal((ushort)18_000, config.PwmFrequencyHz);
+        Assert.Equal((ushort)600, config.SpeedRampRpmPerSecond);
+        Assert.DoesNotContain((CommOpcode)0x24, transport.RequestedOpcodes);
     }
 
     [Fact]
-    public async Task HilStartCanConfigureValidationInputTimeout()
+    public async Task SpeedRampConfigRefreshesControllerConfig()
     {
         FakeEscTransport transport = new();
         var bridge = CreateBridge(transport);
         await bridge.ConnectAsync();
-        await bridge.SetModeAsync(ControlMode.SimulinkControl);
 
-        CommandResult result = await bridge.HilStartAsync(500);
+        CommandResult result = await bridge.SetConfigAsync(ConfigParam.SpeedRamp, 1200);
 
         Assert.True(result.Success);
-        byte[] payload = Assert.Single(transport.RequestPayloads, payload => payload.Length == 2);
-        Assert.Equal(500, BitConverter.ToUInt16(payload));
+        Assert.Equal((ushort)1200, bridge.Snapshot.ActiveControllerConfig?.SpeedRampRpmPerSecond);
+        int requestIndex = transport.Requests.FindIndex(
+            request => request.Opcode == CommOpcode.SetConfig && request.Parameter == (byte)ConfigParam.SpeedRamp);
+        Assert.Equal([0xB0, 0x04], transport.RequestPayloads[requestIndex]);
     }
 
     [Fact]
-    public async Task HilStartCanSelectSteppedExecutionWithoutChangingLegacyPayloads()
+    public async Task StatusSnapshotCarriesReferenceDutyAndSweepFlag()
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+
+        await bridge.ConnectAsync();
+
+        Assert.Equal((ushort)950, bridge.Snapshot.Status?.ReferenceRpm);
+        Assert.Equal(31.25, bridge.Snapshot.Status?.DutyPercent);
+        Assert.False(bridge.Snapshot.Status?.LoadSweepActive);
+    }
+
+    [Fact]
+    public async Task LoadSweepStartSendsExactPayloadAndRefreshDrainsAllPoints()
     {
         FakeEscTransport transport = new();
         var bridge = CreateBridge(transport);
         await bridge.ConnectAsync();
-        await bridge.SetModeAsync(ControlMode.SimulinkControl);
+        var request = new LoadSweepRequest(
+            LoadSweepMode.Staircase, 1000, 2000, 250, 1500, 1000, LoadSweepOptions.StopAtEnd);
 
-        CommandResult result = await bridge.HilStartAsync(500, executionMode: HilExecutionMode.Stepped);
+        CommandResult started = await bridge.StartLoadSweepAsync(request);
+        transport.AddSweepPoints(5);
+        LoadSweepSnapshot sweep = await bridge.RefreshLoadSweepAsync();
 
-        Assert.True(result.Success);
-        byte[] payload = Assert.Single(transport.RequestPayloads, payload => payload.Length == 3);
-        Assert.Equal([0xF4, 0x01, 0x01], payload);
+        Assert.True(started.Success);
+        int startIndex = transport.Requests.FindIndex(
+            r => r.Opcode == CommOpcode.LoadSweep && r.Parameter == (byte)LoadSweepCommand.Start);
+        Assert.Equal(EscProtocol.LoadSweepStartPayload(request), transport.RequestPayloads[startIndex]);
+        Assert.Equal(5, sweep.Points.Count);
+        Assert.Equal(Enumerable.Range(0, 5), sweep.Points.Select(point => point.Index));
+        Assert.True(sweep.Active);
+        List<ushort> pointRequests = transport.Requests
+            .Select((r, index) => (r, index))
+            .Where(item => item.r.Opcode == CommOpcode.LoadSweep && item.r.Parameter == (byte)LoadSweepCommand.GetPoints)
+            .Select(item => BitConverter.ToUInt16(transport.RequestPayloads[item.index]))
+            .ToList();
+        Assert.Equal([(ushort)0, (ushort)3], pointRequests);
     }
 
     [Fact]
-    public async Task HilStepRetriesOneTimeoutWithTheSamePayload()
-    {
-        FakeEscTransport transport = new() { HilStepResponsesToDrop = 1 };
-        var bridge = CreateBridge(transport);
-        await bridge.ConnectAsync();
-        await bridge.SetModeAsync(ControlMode.SimulinkControl);
-        await bridge.HilStartAsync(500, executionMode: HilExecutionMode.Stepped);
-        var request = new HilStepRequest(900, 0, 0, true, 44, 1, 10);
-
-        HilStepResult result = await bridge.HilStepAsync(request, 1);
-
-        Assert.True(result.Replayed);
-        byte[][] payloads = transport.RequestPayloads.Where(payload => payload.Length == 18).ToArray();
-        Assert.Equal(2, payloads.Length);
-        Assert.Equal(payloads[0], payloads[1]);
-        Assert.Equal((ushort)10, result.RequestedSteps);
-        Assert.Equal((ushort)10, result.AppliedSteps);
-        Assert.Equal(10u, result.Outputs.OutputGeneration - result.Outputs.AcceptedGeneration);
-    }
-
-    [Fact]
-    public async Task ValidatedHilInputsPropagateRunAndSourceSequence()
+    public async Task LoadSweepPollStopsFollowingOnceFinishedAndDrained()
     {
         FakeEscTransport transport = new();
         var bridge = CreateBridge(transport);
         await bridge.ConnectAsync();
-        await bridge.SetModeAsync(ControlMode.SimulinkControl);
+        await bridge.StartLoadSweepAsync(new LoadSweepRequest(LoadSweepMode.Ramp, 1000, 2000, 100, 0, 500));
+        transport.AddSweepPoints(2);
+        transport.FinishSweep();
 
-        CommandResult result = await bridge.HilSetInputsAsync(new HilInputs(1800, 0, 0, true, 44, 55));
+        await bridge.PollLoadSweepAsync();
+        int requestsAfterDrain = transport.RequestedOpcodes.Count;
+        await bridge.PollLoadSweepAsync();
 
-        Assert.True(result.Success);
-        byte[] payload = Assert.Single(transport.RequestPayloads, payload => payload.Length == 16);
-        Assert.Equal(44u, BitConverter.ToUInt32(payload, 8));
-        Assert.Equal(55u, BitConverter.ToUInt32(payload, 12));
+        Assert.Equal(2, bridge.Snapshot.LoadSweep.Points.Count);
+        Assert.Equal(LoadSweepState.Done, bridge.Snapshot.LoadSweep.Status?.State);
+        Assert.Equal(requestsAfterDrain, transport.RequestedOpcodes.Count);
     }
 
     [Fact]
-    public async Task ValidationUsesMatHorizonAndRestoresActiveConfiguration()
+    public async Task LoadSweepIsBlockedInMonitorOnlyModeButAbortIsAllowed()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"esc-validation-service-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(root);
-        string artifact = Path.Combine(root, "input.mat");
-        await File.WriteAllTextAsync(artifact, "validation artifact");
-        try
-        {
-            FakeEscTransport transport = new();
-            EscBridgeService bridge = CreateBridge(transport);
-            await bridge.ConnectAsync();
-            var manifest = new ValidationManifest(2, "Temporary gains", "restore test", "2026-01-01T00:00:00Z",
-                0.02, 20_000, 1000, new ValidationReferenceConfig(0.01, 0.01, 0, 18_000, 2, 2_000, 0.002));
-            var vector = new ImportedValidationVector(44, manifest,
-            [
-                new ValidationInputSample(1, 0, 900, true, 1000, 700)
-            ], artifact);
-            var store = new ValidationRunStore(root);
-            ValidationRunSummary run = await store.CreateAsync(vector, new ValidationRunOptions());
-            var service = new ValidationRunService(new MatValidationImporter(), store, bridge);
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        await bridge.SetModeAsync(ControlMode.MonitorOnly);
 
-            await service.ExecuteAsync(run.Id);
+        CommandResult start = await bridge.StartLoadSweepAsync(
+            new LoadSweepRequest(LoadSweepMode.Staircase, 1000, 2000, 250, 0, 500));
+        CommandResult abort = await bridge.AbortLoadSweepAsync();
 
-            ValidationRunDetail detail = (await store.GetAsync(run.Id))!;
-            Assert.Equal(ValidationRunStatus.Completed, detail.Summary.Status);
-            Assert.Equal(ValidationSampleStatus.Passed, detail.Samples[0].Status);
-            Assert.Equal(0.28, transport.ConfigValues[ConfigParam.KpRpm]);
-            Assert.Equal(1.00, transport.ConfigValues[ConfigParam.KiRpm]);
-            Assert.Equal(0, transport.ConfigValues[ConfigParam.KdRpm]);
-            Assert.DoesNotContain(CommOpcode.SaveConfig, transport.RequestedOpcodes);
-            Assert.DoesNotContain(
-                transport.Requests,
-                request => request.Opcode == CommOpcode.SetConfig && request.Parameter == (byte)ConfigParam.PwmFreq);
-            byte[] stepPayload = Assert.Single(transport.RequestPayloads, payload => payload.Length == 18);
-            Assert.Equal((ushort)10, BitConverter.ToUInt16(stepPayload, 16));
-            Assert.Single(transport.RequestedOpcodes, opcode => opcode == CommOpcode.HilStep);
-            Assert.DoesNotContain(CommOpcode.HilSetInputs, transport.RequestedOpcodes);
-            Assert.Single(transport.RequestedOpcodes, opcode => opcode == CommOpcode.HilGetOutputs);
-        }
-        finally
-        {
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, recursive: true);
-            }
-        }
+        Assert.False(start.Success);
+        Assert.True(abort.Success);
+        Assert.DoesNotContain(transport.Requests,
+            r => r.Opcode == CommOpcode.LoadSweep && r.Parameter == (byte)LoadSweepCommand.Start);
+        Assert.Contains(transport.Requests,
+            r => r.Opcode == CommOpcode.LoadSweep && r.Parameter == (byte)LoadSweepCommand.Abort);
+    }
+
+    [Theory]
+    [InlineData(LoadSweepMode.Staircase, 100, 2000, 250, 1000)]
+    [InlineData(LoadSweepMode.Staircase, 1000, 6000, 250, 1000)]
+    [InlineData(LoadSweepMode.Staircase, 1000, 5000, 5, 1000)]
+    [InlineData(LoadSweepMode.Staircase, 1000, 5000, 20, 1000)]
+    [InlineData(LoadSweepMode.Ramp, 1000, 1000, 100, 1000)]
+    [InlineData(LoadSweepMode.Ramp, 1000, 5000, 10, 1000)]
+    [InlineData(LoadSweepMode.Ramp, 1000, 2000, 100, 50)]
+    public async Task LoadSweepRejectsInvalidPlansWithoutSending(
+        LoadSweepMode mode, int start, int end, int stepOrRate, int windowMs)
+    {
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+
+        CommandResult result = await bridge.StartLoadSweepAsync(new LoadSweepRequest(
+            mode, (ushort)start, (ushort)end, (ushort)stepOrRate, 0, (ushort)windowMs));
+
+        Assert.False(result.Success);
+        Assert.DoesNotContain(CommOpcode.LoadSweep, transport.RequestedOpcodes);
     }
 
     [Fact]
-    public async Task ValidationComparesMcuPwmWithImportedExpectedPwm()
+    public async Task LoadSweepStartReportsFirmwareRejection()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"esc-validation-pwm-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(root);
-        string artifact = Path.Combine(root, "input.mat");
-        await File.WriteAllTextAsync(artifact, "validation artifact");
-        try
-        {
-            FakeEscTransport transport = new() { HilPwmCommand = 700 };
-            EscBridgeService bridge = CreateBridge(transport);
-            await bridge.ConnectAsync();
-            var manifest = new ValidationManifest(2, "PWM comparison", "MAT expectation", "2026-01-01T00:00:00Z",
-                0.02, 20_000, 1000, new ValidationReferenceConfig(0.28, 1.00, 0, 18_000, 2, 2_000, 0.002));
-            var vector = new ImportedValidationVector(44, manifest,
-                [new ValidationInputSample(1, 0, 900, true, 1000, 650)], artifact);
-            var store = new ValidationRunStore(root);
-            ValidationRunSummary run = await store.CreateAsync(vector, new ValidationRunOptions(2));
-            var service = new ValidationRunService(new MatValidationImporter(), store, bridge);
+        FakeEscTransport transport = new();
+        transport.ResponseStatuses[CommOpcode.LoadSweep] = CommStatus.InvalidState;
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
 
-            await service.ExecuteAsync(run.Id);
+        CommandResult result = await bridge.StartLoadSweepAsync(
+            new LoadSweepRequest(LoadSweepMode.Staircase, 1000, 2000, 250, 0, 500));
 
-            ValidationRunDetail detail = (await store.GetAsync(run.Id))!;
-            ValidationSampleResult sample = Assert.Single(detail.Samples);
-            Assert.Equal(ValidationRunStatus.CompletedWithWarnings, detail.Summary.Status);
-            Assert.Equal(ValidationSampleStatus.OutOfTolerance, sample.Status);
-            Assert.Equal((ushort)650, sample.ExpectedPwm);
-            Assert.Equal<ushort?>((ushort)700, sample.ActualPwm);
-            Assert.Equal(50, sample.AbsoluteError);
-            Assert.Single(transport.RequestedOpcodes, opcode => opcode == CommOpcode.HilStep);
-        }
-        finally
-        {
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, recursive: true);
-            }
-        }
+        Assert.False(result.Success);
+        Assert.Equal(CommStatus.InvalidState, result.DeviceStatus);
     }
 
     [Fact]
-    public async Task ValidationStopsReplayWhenHilStepGenerationDeltaMismatches()
+    public async Task SavedCurvesSurviveNewSweepAndOneCanBeTare()
     {
-        string root = Path.Combine(Path.GetTempPath(), $"esc-validation-delta-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(root);
-        string artifact = Path.Combine(root, "input.mat");
-        await File.WriteAllTextAsync(artifact, "validation artifact");
-        try
-        {
-            FakeEscTransport transport = new() { HilGenerationDeltaAdjustment = -1 };
-            EscBridgeService bridge = CreateBridge(transport);
-            await bridge.ConnectAsync();
-            var manifest = new ValidationManifest(2, "Delta mismatch", "stop replay", "2026-01-01T00:00:00Z",
-                0.04, 20_000, 1000, new ValidationReferenceConfig(0.28, 1.00, 0, 18_000, 2, 2_000, 0.002));
-            var vector = new ImportedValidationVector(44, manifest,
-            [
-                new ValidationInputSample(1, 0, 900, true, 1000, 700),
-                new ValidationInputSample(2, 0.02, 950, true, 1000, 700)
-            ], artifact);
-            var store = new ValidationRunStore(root);
-            ValidationRunSummary run = await store.CreateAsync(vector, new ValidationRunOptions());
-            var service = new ValidationRunService(new MatValidationImporter(), store, bridge);
+        FakeEscTransport transport = new();
+        var bridge = CreateBridge(transport);
+        await bridge.ConnectAsync();
+        await bridge.StartLoadSweepAsync(new LoadSweepRequest(LoadSweepMode.Staircase, 1000, 2000, 500, 0, 500));
+        transport.AddSweepPoints(3);
+        await bridge.RefreshLoadSweepAsync();
 
-            await service.ExecuteAsync(run.Id);
+        CommandResult saved = bridge.SaveCurrentLoadCurve("Aire");
+        string csv = bridge.LoadSweepCsv();
+        CommandResult imported = bridge.ImportLoadCurveCsv("Agua", csv);
+        Guid air = bridge.Snapshot.LoadSweep.SavedCurves[0].Id;
+        bridge.SetLoadCurveTare(air);
+        await bridge.StartLoadSweepAsync(new LoadSweepRequest(LoadSweepMode.Staircase, 1000, 2000, 500, 0, 500));
 
-            ValidationRunDetail detail = (await store.GetAsync(run.Id))!;
-            Assert.Equal(ValidationRunStatus.Failed, detail.Summary.Status);
-            Assert.Contains("generation delta", detail.Summary.FailureReason);
-            Assert.Equal(ValidationSampleStatus.MismatchedOutput, detail.Samples[0].Status);
-            Assert.Equal(ValidationSampleStatus.Skipped, detail.Samples[1].Status);
-            Assert.Single(transport.RequestedOpcodes, opcode => opcode == CommOpcode.HilStep);
-        }
-        finally
-        {
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, recursive: true);
-            }
-        }
-    }
+        Assert.True(saved.Success);
+        Assert.True(imported.Success);
+        Assert.Equal(["Aire", "Agua"], bridge.Snapshot.LoadSweep.SavedCurves.Select(curve => curve.Label));
+        Assert.All(bridge.Snapshot.LoadSweep.SavedCurves, curve => Assert.Equal(3, curve.Points.Count));
+        Assert.Equal("Aire", bridge.Snapshot.LoadSweep.TareCurve?.Label);
+        Assert.Empty(bridge.Snapshot.LoadSweep.Points);
 
-    [Fact]
-    public async Task ValidationRejectsLegacyFirmwareBeforeConfigurationOrStart()
-    {
-        string root = Path.Combine(Path.GetTempPath(), $"esc-validation-legacy-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(root);
-        string artifact = Path.Combine(root, "input.mat");
-        await File.WriteAllTextAsync(artifact, "validation artifact");
-        try
-        {
-            FakeEscTransport transport = new() { LegacyValidationReference = true };
-            EscBridgeService bridge = CreateBridge(transport);
-            await bridge.ConnectAsync();
-            var manifest = new ValidationManifest(2, "Legacy firmware", "preflight", "2026-01-01T00:00:00Z",
-                0.02, 20_000, 1000, new ValidationReferenceConfig(0.28, 1.00, 0, 18_000, 2, 2_000, 0.002));
-            var vector = new ImportedValidationVector(44, manifest,
-                [new ValidationInputSample(1, 0, 900, true, 1000, 700)], artifact);
-            var store = new ValidationRunStore(root);
-            ValidationRunSummary run = await store.CreateAsync(vector, new ValidationRunOptions());
-            var service = new ValidationRunService(new MatValidationImporter(), store, bridge);
-
-            InvalidOperationException exception = await Assert.ThrowsAsync<InvalidOperationException>(() => service.ExecuteAsync(run.Id));
-
-            ValidationRunDetail detail = (await store.GetAsync(run.Id))!;
-            Assert.Contains("capability HIL determinista", exception.Message);
-            Assert.Equal(ValidationRunStatus.Failed, detail.Summary.Status);
-            Assert.DoesNotContain(CommOpcode.HilStart, transport.RequestedOpcodes);
-            Assert.DoesNotContain(CommOpcode.SetConfig, transport.RequestedOpcodes);
-        }
-        finally
-        {
-            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-            if (Directory.Exists(root))
-            {
-                Directory.Delete(root, recursive: true);
-            }
-        }
-    }
-
-    [Fact]
-    public void ConsecutiveIdenticalHilFramesAreCollapsedWithRepeatCount()
-    {
-        var bridge = CreateBridge();
-
-        bridge.RecordHilFrame("Simulink -> Bridge", "UDP", 7, "HilInputs", "7,137,1");
-        bridge.RecordHilFrame("Simulink -> Bridge", "UDP", 7, "HilInputs", "7,137,1");
-        bridge.RecordHilFrame("Simulink -> Bridge", "UDP", 7, "HilInputs", "7,138,1");
-
-        IReadOnlyList<HilFrameTraceEntry> frames = bridge.Snapshot.Hil.RecentFrames;
-
-        Assert.Equal(2, frames.Count);
-        Assert.Equal((uint)1, frames[0].RepeatCount);
-        Assert.Equal("7,138,1", frames[0].Payload);
-        Assert.Equal((uint)2, frames[1].RepeatCount);
-        Assert.Equal("7,137,1", frames[1].Payload);
-    }
-
-    [Fact]
-    public void HilSnapshotCanExposeLastAcceptedUdpInputs()
-    {
-        var bridge = CreateBridge();
-
-        bridge.UpdateHilStats(new HilBridgeStats(
-            true,
-            12,
-            0,
-            10,
-            3,
-            0.5,
-            null,
-            new HilInputs(245, 0, 0, true)));
-
-        Assert.Equal((ushort)245, bridge.Snapshot.Hil.LastInputs?.SpeedRpm);
-        Assert.True(bridge.Snapshot.Hil.LastInputs?.Enable);
-    }
-
-    [Fact]
-    public void LowerSequenceCanTakeOwnershipFromAnotherUdpSender()
-    {
-        HilUdpSenderSession session = new(250);
-        IPEndPoint senderA = new(IPAddress.Loopback, 1);
-        IPEndPoint senderB = new(IPAddress.Loopback, 50571);
-
-        session.Accept(senderA, 101, 0);
-
-        Assert.True(session.CanAccept(senderB, 2, false, false, 50));
-
-        session.Accept(senderB, 2, 50);
-
-        Assert.False(session.CanAccept(senderA, 101, false, false, 60));
-    }
-
-    [Fact]
-    public void StartCommandCanForceTakeoverFromAnotherUdpSender()
-    {
-        HilUdpSenderSession session = new(250);
-        IPEndPoint senderA = new(IPAddress.Loopback, 1);
-        IPEndPoint senderB = new(IPAddress.Loopback, 50571);
-
-        session.Accept(senderA, 101, 0);
-
-        Assert.True(session.WouldTakeOver(senderB, null, true, 50));
-        Assert.False(session.WouldTakeOver(senderA, 102, false, 50));
-    }
-
-    [Fact]
-    public void SenderLeaseExpiresAfterIdleGap()
-    {
-        HilUdpSenderSession session = new(250);
-        IPEndPoint senderA = new(IPAddress.Loopback, 1);
-        IPEndPoint senderB = new(IPAddress.Loopback, 50571);
-
-        session.Accept(senderA, 40, 0);
-
-        Assert.False(session.CanAccept(senderB, 41, false, false, 100));
-        Assert.True(session.CanAccept(senderB, 41, false, false, 400));
+        bridge.RemoveSavedLoadCurve(air);
+        Assert.Null(bridge.Snapshot.LoadSweep.TareCurveId);
+        Assert.Single(bridge.Snapshot.LoadSweep.SavedCurves);
+        string[] lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        Assert.StartsWith("# mode=Staircase", lines[0]);
+        Assert.Equal(LoadSweepCsvWriter.Header, lines[1]);
+        Assert.Equal(5, lines.Length);
     }
 
     private static EscBridgeService CreateBridge(FakeEscTransport? transport = null)
@@ -805,10 +650,9 @@ public sealed class BridgeTests
         public List<byte[]> RequestPayloads { get; } = [];
         public List<(CommOpcode Opcode, byte Parameter)> Requests { get; } = [];
         public Dictionary<CommOpcode, CommStatus> ResponseStatuses { get; } = [];
-        public ushort HilPwmCommand { get; init; } = 700;
-        public int HilGenerationDeltaAdjustment { get; init; }
-        public int HilStepResponsesToDrop { get; set; }
-        public bool LegacyValidationReference { get; init; }
+        private readonly List<byte[]> _sweepPoints = [];
+        private LoadSweepState _sweepState = LoadSweepState.Idle;
+        private byte[] _sweepConfig = new byte[12];
         public Dictionary<ConfigParam, double> ConfigValues { get; } = new()
         {
             [ConfigParam.KpRpm] = 0.28,
@@ -822,7 +666,8 @@ public sealed class BridgeTests
             [ConfigParam.StartupFinalAmplitude] = 100,
             [ConfigParam.StartupInitialFrequency] = 2.09,
             [ConfigParam.StartupFinalFrequency] = 9.28,
-            [ConfigParam.StartupDuration] = 3.0
+            [ConfigParam.StartupDuration] = 3.0,
+            [ConfigParam.SpeedRamp] = 0
         };
 
         public Task OpenAsync(HidDeviceDescriptor descriptor, CancellationToken cancellationToken = default)
@@ -859,19 +704,18 @@ public sealed class BridgeTests
                     ConfigValues[parameter] = DecodeConfigPayload(parameter, request.Payload);
                 }
             }
-            if (request.Opcode == CommOpcode.HilStart)
+            if (request.Opcode == CommOpcode.LoadSweep && responseStatus == CommStatus.Ok)
             {
-                _runtimeMode = ControlRuntimeMode.HilSim;
-                _appState = 6;
-            }
-            else if (request.Opcode == CommOpcode.SetControlMode && request.Payload.Length == 1)
-            {
-                _runtimeMode = (ControlRuntimeMode)request.Payload[0];
-            }
-            else if (request.Opcode == CommOpcode.HilStop)
-            {
-                _runtimeMode = ControlRuntimeMode.Normal;
-                _appState = 0;
+                if (request.Parameter == (byte)LoadSweepCommand.Start)
+                {
+                    _sweepPoints.Clear();
+                    _sweepConfig = request.Payload;
+                    _sweepState = LoadSweepState.Measuring;
+                }
+                else if (request.Parameter == (byte)LoadSweepCommand.Abort && _sweepState is >= LoadSweepState.MeasuringIdleCurrent and <= LoadSweepState.Measuring)
+                {
+                    _sweepState = LoadSweepState.Aborted;
+                }
             }
             else if (request.Opcode == CommOpcode.SineDrive)
             {
@@ -912,30 +756,12 @@ public sealed class BridgeTests
                 _appState = 0;
             }
 
-            if (request.Opcode == CommOpcode.HilSetInputs && request.Payload.Length >= 16)
-            {
-                _hilRunId = BitConverter.ToUInt32(request.Payload, 8);
-                _hilSourceSequence = BitConverter.ToUInt32(request.Payload, 12);
-            }
-            if (request.Opcode == CommOpcode.HilSetInputs && request.Payload.Length >= 8 && request.Payload[7] != 0)
-            {
-                _runtimeMode = ControlRuntimeMode.HilSim;
-                _appState = 6;
-            }
-
-            if (request.Opcode == CommOpcode.HilStep)
-            {
-                ApplyHilStep(request.Payload);
-            }
-
             byte[] payload = request.Opcode switch
             {
                 CommOpcode.Ping => request.Payload,
                 CommOpcode.GetStatus => StatusPayload(),
                 CommOpcode.GetConfig => ConfigPayload((ConfigParam)request.Parameter),
-                CommOpcode.GetValidationReference => ValidationReferencePayload(),
-                CommOpcode.HilGetOutputs => HilOutputsPayload(),
-                CommOpcode.HilStep => HilStepResultPayload(),
+                CommOpcode.LoadSweep => LoadSweepPayload((LoadSweepCommand)request.Parameter, request.Payload),
                 CommOpcode.SineDrive => request.Payload,
                 CommOpcode.StepTest => request.Payload,
                 CommOpcode.ZcDiag => ZcDiagResponsePayload((ZcDiagCommand)request.Parameter),
@@ -950,14 +776,7 @@ public sealed class BridgeTests
                 CommFrameType.Response,
                 responseStatus);
 
-            if (request.Opcode == CommOpcode.HilStep && HilStepResponsesToDrop > 0)
-            {
-                HilStepResponsesToDrop--;
-            }
-            else
-            {
-                _readQueue.Enqueue(EscProtocol.Parse(response));
-            }
+            _readQueue.Enqueue(EscProtocol.Parse(response));
             return Task.CompletedTask;
         }
 
@@ -978,7 +797,7 @@ public sealed class BridgeTests
             ushort validSamples = 0,
             sbyte commutationStep = 0)
         {
-            bool extended = parameter is LogParam.CurrentU or LogParam.CurrentV or LogParam.BemfPeriod;
+            bool extended = parameter is LogParam.Duty;
             byte[] payload = new byte[extended ? 15 : 9];
             payload[0] = (byte)parameter;
             BitConverter.GetBytes(value).CopyTo(payload, 1);
@@ -1001,6 +820,61 @@ public sealed class BridgeTests
             _appState = 0;
         }
 
+        public void AddSweepPoints(int count)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                int index = _sweepPoints.Count;
+                byte[] point = new byte[16];
+                BitConverter.GetBytes((ushort)(1000 + index * 250)).CopyTo(point, 0);
+                BitConverter.GetBytes((ushort)(998 + index * 250)).CopyTo(point, 2);
+                BitConverter.GetBytes((ushort)(2000 + index * 300)).CopyTo(point, 4);
+                BitConverter.GetBytes((ushort)12_000).CopyTo(point, 6);
+                BitConverter.GetBytes((short)(800 + index * 50)).CopyTo(point, 8);
+                BitConverter.GetBytes((short)(3000 + index * 100)).CopyTo(point, 10);
+                BitConverter.GetBytes((ushort)40).CopyTo(point, 12);
+                point[14] = 9;
+                _sweepPoints.Add(point);
+            }
+        }
+
+        public void FinishSweep() => _sweepState = LoadSweepState.Done;
+
+        private byte[] LoadSweepPayload(LoadSweepCommand command, byte[] request)
+        {
+            switch (command)
+            {
+                case LoadSweepCommand.GetStatus:
+                {
+                    byte[] payload = new byte[29];
+                    payload[0] = (byte)_sweepState;
+                    payload[2] = _sweepConfig[0];
+                    payload[3] = _sweepConfig[11];
+                    BitConverter.GetBytes((ushort)_sweepPoints.Count).CopyTo(payload, 4);
+                    BitConverter.GetBytes((ushort)128).CopyTo(payload, 6);
+                    Array.Copy(_sweepConfig, 1, payload, 8, 10);
+                    BitConverter.GetBytes(12_500).CopyTo(payload, 20);
+                    payload[28] = 1;
+                    return payload;
+                }
+                case LoadSweepCommand.GetPoints:
+                {
+                    ushort first = BitConverter.ToUInt16(request);
+                    int count = Math.Clamp(_sweepPoints.Count - first, 0, 3);
+                    byte[] payload = new byte[3 + count * 16];
+                    BitConverter.GetBytes(first).CopyTo(payload, 0);
+                    payload[2] = (byte)count;
+                    for (int i = 0; i < count; i++)
+                    {
+                        _sweepPoints[first + i].CopyTo(payload, 3 + i * 16);
+                    }
+                    return payload;
+                }
+                default:
+                    return [];
+            }
+        }
+
         public ValueTask DisposeAsync()
         {
             return ValueTask.CompletedTask;
@@ -1008,92 +882,19 @@ public sealed class BridgeTests
 
         private byte[] StatusPayload()
         {
-            byte[] payload = new byte[10];
+            byte[] payload = new byte[31];
             payload[0] = _appState;
             payload[1] = 1;
             BitConverter.GetBytes((ushort)1000).CopyTo(payload, 4);
             BitConverter.GetBytes((ushort)980).CopyTo(payload, 6);
             BitConverter.GetBytes((ushort)2000).CopyTo(payload, 8);
+            BitConverter.GetBytes((ushort)950).CopyTo(payload, 26);
+            BitConverter.GetBytes((ushort)3125).CopyTo(payload, 28);
+            payload[30] = _sweepState is >= LoadSweepState.MeasuringIdleCurrent and <= LoadSweepState.Measuring ? (byte)1 : (byte)0;
             return payload;
         }
 
-        private byte[] ValidationReferencePayload()
-        {
-            byte[] payload = new byte[LegacyValidationReference ? 20 : 24];
-            payload[0] = 1;
-            payload[1] = 2;
-            BitConverter.GetBytes((ushort)18_000).CopyTo(payload, 2);
-            BitConverter.GetBytes((ushort)2_000).CopyTo(payload, 4);
-            BitConverter.GetBytes(180_000u).CopyTo(payload, 6);
-            BitConverter.GetBytes((ushort)14_000).CopyTo(payload, 10);
-            BitConverter.GetBytes((ushort)200).CopyTo(payload, 12);
-            BitConverter.GetBytes(2_000u).CopyTo(payload, 14);
-            BitConverter.GetBytes((ushort)100).CopyTo(payload, 18);
-            if (!LegacyValidationReference)
-            {
-                payload[20] = ValidationReference.DeterministicHilCapability;
-                payload[21] = 1;
-                BitConverter.GetBytes((ushort)1000).CopyTo(payload, 22);
-            }
-            return payload;
-        }
-
-        private uint _hilRunId;
-        private uint _hilSourceSequence;
-        private uint _hilAcceptedGeneration;
-        private uint _hilOutputGeneration;
-        private ushort _hilRequestedSteps;
-        private bool _hilStepReplayed;
-        private ControlRuntimeMode _runtimeMode = ControlRuntimeMode.Normal;
         private byte _appState;
-
-        private void ApplyHilStep(byte[] payload)
-        {
-            uint runId = BitConverter.ToUInt32(payload, 8);
-            uint sourceSequence = BitConverter.ToUInt32(payload, 12);
-            ushort steps = BitConverter.ToUInt16(payload, 16);
-            _hilStepReplayed = runId == _hilRunId && sourceSequence == _hilSourceSequence;
-            if (_hilStepReplayed)
-            {
-                return;
-            }
-
-            _hilRunId = runId;
-            _hilSourceSequence = sourceSequence;
-            _hilRequestedSteps = steps;
-            _hilAcceptedGeneration = _hilOutputGeneration;
-            _hilOutputGeneration = checked((uint)(_hilAcceptedGeneration + steps + HilGenerationDeltaAdjustment));
-        }
-
-        private byte[] HilOutputsPayload()
-        {
-            byte[] payload = new byte[43];
-            BitConverter.GetBytes(1000u).CopyTo(payload, 0);
-            payload[4] = _appState;
-            payload[5] = (byte)_runtimeMode;
-            BitConverter.GetBytes((ushort)1000).CopyTo(payload, 6);
-            BitConverter.GetBytes((ushort)1800).CopyTo(payload, 8);
-            BitConverter.GetBytes(HilPwmCommand).CopyTo(payload, 10);
-            payload[12] = 1;
-            BitConverter.GetBytes(_hilRunId).CopyTo(payload, 15);
-            BitConverter.GetBytes(_hilSourceSequence).CopyTo(payload, 19);
-            BitConverter.GetBytes(_hilAcceptedGeneration).CopyTo(payload, 23);
-            BitConverter.GetBytes(_hilRunId).CopyTo(payload, 27);
-            BitConverter.GetBytes(_hilSourceSequence).CopyTo(payload, 31);
-            BitConverter.GetBytes(_hilOutputGeneration).CopyTo(payload, 35);
-            BitConverter.GetBytes(_hilOutputGeneration).CopyTo(payload, 39);
-            return payload;
-        }
-
-        private byte[] HilStepResultPayload()
-        {
-            byte[] payload = new byte[48];
-            HilOutputsPayload().CopyTo(payload, 0);
-            BitConverter.GetBytes(_hilRequestedSteps).CopyTo(payload, 43);
-            BitConverter.GetBytes(_hilRequestedSteps).CopyTo(payload, 45);
-            payload[47] = _hilStepReplayed ? (byte)1 : (byte)0;
-            return payload;
-        }
 
         private byte[] ZcDiagResponsePayload(ZcDiagCommand command)
         {

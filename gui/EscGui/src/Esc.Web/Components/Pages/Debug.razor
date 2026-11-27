@@ -50,16 +50,8 @@
 
         <div class="phase-footer">
             <div class="phase-readouts">
-                <div><span>IU</span><strong>@(Snapshot.CurrentUTelemetry.LastValue?.ToString("0", Inv) ?? "-") <small>mA</small></strong></div>
-                <div><span>IV</span><strong>@(Snapshot.CurrentVTelemetry.LastValue?.ToString("0", Inv) ?? "-") <small>mA</small></strong></div>
-                @if (Snapshot.CurrentULoggingEnabled || Snapshot.CurrentVLoggingEnabled)
-                {
-                    <button type="button" class="ghost" @onclick="StopCurrentLogAsync" disabled="@(_isBusy || !IsConnected)">Dejar de medir</button>
-                }
-                else
-                {
-                    <button type="button" class="ghost" @onclick="StartCurrentLogAsync" disabled="@(_isBusy || !IsConnected)">Medir IU / IV</button>
-                }
+                <div><span>I bus</span><strong>@BusCurrentText <small>mA</small></strong></div>
+                <div><span>V bus</span><strong>@BusVoltageText <small>V</small></strong></div>
             </div>
             <div class="phase-actions">
                 <button class="primary" @onclick="ApplyStepTestAsync" disabled="@(!CanEditStep)">@(Snapshot.StepTest.Active ? "Aplicar cambios" : "Energizar")</button>
@@ -452,21 +444,14 @@
     private static string LegLabel(string stepName, char phase) =>
         stepName[0] == phase ? "PWM" : stepName[1] == phase ? "GND" : "flot.";
 
-    private async Task StartCurrentLogAsync() => await BusyExecAsync(async () =>
-    {
-        CommandResult u = await Bridge.StartLogAsync(LogParam.CurrentU);
-        CommandResult v = await Bridge.StartLogAsync(LogParam.CurrentV);
-        _lastCommandResult = u.Success && v.Success ? "Midiendo IU / IV." : (u.Success ? v.Message : u.Message);
-        Snapshot = Bridge.Snapshot;
-    });
+    // Con un paso fijo la corriente de bus del INA219 es d * I_fase (recirculacion por el lado bajo).
+    private string BusCurrentText => Snapshot.Status?.Power is { Valid: true } power
+        ? (power.CurrentMicroamps / 1000.0).ToString("0.0", Inv)
+        : "-";
 
-    private async Task StopCurrentLogAsync() => await BusyExecAsync(async () =>
-    {
-        await Bridge.StopLogAsync(LogParam.CurrentU);
-        CommandResult v = await Bridge.StopLogAsync(LogParam.CurrentV);
-        _lastCommandResult = v.Message;
-        Snapshot = Bridge.Snapshot;
-    });
+    private string BusVoltageText => Snapshot.Status?.Power is { Valid: true } power
+        ? power.BusVolts.ToString("0.00", Inv)
+        : "-";
 
     private async Task StopAsync() => await BusyExecAsync(async () =>
     {

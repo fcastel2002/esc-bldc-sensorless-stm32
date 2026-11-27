@@ -1,5 +1,8 @@
 # PIL Simulink
 
+> **Retirado (spec 002).** El firmware ya no implementa HIL/PIL (`HIL_START..HIL_STEP`, `SET_CONTROL_MODE`, `GET_VALIDATION_REFERENCE`) y la GUI ya no tiene el puente UDP ni las corridas de validacion. Este documento queda como registro historico; Simulink se sigue usando solo para modelado offline en `simulacion_agitador/`. Ver [`specs/002-load-curve-instrumentation`](../specs/002-load-curve-instrumentation/spec.md).
+
+
 Este flujo deja en Simulink la planta, el ESC y la conmutacion del BLDC. La planta usa su PI local; el MCU fisico recibe el mismo vector de velocidad para validar el controlador offline. En esta arquitectura el MCU no recibe cruces por cero ni conoce el paso de conmutacion: solo recibe velocidad simulada como realimentacion y devuelve el PWM logico calculado por el controlador.
 
 El modelo selecciona el sector six-step a partir de la posicion mecanica ideal del rotor: `theta_e = mod(2 * theta_m, 2*pi)`. Los dos pares de polos coinciden con el bloque BLDC y el offset electrico inicial es cero. Es una abstraccion de simulacion; no representa una estrategia aplicable al STM32 sin sensor de posicion.

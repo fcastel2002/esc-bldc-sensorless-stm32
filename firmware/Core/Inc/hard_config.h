@@ -15,6 +15,7 @@
 #define ESC_PARAMS_SIGNATURE_V3 0x33504345U
 #define ESC_PARAMS_SIGNATURE_V4 0x34504345U
 #define ESC_PARAMS_SIGNATURE_V5 0x35504345U
+#define ESC_PARAMS_SIGNATURE_V6 0x36504345U
 #define ESC_DEFAULT_KP_RPM 1.00f
 #define ESC_DEFAULT_KI_RPM 1.00f
 #define ESC_DEFAULT_KD_RPM 0.00f
@@ -31,6 +32,8 @@
 #define ESC_DEFAULT_STARTUP_DURATION_MS 3000U
 #define ESC_DEFAULT_BEMF_BLANKING_US 0U
 #define ESC_MAX_BEMF_BLANKING_US 200U
+#define ESC_DEFAULT_SPEED_RAMP_RPM_S 0U /* 0 = no slew limit */
+#define ESC_MAX_SPEED_RAMP_RPM_S 20000U
 #define ESC_DEFAULT_ZC_CHANNEL_U 2U
 #define ESC_DEFAULT_ZC_CHANNEL_V 1U
 #define ESC_DEFAULT_ZC_CHANNEL_W 0U
@@ -95,6 +98,9 @@ typedef struct {
   uint8_t  zc_channel_v;
   uint8_t  zc_channel_w;
   uint8_t  zc_reserved;
+  /* V6 */
+  uint16_t speed_ramp_rpm_s; /**< Setpoint slew limit, RPM/s; 0 = off. */
+  uint16_t reserved_v6;
 } ESCparams;
 
 #pragma pack(pop)
@@ -117,7 +123,6 @@ extern volatile uint8_t esc_config_done;
 extern void         set_default_esc_params();
 extern void         update_all_esc();
 extern ConfigStatus set_pwm_freq(uint16_t new_freq);
-extern ConfigStatus set_current_limit(uint16_t new_current);
 extern ConfigStatus set_pole_pairs(uint8_t new_pole_pairs);
 extern ConfigStatus set_KP(float new_kp);
 extern ConfigStatus set_KI(float new_ki);
@@ -131,11 +136,11 @@ extern ConfigStatus set_startup_final_frequency(uint32_t frequency_millihz);
 extern ConfigStatus set_startup_duration(uint32_t duration_ms);
 extern ConfigStatus set_bemf_blanking_us(uint16_t blanking_us);
 extern ConfigStatus set_zc_channel_map(uint8_t ch_u, uint8_t ch_v, uint8_t ch_w);
+extern ConfigStatus set_speed_ramp(uint16_t rpm_per_s);
 
 extern uint16_t get_max_speed();
 extern uint16_t get_min_speed();
 extern uint16_t get_pwm_freq();
-extern uint16_t get_current_limit();
 extern uint8_t  get_pole_pairs();
 extern float    get_KP();
 extern float    get_KI();
@@ -146,6 +151,7 @@ extern uint32_t get_startup_initial_frequency(void);
 extern uint32_t get_startup_final_frequency(void);
 extern uint32_t get_startup_duration(void);
 extern uint16_t get_bemf_blanking_us(void);
+extern uint16_t get_speed_ramp(void);
 extern bool     zc_channel_map_is_valid(uint8_t ch_u, uint8_t ch_v, uint8_t ch_w);
 extern void     get_zc_channel_map(uint8_t* ch_u, uint8_t* ch_v, uint8_t* ch_w);
 extern uint32_t zc_phase_to_tim_channel(uint8_t phase);

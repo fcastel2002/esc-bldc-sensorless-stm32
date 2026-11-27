@@ -88,8 +88,7 @@ static void push_recent_event(uint8_t code)
 
 bool zc_diag_freewheel_start(void)
 {
-  if (control_runtime_mode != CONTROL_RUNTIME_NORMAL || hil_session_state != 0U ||
-      (app_state != IDLE && app_state != FREEWHEEL)) {
+  if (app_state != IDLE && app_state != FREEWHEEL) {
     return false;
   }
 
@@ -392,8 +391,7 @@ static bool extract_unique_map(const uint8_t pct[9], bool inverted, uint8_t out_
 bool zc_diag_auto_detect(uint16_t duty_permille, ZcAutoDetectResult* result)
 {
   if (result == NULL) return false;
-  if (control_runtime_mode != CONTROL_RUNTIME_NORMAL || hil_session_state != 0U ||
-      app_state != IDLE) {
+  if (app_state != IDLE) {
     return false;
   }
 

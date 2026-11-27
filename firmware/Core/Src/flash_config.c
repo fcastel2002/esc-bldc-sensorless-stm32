@@ -7,6 +7,8 @@
 
 #include "flash_config.h"
 
+#include <stddef.h>
+
 #pragma pack(push, 4)
 typedef struct {
   uint32_t signature;
@@ -30,6 +32,40 @@ typedef struct {
   ESCparams config;
   uint32_t  crc32;
 } FlashStorageBlock;
+
+#pragma pack(push, 4)
+typedef struct {
+  uint32_t signature;
+  uint16_t pwm_freq_hz;
+  uint8_t  brake_type;
+  float    current_limit;
+  uint16_t temp_limit;
+  float    speed_kp;
+  float    speed_ki;
+  float    speed_kd;
+  uint16_t speed_max_rpm;
+  uint16_t speed_min_rpm;
+  uint32_t crc32;
+  uint8_t  pole_pairs;
+  uint16_t startup_initial_amplitude_permille;
+  uint16_t startup_final_amplitude_permille;
+  uint32_t startup_initial_frequency_millihz;
+  uint32_t startup_final_frequency_millihz;
+  uint32_t startup_duration_ms;
+  uint16_t bemf_blanking_us;
+  uint8_t  zc_channel_u;
+  uint8_t  zc_channel_v;
+  uint8_t  zc_channel_w;
+  uint8_t  zc_reserved;
+} ESCparamsV5;
+#pragma pack(pop)
+
+typedef struct {
+  uint32_t    signature;
+  uint32_t    write_counter;
+  ESCparamsV5 config;
+  uint32_t    crc32;
+} FlashStorageBlockV5;
 
 #pragma pack(push, 4)
 typedef struct {
@@ -103,8 +139,12 @@ _Static_assert(sizeof(ESCparamsV3) == 56U, "Unexpected V3 ESC config size");
 _Static_assert(sizeof(FlashStorageBlockV3) == 68U, "Unexpected V3 flash block size");
 _Static_assert(sizeof(ESCparamsV4) == 60U, "Unexpected V4 ESC config size");
 _Static_assert(sizeof(FlashStorageBlockV4) == 72U, "Unexpected V4 flash block size");
-_Static_assert(sizeof(ESCparams) == 64U, "Unexpected V5 ESC config size");
-_Static_assert(sizeof(FlashStorageBlock) == 76U, "Unexpected V5 flash block size");
+_Static_assert(sizeof(ESCparamsV5) == 64U, "Unexpected V5 ESC config size");
+_Static_assert(sizeof(FlashStorageBlockV5) == 76U, "Unexpected V5 flash block size");
+_Static_assert(sizeof(ESCparams) == 68U, "Unexpected V6 ESC config size");
+_Static_assert(sizeof(FlashStorageBlock) == 80U, "Unexpected V6 flash block size");
+_Static_assert(offsetof(ESCparams, zc_reserved) == offsetof(ESCparamsV5, zc_reserved),
+               "V6 must keep the V5 field layout and only append fields");
 
 static ESCparams       flash_cached_config;
 static uint8_t         flash_initialized = 0;
@@ -115,6 +155,7 @@ static uint8_t         is_saving         = 0;
 static uint8_t         loaded_legacy     = 0;
 static FlashResultCode erase_flash_page(uint32_t page_addr);
 static uint32_t        calculate_block_crc(FlashStorageBlock* block);
+static uint32_t        calculate_v5_block_crc(FlashStorageBlockV5* block);
 static uint32_t        calculate_v4_block_crc(FlashStorageBlockV4* block);
 static uint32_t        calculate_v3_block_crc(FlashStorageBlockV3* block);
 static uint32_t        calculate_legacy_block_crc(FlashStorageBlockV2* block);
@@ -158,6 +199,14 @@ static uint32_t calculate_v3_block_crc(FlashStorageBlockV3* block)
   return HAL_CRC_Calculate(&hcrc, buffer, sizeof(buffer) / sizeof(buffer[0]));
 }
 
+static uint32_t calculate_v5_block_crc(FlashStorageBlockV5* block)
+{
+  uint32_t buffer[sizeof(FlashStorageBlockV5) / 4U];
+  memcpy(buffer, block, sizeof(FlashStorageBlockV5));
+  ((FlashStorageBlockV5*)buffer)->crc32 = 0U;
+  return HAL_CRC_Calculate(&hcrc, buffer, sizeof(buffer) / sizeof(buffer[0]));
+}
+
 static uint32_t calculate_v4_block_crc(FlashStorageBlockV4* block)
 {
   uint32_t buffer[sizeof(FlashStorageBlockV4) / 4U];
@@ -182,7 +231,7 @@ static void migrate_legacy_config(const ESCparamsV2* legacy, ESCparams* migrated
     migrated->speed_ki = legacy->speed_ki;
     migrated->speed_kd = legacy->speed_kd;
   }
-  migrated->signature = ESC_PARAMS_SIGNATURE_V5;
+  migrated->signature = ESC_PARAMS_SIGNATURE_V6;
   migrated->crc32 = compute_crc32(migrated);
 }
 
@@ -209,7 +258,7 @@ static void migrate_v3_config(const ESCparamsV3* legacy, ESCparams* migrated)
   migrated->startup_final_frequency_millihz =
       legacy->startup_final_frequency_millihz;
   migrated->startup_duration_ms = legacy->startup_duration_ms;
-  migrated->signature = ESC_PARAMS_SIGNATURE_V5;
+  migrated->signature = ESC_PARAMS_SIGNATURE_V6;
   migrated->crc32 = compute_crc32(migrated);
 }
 
@@ -237,7 +286,19 @@ static void migrate_v4_config(const ESCparamsV4* legacy, ESCparams* migrated)
       legacy->startup_final_frequency_millihz;
   migrated->startup_duration_ms = legacy->startup_duration_ms;
   migrated->bemf_blanking_us = legacy->bemf_blanking_us;
-  migrated->signature = ESC_PARAMS_SIGNATURE_V5;
+  migrated->signature = ESC_PARAMS_SIGNATURE_V6;
+  migrated->crc32 = compute_crc32(migrated);
+}
+
+static void migrate_v5_config(const ESCparamsV5* legacy, ESCparams* migrated)
+{
+  set_default_esc_params();
+  *migrated = current_esc_params;
+  /* V6 only appends fields, so every V5 field copies verbatim (not the tail padding). */
+  memcpy(migrated, legacy, offsetof(ESCparamsV5, zc_reserved) + 1U);
+  migrated->speed_ramp_rpm_s = ESC_DEFAULT_SPEED_RAMP_RPM_S;
+  migrated->reserved_v6 = 0U;
+  migrated->signature = ESC_PARAMS_SIGNATURE_V6;
   migrated->crc32 = compute_crc32(migrated);
 }
 
@@ -247,7 +308,7 @@ static uint8_t read_page(uint32_t page_addr, ESCparams* config, uint32_t* counte
   if (page->signature != FLASH_CONFIG_SIGNATURE) return 0U;
 
   uint32_t config_signature = page->config.signature;
-  if (config_signature == ESC_PARAMS_SIGNATURE_V5) {
+  if (config_signature == ESC_PARAMS_SIGNATURE_V6) {
     FlashStorageBlock copy;
     memcpy(&copy, page, sizeof(copy));
     if (calculate_block_crc(&copy) != page->crc32) return 0U;
@@ -259,6 +320,22 @@ static uint8_t read_page(uint32_t page_addr, ESCparams* config, uint32_t* counte
     }
     *counter = page->write_counter;
     *legacy = 0U;
+    return 1U;
+  }
+
+  if (config_signature == ESC_PARAMS_SIGNATURE_V5) {
+    const FlashStorageBlockV5* legacy_page = (const FlashStorageBlockV5*)page_addr;
+    FlashStorageBlockV5 copy;
+    memcpy(&copy, legacy_page, sizeof(copy));
+    if (calculate_v5_block_crc(&copy) != legacy_page->crc32) return 0U;
+    migrate_v5_config(&legacy_page->config, config);
+    if (!zc_channel_map_is_valid(config->zc_channel_u, config->zc_channel_v, config->zc_channel_w)) {
+      config->zc_channel_u = ESC_DEFAULT_ZC_CHANNEL_U;
+      config->zc_channel_v = ESC_DEFAULT_ZC_CHANNEL_V;
+      config->zc_channel_w = ESC_DEFAULT_ZC_CHANNEL_W;
+    }
+    *counter = legacy_page->write_counter;
+    *legacy = 1U;
     return 1U;
   }
 
@@ -385,7 +462,7 @@ FlashResultCode flash_config_init(void)
   if (result == FLASH_RESULT_OK) {
 
     memcpy(&current_esc_params, &flash_cached_config, sizeof(ESCparams));
-    if (current_esc_params.signature != ESC_PARAMS_SIGNATURE_V5) {
+    if (current_esc_params.signature != ESC_PARAMS_SIGNATURE_V6) {
       set_default_esc_params();
       pending_changes = 1;
     }

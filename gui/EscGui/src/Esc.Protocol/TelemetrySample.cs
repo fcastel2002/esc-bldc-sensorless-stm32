@@ -12,6 +12,6 @@ public sealed record TelemetrySample(
     ushort ValidSampleCount = 0,
     sbyte? CommutationStep = null)
 {
-    public double DisplayValue => Parameter == LogParam.Temperature ? RawValue / 100.0 : RawValue;
+    public double DisplayValue => Parameter == LogParam.Duty ? RawValue / 100.0 : RawValue;
     public bool IsValid => (Quality & TelemetryQuality.Valid) != 0;
 }

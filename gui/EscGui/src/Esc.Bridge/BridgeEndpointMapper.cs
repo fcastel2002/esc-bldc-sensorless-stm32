@@ -66,8 +66,8 @@ public static class BridgeEndpointMapper
 
         group.MapGet("/config/{parameter}", async (string parameter, EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.GetConfigAsync(ParseConfigParam(parameter), cancellationToken));
-        group.MapGet("/validation-reference", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
-            await bridge.RefreshValidationReferenceAsync(cancellationToken));
+        group.MapGet("/controller-config", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.RefreshControllerConfigAsync(cancellationToken));
         group.MapPost("/config/{parameter}", async (string parameter, SetConfigRequest request, EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.SetConfigAsync(ParseConfigParam(parameter), request.Value, cancellationToken));
         group.MapPost("/config/{parameter}/reset", async (string parameter, EscBridgeService bridge, CancellationToken cancellationToken) =>
@@ -86,59 +86,14 @@ public static class BridgeEndpointMapper
         group.MapPost("/log/{parameter}/stop", async (string parameter, EscBridgeService bridge, CancellationToken cancellationToken) =>
             await bridge.StopLogAsync(ParseLogParam(parameter), cancellationToken));
 
-        group.MapPost("/hil/start", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
-            await bridge.HilStartAsync(cancellationToken: cancellationToken));
-        group.MapPost("/hil/stop", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
-            await bridge.HilStopAsync(cancellationToken));
-        group.MapPost("/hil/inputs", async (HilInputRequest request, EscBridgeService bridge, CancellationToken cancellationToken) =>
-            await bridge.HilSetInputsAsync(new HilInputs(
-                request.SpeedRpm,
-                request.LoadTorque,
-                request.Flags,
-                request.Enable),
-                cancellationToken));
-        group.MapGet("/hil/outputs", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
-            await bridge.HilGetOutputsAsync(cancellationToken));
-
-        RouteGroupBuilder validation = endpoints.MapGroup("/api/validation");
-        validation.MapGet("/runs", async (ValidationRunService runs, CancellationToken cancellationToken) =>
-            await runs.ListAsync(cancellationToken));
-        validation.MapGet("/runs/{id:guid}", async (Guid id, ValidationRunService runs, CancellationToken cancellationToken) =>
-        {
-            ValidationRunDetail? run = await runs.GetAsync(id, cancellationToken);
-            return run is null ? Results.NotFound() : Results.Ok(run);
-        });
-        validation.MapPost("/import", async (ValidationImportRequest request, ValidationRunService runs, CancellationToken cancellationToken) =>
-        {
-            ValidationRunSummary run = await runs.ImportAsync(request.Path, request.Options ?? new ValidationRunOptions(), cancellationToken);
-            return Results.Created($"/api/validation/runs/{run.Id}", run);
-        });
-        validation.MapPost("/runs/{id:guid}/execute", async (Guid id, ValidationRunService runs, CancellationToken cancellationToken) =>
-            await runs.ExecuteAsync(id, cancellationToken));
-        validation.MapPatch("/runs/{id:guid}/metadata", async (Guid id, ValidationRunMetadataRequest request, ValidationRunService runs, CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                return await runs.UpdateMetadataAsync(id, request.ExperimentName, request.Description, cancellationToken)
-                    ? Results.NoContent()
-                    : Results.NotFound();
-            }
-            catch (ArgumentException exception)
-            {
-                return Results.BadRequest(new { error = exception.Message });
-            }
-        });
-        validation.MapDelete("/runs/{id:guid}", async (Guid id, ValidationRunService runs, CancellationToken cancellationToken) =>
-        {
-            try
-            {
-                return await runs.DeleteAsync(id, cancellationToken) ? Results.NoContent() : Results.NotFound();
-            }
-            catch (InvalidOperationException exception)
-            {
-                return Results.Conflict(new { error = exception.Message });
-            }
-        });
+        group.MapGet("/load-sweep", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.RefreshLoadSweepAsync(cancellationToken));
+        group.MapPost("/load-sweep/start", async (LoadSweepRequest request, EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.StartLoadSweepAsync(request, cancellationToken));
+        group.MapPost("/load-sweep/abort", async (EscBridgeService bridge, CancellationToken cancellationToken) =>
+            await bridge.AbortLoadSweepAsync(cancellationToken));
+        group.MapGet("/load-sweep/csv", (EscBridgeService bridge) =>
+            Results.Text(bridge.LoadSweepCsv(), "text/csv"));
 
         endpoints.Map("/ws/bridge", HandleWebSocketAsync);
         return endpoints;
@@ -179,6 +134,7 @@ public static class BridgeEndpointMapper
             "MAX_SPEED" => ConfigParam.MaxSpeed,
             "MIN_SPEED" => ConfigParam.MinSpeed,
             "ZC_MAP" => ConfigParam.ZcMap,
+            "SPEED_RAMP" or "RAMP" => ConfigParam.SpeedRamp,
             "ALL" => ConfigParam.All,
             _ => throw new BadHttpRequestException($"Unknown config parameter '{parameter}'.")
         };
@@ -193,11 +149,9 @@ public static class BridgeEndpointMapper
 
         return parameter.ToUpperInvariant() switch
         {
-            "CURRENT_U" or "IU" => LogParam.CurrentU,
-            "CURRENT_V" or "IV" => LogParam.CurrentV,
-            "BEMF" or "BEMF_PERIOD" => LogParam.BemfPeriod,
             "BUS_VOLTAGE" or "VBUS" or "VOLTAGE" => LogParam.BusVoltage,
             "BUS_CURRENT" or "IBUS" or "CURRENT" => LogParam.BusCurrent,
+            "DUTY" => LogParam.Duty,
             _ => throw new BadHttpRequestException($"Unknown telemetry parameter '{parameter}'.")
         };
     }
@@ -209,12 +163,4 @@ public static class BridgeEndpointMapper
     public sealed record ZcAutoDetectRequest(double? DutyPercent);
     public sealed record SetConfigRequest(double Value);
     public sealed record LogRateRequest(ushort RateMs);
-    public sealed record HilInputRequest(
-        ushort SpeedRpm,
-        ushort ZeroCrossingPeriod,
-        short LoadTorque,
-        byte Flags,
-        bool Enable);
-    public sealed record ValidationImportRequest(string Path, ValidationRunOptions? Options);
-    public sealed record ValidationRunMetadataRequest(string ExperimentName, string? Description);
 }

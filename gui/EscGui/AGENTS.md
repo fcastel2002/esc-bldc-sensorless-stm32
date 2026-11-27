@@ -29,13 +29,12 @@
 ## Bridge Invariants
 
 - Only `EscBridgeService` owns HID access.
-- UI, HTTP endpoints, WebSocket, telemetry worker, and UDP/Simulink paths must go through the bridge.
+- UI, HTTP endpoints, WebSocket and the background worker must go through the bridge.
 - Do not access `HidSharpEscTransport` directly outside the bridge ownership boundary.
 - HID I/O in the bridge is serialized by `_ioLock`.
 - Bridge state and snapshot updates use `_stateGate`.
 - If a bridge change affects observable UI state, update `Snapshot` and call `Notify()` so Blazor subscribers receive `SnapshotChanged`.
-- `EscBridgeWorker` scans devices, reads at most one telemetry frame, and refreshes status on a 500 ms loop.
-- Telemetry is not an independent high-rate stream.
+- `EscBridgeWorker` scans devices and refreshes status every 500 ms, pumps telemetry frames every 10 ms, and every 350 ms renews manual outputs and follows an active load sweep.
 - `EmergencyStopAsync()` is intentionally allowed regardless of control mode.
 
 ## UI And Control Notes
@@ -51,16 +50,15 @@
 ## Control Modes
 
 - `GuiControl` permits GUI control and configuration.
-- `SimulinkControl` blocks GUI control except ESTOP and permits UDP/Simulink control.
-- `MonitorOnly` blocks control paths except ESTOP.
+- `MonitorOnly` blocks control paths except ESTOP and load-sweep ABORT.
+- The HIL/PIL UDP bridge, validation runs and `SimulinkControl` mode were removed in spec 002.
 
-## HIL / UDP
+## Load Curves
 
-- UDP bridge listens on `127.0.0.1:5055` in `HilUdpBridgeService`.
-- HIL input CSVs include `seq,speed_rpm,enable`, `PIL,speed_rpm,enable`, `PIL,seq,speed_rpm,enable`, and legacy `seq,speed_rpm,reserved,load_torque,flags,enable`.
-- High-rate UDP packets are latest-value signals, not FIFO.
-- Coalesced `SETPOINT`/HIL inputs keep only the newest value while HID is busy.
-- `ESTOP` has priority.
+- `/curvas` (`LoadCurves.razor`) starts/aborts `LOAD_SWEEP`, overlays the current sweep with saved and imported curves (`SaveCurrentLoadCurve`, `ImportLoadCurveCsv`), selects one as tare (`SetLoadCurveTare`) and exports CSV.
+- The bridge keeps the points copied from the MCU table (`LoadSweepSnapshot.Points`); `StartLoadSweepAsync` clears them. Saved curves and the tare never reach the MCU.
+- Load current is `(I_bus - I_bus,tare) / d` at equal speed (`LoadCurveMetric.LoadCurrentVsTare`); never divide the absolute bus current by the duty.
+- `LoadCurveAnalysis`, `LoadSweepCsvWriter` and `LoadSweepCsvReader` are pure helpers; keep them free of bridge state.
 
 ## Useful Files
 
@@ -68,9 +66,9 @@
 - Bridge service: `src/Esc.Bridge/EscBridgeService.cs`
 - HTTP endpoints: `src/Esc.Bridge/BridgeEndpointMapper.cs`
 - Main UI: `src/Esc.Web/Components/Pages/Home.razor`
-- PIL monitor page: `src/Esc.Web/Components/Pages/PilFrames.razor`
+- Load curves page: `src/Esc.Web/Components/Pages/LoadCurves.razor`
 - Protocol constants and serializers: `src/Esc.Protocol/CommConstants.cs`, `src/Esc.Protocol/EscProtocol.cs`
-- HIL models and UDP: `src/Esc.Protocol/HilModels.cs`, `src/Esc.Bridge/HilUdpBridgeService.cs`
+- Load sweep models and helpers: `src/Esc.Protocol/LoadSweepModels.cs`, `src/Esc.Bridge/LoadCurveAnalysis.cs`, `src/Esc.Bridge/LoadSweepCsvWriter.cs`
 - Useful tests: `tests/Esc.Tests/ProtocolTests.cs`, `tests/Esc.Tests/BridgeTests.cs`
 
 ## Protocol Change Checklist

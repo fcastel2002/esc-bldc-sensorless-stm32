@@ -106,5 +106,17 @@
     "step": 50,
     "unit": "rpm",
     "defaultValue": 5400
+  },
+  {
+    "id": "speed_ramp",
+    "label": "Rampa de consigna",
+    "kind": "number",
+    "command": "set_config",
+    "param": "SpeedRamp",
+    "min": 0,
+    "max": 20000,
+    "step": 50,
+    "unit": "rpm/s · 0 = sin limite",
+    "defaultValue": 0
   }
 ]

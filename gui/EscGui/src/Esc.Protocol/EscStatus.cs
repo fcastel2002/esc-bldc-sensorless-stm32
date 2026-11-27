@@ -9,7 +9,14 @@ public sealed record EscStatus(
     ushort SpeedSetpointRpm,
     ushort ActualSpeedRpm,
     ushort MaxPwm,
-    PowerMonitorReading? Power = null);
+    PowerMonitorReading? Power = null,
+    ushort? ReferenceRpm = null,
+    ushort? DutyE4 = null,
+    bool LoadSweepActive = false)
+{
+    /// <summary>Commanded PWM duty in percent (GET_STATUS bytes 28..29), when reported.</summary>
+    public double? DutyPercent => DutyE4 is { } duty ? duty / 100.0 : null;
+}
 
 [Flags]
 public enum PowerMonitorFlags : byte

@@ -1,6 +1,6 @@
 # Repository Map
 
-This repository is a mixed embedded firmware and local GUI project. Firmware and GUI share a fixed binary protocol, while PIL/HIL assets support integration and simulation.
+This repository is a mixed embedded firmware and local GUI project. Firmware and GUI share a fixed binary protocol, while Simulink assets support offline modelling of the stirrer.
 
 ## Roots
 
@@ -11,7 +11,7 @@ This repository is a mixed embedded firmware and local GUI project. Firmware and
 |-- .agents/               Tool-neutral agent support conventions
 |-- docs/                  Project documentation
 |-- specs/                 SSD feature specs and templates
-|-- simulacion_agitador/   Simulink/PIL/HIL helper scripts and models
+|-- simulacion_agitador/   Simulink models of the stirrer (offline)
 |-- INFORME/               Paper/report and hardware documentation
 ```
 
@@ -46,7 +46,7 @@ High-value files:
 
 The protocol is shared across firmware and GUI. Changes to opcodes, frame payloads, constants, CRC behavior, config semantics, or telemetry fields must be treated as cross-project changes.
 
-PIL/HIL and Simulink integration are shared integration support, not a third primary application root.
+Simulink modelling is offline support, not a third primary application root. The live PIL/HIL path to the MCU was removed in spec 002.
 
 ## Generated Artifacts
 

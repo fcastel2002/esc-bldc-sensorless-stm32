@@ -1,0 +1,226 @@
+.startup-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    padding: 12px 15px;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.startup-summary p {
+    margin: 0;
+    max-width: 70ch;
+}
+
+.startup-summary span {
+    color: var(--text);
+    font-family: var(--mono);
+    text-align: right;
+}
+
+.curves-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+    gap: 12px;
+}
+
+@media (max-width: 1100px) {
+    .curves-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+.sweep-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+}
+
+.sweep-form label {
+    display: grid;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.sweep-form label small {
+    color: var(--text-faint);
+    font-family: var(--mono);
+}
+
+.sweep-form label.checkbox,
+.curve-toolbar label.checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.sweep-actions,
+.curve-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.curve-toolbar label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    font-size: 0.78rem;
+}
+
+.curve-legend {
+    display: flex;
+    gap: 16px;
+    color: var(--text-muted);
+    font-size: 0.76rem;
+    margin: 4px 0 8px;
+}
+
+.legend-line {
+    display: inline-block;
+    width: 18px;
+    height: 0;
+    margin-right: 6px;
+    vertical-align: middle;
+    border-top: 2px solid var(--accent);
+}
+
+
+.curve-plot {
+    width: 100%;
+    height: auto;
+    display: block;
+    background: var(--plot-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+}
+
+.curve-plot .plot-area {
+    fill: none;
+    stroke: var(--plot-grid-major);
+}
+
+.curve-plot .grid {
+    stroke: var(--plot-grid);
+    stroke-width: 1;
+}
+
+/* Tick labels are rendered as MarkupString (no scope attribute), hence ::deep. */
+.curve-plot ::deep .tick,
+.curve-plot .axis-title {
+    fill: var(--plot-axis-text);
+    font-family: var(--mono);
+    font-size: 11px;
+}
+
+.curve-plot .series {
+    fill: none;
+    stroke-width: 2;
+}
+
+
+.points-table-wrap {
+    overflow-x: auto;
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.points-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+}
+
+.points-table th,
+.points-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: right;
+    white-space: nowrap;
+}
+
+.points-table th {
+    position: sticky;
+    top: 0;
+    background: var(--surface);
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.points-table tr.flagged td {
+    color: var(--amber);
+}
+
+.curve-plot .zero {
+    stroke: var(--plot-grid-major);
+    stroke-dasharray: 4 3;
+}
+
+.curves-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.78rem;
+}
+
+.curves-table th,
+.curves-table td {
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+}
+
+.curves-table th {
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.row-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+}
+
+.swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+}
+
+.curve-name {
+    min-width: 220px;
+}
+
+.file-button {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text);
+}
+
+.file-button ::deep input[type="file"] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+}
+
+button.link {
+    background: none;
+    border: none;
+    color: var(--accent);
+    padding: 0;
+    cursor: pointer;
+}

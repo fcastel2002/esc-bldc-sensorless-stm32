@@ -1,5 +1,8 @@
 # Walkthrough del ESC Bridge en C#
 
+> **Nota (spec 002).** Las secciones sobre HIL/PIL, el puente UDP con Simulink (`HilUdpBridgeService`), el modo `SimulinkControl`, las corridas de validacion y los canales de corriente `IU/IV`/BEMF describen codigo que se elimino. El resto del recorrido (transporte HID, `_ioLock`, snapshots, worker) sigue vigente. Para el estado actual ver `GUI_AGENT_CONTEXT.md` y `firmware/COMM_PROTOCOL.md`.
+
+
 Esta guía explica cómo funciona el Bridge de la GUI, asumiendo que no tenés experiencia previa en C#.
 
 La idea no es solo decir "qué archivo hace qué", sino recorrer el código como si siguiéramos un paquete desde la GUI o Simulink hasta el microcontrolador.

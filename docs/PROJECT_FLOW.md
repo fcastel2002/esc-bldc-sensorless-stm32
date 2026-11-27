@@ -173,8 +173,18 @@ En `CLOSEDLOOP`, TIM4 CH1 dispara [`HAL_TIM_OC_DelayElapsedCallback()`](../firmw
 
 `KD` permanece bloqueado en cero en algoritmo v2. Al entrar en `CLOSEDLOOP`,
 el integrador se precarga para conservar el PWM de handoff. Si la medicion
-fisica aun no es valida, el PI mantiene esa salida; en HIL espera la primera
-entrada habilitada.
+fisica aun no es valida, el PI mantiene esa salida.
+
+La consigna que ve el PI pasa por un limitador de pendiente (`SPEED_RAMP`, rpm/s):
+en cada tick de 2 ms la referencia avanza hacia `speed_setpoint_rpm` como mucho
+`SPEED_RAMP * 0.002` rpm. Con `SPEED_RAMP = 0` (default) la referencia salta al
+objetivo como antes. Con rampa activa, al entrar en `CLOSEDLOOP` la referencia
+arranca en la velocidad medida.
+
+El barrido de curvas de carga (`load_sweep.c`, opcode `LOAD_SWEEP`) corre desde el
+loop principal: mueve el objetivo en escalera o rampa, promedia rpm, duty y V/I del
+INA219 por ventana y guarda hasta 128 puntos en RAM para que la GUI los lea. El
+firmware solo guarda magnitudes medidas; la comparacion contra una tara la hace la GUI.
 
 El motor se monitorea con [`check_motor_status()`](../firmware/Core/Src/motor_control.c#L217). Si en `RUNNING` o `CLOSEDLOOP` no llegan cruces por cero por mas de `TIMEOUT_MOTOR_STALL_MS`, se marca `motor_stalled`; la maquina de estados responde reintentando [`foc_startup()`](../firmware/Core/Src/startup.c#L94).
 
@@ -207,7 +217,6 @@ Una ejecucion normal queda asi:
 main()
   -> inicializa HAL, clocks, GPIO, timers, CRC
   -> habilita captura TIM2 para BEMF
-  -> calibra ADC1/ADC2 y arma corriente IU/IV por TIM1_CH4
   -> detect_motor()
   -> while:
        handleState()
@@ -250,4 +259,4 @@ Cruces por cero
 - El arranque llamado `foc_startup()` es senoidal open-loop, no FOC completo con lazo de corriente.
 - El pasaje a lazo cerrado depende de `consistent_zero_crossing`.
 - El control PI actua ajustando duty, no cambiando directamente la secuencia de conmutacion.
-- Temperatura y corriente en telemetria todavia son placeholders.
+- No hay sensado de corriente por fase ni de temperatura (se eliminaron en la spec 002). La unica medicion de corriente es el INA219 del bus DC.
