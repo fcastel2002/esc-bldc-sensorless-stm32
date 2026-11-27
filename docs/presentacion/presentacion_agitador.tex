@@ -1,5 +1,5 @@
 % =====================================================================
-% Consulta de avance - Agitador magnético con motor BLDC sensorless
+% Agitador magnético con motor BLDC sensorless - presentación de la mesa
 % Compilar desde esta carpeta (dos pasadas para el total de slides):
 %   pdflatex presentacion_agitador.tex
 % Las figuras leen datos/aire.dat y datos/agua.dat. Para regenerarlos desde
@@ -13,6 +13,7 @@
 \usepackage[spanish,es-noshorthands]{babel}
 \usepackage{lmodern}
 \usepackage{amsmath,amssymb}
+\usepackage{booktabs}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,calc}
 \usepackage{pgfplots}
@@ -49,9 +50,6 @@
   \hfill{\color{gris}\tiny\insertframenumber/\inserttotalframenumber}\hspace{0.75cm}}\vspace{0.28cm}}
 
 \newcommand{\titulito}[1]{{\color{azul}\small\bfseries #1}\par\vspace{0.3em}}
-\newcommand{\nro}[1]{\tikz[baseline=(n.base)]\node[circle, fill=acento, text=white,
-  font=\tiny\bfseries, inner sep=0pt, minimum size=1.15em] (n) {#1};}
-\newcommand{\rta}{{\color{acento}$\Rightarrow$}\hspace{0.3em}}
 
 \pgfplotsset{
   estilo/.style={
@@ -72,8 +70,6 @@
 
 % =====================================================================
 % 1. Título
-% Guion: el agitador tiene dos zonas donde el control "no ve": el rotor a
-% baja velocidad y la píldora siempre. De eso trata el avance.
 % =====================================================================
 \begin{frame}[plain,c]
   \begin{columns}[c]
@@ -81,13 +77,11 @@
       {\color{acento}\scriptsize\bfseries CONTROL Y SISTEMAS \textperiodcentered{} TRABAJO FINAL}\par
       \vspace{0.7em}
       {\color{azul}\LARGE\bfseries Agitador magnético con\\[0.1em] motor BLDC sensorless\par}
-      \vspace{0.8em}
-      {\normalsize Dos no linealidades que limitan el control:\\ la zona ciega y el desenganche de la píldora\par}
       \vspace{1.6em}
       {\small\bfseries Francisco Castel}\par
       {\small Facultad de Ingeniería \textperiodcentered{} Universidad Nacional de Cuyo}\par
       \vspace{0.4em}
-      {\small\color{gris}Consulta de avance \textperiodcentered{} 27 de noviembre de 2026}\par
+      {\small\color{gris}15 de diciembre de 2026}\par
     \end{column}
     \begin{column}{0.42\textwidth}
       \centering
@@ -118,39 +112,39 @@
         \node[font=\tiny, align=center] at (0,0.55) {motor BLDC\\(disco rígido)};
         % rótulos
         \draw[gris] (0.8,2.05) -- (1.9,2.45);
-        \node[font=\tiny, anchor=west, align=left] at (1.9,2.45) {píldora: $\theta_2,\ \omega_2$\\{\color{rojo}no se mide}};
+        \node[font=\tiny, anchor=west, align=left] at (1.9,2.45) {píldora: $\omega_2$\\{\color{rojo}no se mide}};
         \draw[gris] (0.85,1.37) -- (1.9,1.05);
-        \node[font=\tiny, anchor=west, align=left] at (1.9,1.05) {imán: $\theta_1,\ \omega_1$\\{\color{acento!70!black}se mide (BEMF)}};
-        \node[font=\tiny, anchor=west, text=azul] at (1.9,1.75) {$\delta=\theta_1-\theta_2$};
+        \node[font=\tiny, anchor=west, align=left] at (1.9,1.05) {imán: $\omega_1$\\{\color{acento!70!black}se mide (BEMF)}};
       \end{tikzpicture}
     \end{column}
   \end{columns}
 \end{frame}
 
 % =====================================================================
-% 2. Avances
-% Guion: qué anda hoy y qué preguntas del anteproyecto ya tienen respuesta.
-% La medición nueva que cambia todo es la corriente de bus.
+% 2. Sistema
+% Guion: recorrer el diagrama. Arranque a lazo abierto, después six-step con
+% cruces por cero y PI de velocidad. El INA219 mide la corriente de bus.
 % =====================================================================
-\begin{frame}{Qué está hecho y qué preguntas del anteproyecto ya tienen respuesta}
+\begin{frame}{Sistema implementado}
+  \vspace{0.8em}
   \begin{columns}[T]
-    \begin{column}{0.56\textwidth}
+    \begin{column}{0.58\textwidth}
       \centering
-      \begin{tikzpicture}[
+      \begin{tikzpicture}[baseline=(current bounding box.north),
           bloque/.style={draw=azul, fill=azul!5, rounded corners=2pt, align=center,
             font=\scriptsize, minimum height=0.85cm, inner sep=2.5pt},
           sensor/.style={draw=acento, fill=acento!7, rounded corners=2pt, align=center,
             font=\scriptsize, minimum height=0.65cm, inner sep=2.5pt},
           flecha/.style={-{Stealth[length=4pt]}, thick, gris!90!black},
           lbl/.style={font=\tiny, text=gris!90!black}]
-        \node[bloque, minimum width=2.0cm] (mcu) at (0,0) {\textbf{STM32F103}\\PI 2 ms \textperiodcentered{} six-step\\barrido de carga};
+        \node[bloque, minimum width=2.0cm] (mcu) at (0,0) {\textbf{STM32F103}};
         \node[bloque, minimum width=1.2cm] (puente) at (2.55,0) {\textbf{L298N}};
         \node[bloque, minimum width=1.4cm] (motor) at (4.45,0) {\textbf{Motor}\\BLDC};
-        \node[bloque, minimum width=1.35cm, draw=rojo, fill=rojo!5] (pildora) at (6.35,0) {\textbf{Píldora}\\en el vaso};
+        \node[bloque, minimum width=1.35cm, draw=rojo, fill=rojo!5] (pildora) at (6.35,0) {\textbf{Píldora}};
         \node[sensor] (lm) at (2.55,-1.2) {LM339: cruces por cero};
-        \node[sensor] (ina) at (3.0,1.2) {INA219: $V_{bus}$, $I_{bus}$ de la fuente};
+        \node[sensor] (ina) at (3.0,1.2) {INA219: $V_{bus}$, $I_{bus}$};
         \node[bloque, minimum width=1.5cm, minimum height=0.65cm] (gui) at (-0.35,1.2) {\textbf{GUI} (PC)};
-        \draw[flecha] (mcu) -- node[lbl, above] {PWM} node[lbl, below] {34 kHz} (puente);
+        \draw[flecha] (mcu) -- node[lbl, above] {PWM} (puente);
         \draw[flecha] (puente) -- node[lbl, above] {3 fases} (motor);
         \draw[flecha, rojo, dashed] (motor) -- node[lbl, above, text=rojo] {imán} (pildora);
         \draw[flecha] (motor.south) |- (lm.east);
@@ -160,55 +154,33 @@
         \draw[{Stealth[length=4pt]}-{Stealth[length=4pt]}, thick, gris!90!black]
           (gui.south) -- node[lbl, left] {USB} (gui.south |- mcu.north);
       \end{tikzpicture}
-
-      \vspace{0.6em}
-      \raggedright
-      \titulito{Hecho}
-      \scriptsize
-      \begin{itemize}\setlength{\itemsep}{0.1em}
-        \item Arranque SPWM a lazo abierto y paso a six-step por cruces por cero.
-        \item PI de velocidad cada 2 ms, con rampa de consigna.
-        \item Tensión y corriente de bus con el INA219.
-        \item Firmware simplificado, sin HIL/PIL ni shunts: flash 79,6 \% $\to$ 76,2 \%.
-        \item Barrido de carga en el firmware y página de curvas en la GUI.
-        \item Curvas en aire y en agua: la píldora se suelta cerca de 2000 rpm.
-      \end{itemize}
     \end{column}
-    \begin{column}{0.42\textwidth}
-      \titulito{Del anteproyecto a hoy}
-      \footnotesize
-      \textbf{¿Alcanza con medir la velocidad del motor?}\\
-      \rta Para regular, sí. Para saber si la píldora gira, no: si se suelta, el PI sigue en consigna.
-
-      \vspace{0.6em}
-      \textbf{¿Corriente de fase o de bus?}\\
-      \rta De bus: el INA219 alcanza para estimar la carga y ver el desenganche.
-
-      \vspace{0.6em}
-      \textbf{¿Conmutación actual o basada en corriente?}\\
-      \rta Six-step por cruces por cero, sin sensado de fase.
-
-      \vspace{0.6em}
-      \textbf{¿Qué se valida con ensayos?}\\
-      \rta Las curvas de carga, medidas en banco. De ellas salen los parámetros del modelo.
+    \begin{column}{0.38\textwidth}
+      \small
+      \begin{itemize}\setlength{\itemsep}{0.7em}
+        \item Arranque SPWM a lazo abierto
+        \item Six-step por cruces por cero
+        \item PI de velocidad cada 2 ms
+        \item Medición de corriente de bus
+        \item Barrido de carga automático
+      \end{itemize}
     \end{column}
   \end{columns}
 \end{frame}
 
 % =====================================================================
 % 3. No linealidad 1: zona ciega
-% Guion: la BEMF es proporcional a la velocidad; a baja velocidad el
-% comparador no ve cruces. No es ruido: la medición desaparece. Por eso el
-% arranque es a lazo abierto, y ahí el rotor puede perder el paso.
-% Los valores de la rampa SPWM son los de hard_config.h.
+% Guion: la BEMF es proporcional a la velocidad. Por debajo de unas
+% 300-400 rpm el comparador no detecta cruces, así que el arranque es a lazo
+% abierto y el rotor puede perder el paso.
 % =====================================================================
-\begin{frame}{No linealidad 1: a baja velocidad no hay medición}
+\begin{frame}{Zona ciega a baja velocidad}
   \begin{columns}[T]
-    \begin{column}{0.47\textwidth}
+    \begin{column}{0.52\textwidth}
       \vspace{0.6em}
       \begin{tikzpicture}[baseline=(current bounding box.north)]
-        \begin{axis}[estilo, height=5.2cm, xmin=0, xmax=1500, ymin=0, ymax=1.3,
-            xlabel={$n$ [rpm]}, ylabel={BEMF por fase, $e = k_e\,\omega_1$ [V]},
+        \begin{axis}[estilo, height=5.4cm, xmin=0, xmax=1500, ymin=0, ymax=1.3,
+            xlabel={$n$ [rpm]}, ylabel={BEMF por fase [V]},
             xtick={0,1000,1500}, ytick={0,0.5,1},
             extra x ticks={350}, extra x tick labels={$n_{ciego}$},
             extra x tick style={tick label style={text=rojo}, grid=none}, clip=false]
@@ -216,27 +188,20 @@
           \fill[rojo!7] (axis cs:300,0) rectangle (axis cs:400,1.3);
           \fill[gris!12] (axis cs:0,0) rectangle (axis cs:1500,0.29);
           \draw[rojo, dashed, thick] (axis cs:0,0.29) -- (axis cs:1500,0.29)
-            node[pos=0.74, above, font=\tiny, text=rojo] {umbral efectivo (LM339 + ruido PWM)};
+            node[pos=0.8, above, font=\tiny, text=rojo] {umbral del comparador};
           \addplot[azul, very thick, domain=0:1500, samples=2] {0.000827*x};
           \node[font=\tiny\bfseries, text=rojo, rotate=90] at (axis cs:150,0.85) {zona ciega};
-          \node[font=\tiny, align=center, text=gris!80!black] at (axis cs:960,1.15) {cruces por cero válidos\\$\Rightarrow$ lazo cerrado};
-          \node[font=\tiny, anchor=west, text=azul] at (axis cs:1060,0.7) {$k_e = K/2$, $K$ medido};
         \end{axis}
       \end{tikzpicture}
     \end{column}
-    \begin{column}{0.51\textwidth}
-      \small
-      \begin{itemize}\setlength{\itemsep}{0.6em}
-        \item La BEMF crece con la velocidad: $e = k_e\,\omega_1$. A baja velocidad queda
-          tapada por el umbral y el ruido del comparador.
-        \item Por debajo de $n_{ciego} \approx 300$--$400$ rpm no hay cruces por cero:
-          \alert{la medición desaparece}. No es un error chico: es pérdida de observabilidad.
-        \item Por eso el arranque es \textbf{a lazo abierto}: campo rotante SPWM
-          (por defecto, $f_e$ de 2,1 a 9,3 Hz en 3 s). El rotor sigue al campo como un motor
-          síncrono, $T \propto \sin(\theta_s - p\,\theta_1)$: con mucha carga o aceleración
-          \alert{pierde el paso} y el firmware corta y reintenta.
-        \item Por encima de $n_{ciego}$ la medición llega con un retardo $\tau \propto 1/n$:
-          a baja velocidad el lazo tiene que ser más lento.
+    \begin{column}{0.44\textwidth}
+      \vspace{1.6em}
+      \[ e = k_e\,\omega_1 \]
+      \vspace{0.6em}
+      \begin{itemize}\setlength{\itemsep}{0.8em}
+        \item Bajo $n_{ciego} \approx 300$--$400$ rpm no hay cruces por cero
+        \item Arranque a lazo abierto
+        \item Con mucha carga el rotor pierde el paso
       \end{itemize}
     \end{column}
   \end{columns}
@@ -244,178 +209,139 @@
 
 % =====================================================================
 % 4. No linealidad 2: acople magnético
-% Guion: el acople es un resorte que transmite como máximo T_max. Si la carga
-% lo supera no hay equilibrio y la píldora patina. Es el mismo seno que el
-% arranque. El PI no lo ve; lo delata la corriente de bus (medido en agua).
+% Guion: el acople transmite como máximo T_max. Si la carga lo supera, la
+% píldora patina. El PI regula el motor y no lo detecta; se ve en la
+% corriente de bus, que cae por debajo de la tara.
 % =====================================================================
-\begin{frame}{No linealidad 2: el acople magnético transmite como máximo $T_{\max}$}
+\begin{frame}{Desenganche de la píldora}
   \begin{columns}[T]
     \begin{column}{0.44\textwidth}
       \begin{tikzpicture}[baseline=(current bounding box.north)]
-        \begin{axis}[estilo, height=4.1cm, xmin=0, xmax=3.35, ymin=0, ymax=1.32,
-            xlabel={desfase $N_a\,\delta$}, ylabel={torque transmitido $T_c$},
+        \begin{axis}[estilo, height=4.4cm, xmin=0, xmax=3.35, ymin=0, ymax=1.32,
+            xlabel={desfase $N_a\,\delta$}, ylabel={torque transmitido},
             xtick={0,1.5708,3.1416}, xticklabels={$0$,$\pi/2$,$\pi$},
-            ytick={0.55,1}, yticklabels={$T_{L,1}$,$T_{\max}$}, clip=false]
+            ytick={0.55,1}, yticklabels={$T_L$,$T_{\max}$}, clip=false]
           \addplot[azul, very thick, domain=0:3.1416, samples=80] {sin(deg(x))};
           \draw[acento, thick, dashed] (axis cs:0,0.55) -- (axis cs:3.35,0.55);
-          \draw[rojo, thick, dashed] (axis cs:0,1.15) -- (axis cs:3.35,1.15)
-            node[pos=0.5, above, font=\tiny, text=rojo] {$T_{L,2} > T_{\max}$: no hay equilibrio, patina};
           \node[circle, fill=acento, inner sep=1.7pt] at (axis cs:0.5824,0.55) {};
-          \node[circle, draw=acento, fill=white, inner sep=1.5pt] at (axis cs:2.5592,0.55) {};
-          \node[font=\tiny, text=acento!70!black, below right] at (axis cs:0.6,0.53) {estable};
-          \node[font=\tiny, text=gris, below left] at (axis cs:2.55,0.53) {inestable};
         \end{axis}
       \end{tikzpicture}
 
+      \vspace{0.4em}
       \footnotesize
-      \[
-        J_2\,\dot\omega_2 = T_{\max}\sin(N_a\delta) - T_{L,tot}(\omega_2),
-        \qquad \dot\delta = \omega_1 - \omega_2
-      \]
-      Hay equilibrio sólo si $T_{L,tot}(\omega) \le T_{\max}$. Cerca del límite, la rigidez
-      del acople, $K_{eff} = N_a\sqrt{T_{\max}^2 - T_{L,tot}^2}$, tiende a cero.
+      \[ J_2\,\dot\omega_2 = T_{\max}\sin(N_a\delta) - T_L(\omega_2) \]
+      \centering Equilibrio sólo si $T_L \le T_{\max}$
     \end{column}
     \begin{column}{0.54\textwidth}
       \begin{tikzpicture}[baseline=(current bounding box.north)]
-        \begin{axis}[estilo, height=4.1cm, xmin=900, xmax=3100, ymin=70, ymax=116,
+        \begin{axis}[estilo, height=4.4cm, xmin=900, xmax=3100, ymin=70, ymax=116,
             xlabel={$n$ [rpm]}, ylabel={$I_{bus}$ [mA]}]
           \fill[rojo!9] (axis cs:2000,70) rectangle (axis cs:2250,116);
           \addplot[gris, thick, mark=o, mark size=1.4pt] table[x=rpm, y=ibus] {datos/aire.dat};
           \addplot[azul, thick, mark=*, mark size=1.6pt, discard if not={acoplado}{1}] table[x=rpm, y=ibus] {datos/agua.dat};
           \addplot[rojo, thick, mark=*, mark size=1.6pt, discard if not={acoplado}{0}] table[x=rpm, y=ibus] {datos/agua.dat};
           \node[font=\tiny, text=azul, anchor=south] at (axis cs:1560,105) {agua, enganchada};
-          \node[font=\tiny, text=gris!90!black, anchor=north west] at (axis cs:1250,78) {tara (vaso sin agua)};
+          \node[font=\tiny, text=gris!90!black, anchor=north west] at (axis cs:1250,78) {tara (vaso vacío)};
           \node[font=\tiny, text=rojo, anchor=north] at (axis cs:2700,86) {agua, suelta};
-          \node[font=\tiny, text=rojo, rotate=90] at (axis cs:2125,104) {se suelta};
         \end{axis}
       \end{tikzpicture}
 
+      \vspace{0.4em}
       \footnotesize
-      \begin{itemize}\setlength{\itemsep}{0.25em}
-        \item \textbf{Mismo seno que en el arranque}: son dos acoples síncronos en serie
-          (campo $\to$ rotor e imán $\to$ píldora) y en ninguno se mide el ángulo.
-        \item \textbf{El PI no lo ve en régimen}: regula $\omega_1$ y vuelve a la consigna.
-          Lo delatan $I_{bus}$, que cae por debajo de la tara, y la dispersión de velocidad
-          (de 5--9 a 24--38 rpm).
-      \end{itemize}
+      \centering El PI mide sólo el motor: el desenganche se ve en $I_{bus}$
     \end{column}
   \end{columns}
 \end{frame}
 
 % =====================================================================
-% 5. Propuesta: curvas de carga
-% Guion: método en cuatro pasos y lo que ya muestra la curva de agua. Cerrar
-% con los ensayos y cuáles se hacen antes de la mesa.
+% 5. Curvas de carga
+% Guion: barrido automático, tara con el vaso vacío y la diferencia de
+% corriente a igual velocidad da el torque de carga. Nombrar los ensayos que
+% faltan.
 % =====================================================================
-\begin{frame}{Propuesta: curvas de carga por fluido y margen al desenganche}
+\begin{frame}{Curvas de carga}
   \begin{columns}[T]
-    \begin{column}{0.53\textwidth}
-      \titulito{Metodología}
-      \footnotesize
-      \begin{enumerate}\setlength{\itemsep}{0.45em}
-        \item \textbf{Barrido en escalera} (firmware): media y dispersión de $n$, $d$,
-          $V_{bus}$ e $I_{bus}$ en cada escalón.
-        \item \textbf{Tara} con el vaso sin líquido. Como $I_{bus} \approx I_0 + d\,I_{fase}$
-          (tara: $50 + 106\,d$ mA), restarla a igual velocidad cancela el consumo propio $I_0$.
-        \item \textbf{Carga del fluido}: $\Delta T = K_t\,(I_{bus} - I_{bus,tara})/d$, con
-          $K_t = 0{,}0158$ N$\cdot$m/A, la pendiente de $d\,V_{bus}$ contra $\omega$ en la tara.
-        \item \textbf{Límites}: ajustar $T_L(\omega)$ y operar con margen $m$:
-          $T_{L,tot}(\omega) \le m\,T_{\max}$ y rampa
-          $\alpha \le \bigl(m\,T_{\max} - T_{L,tot}(\omega)\bigr)/J_{2,eff}$.
+    \begin{column}{0.48\textwidth}
+      \titulito{Método}
+      \small
+      \begin{enumerate}\setlength{\itemsep}{0.6em}
+        \item Barrido de velocidad en escalera
+        \item Tara con el vaso vacío
+        \item Torque de carga a igual velocidad:
+          \[ \Delta T = K_t\,\frac{I_{bus} - I_{tara}}{d} \]
+        \item Velocidad de desenganche $n_{dec}$
       \end{enumerate}
     \end{column}
-    \begin{column}{0.45\textwidth}
+    \begin{column}{0.48\textwidth}
       \begin{tikzpicture}[baseline=(current bounding box.north)]
-        \begin{axis}[estilo, height=3.7cm, xmin=1100, xmax=2900, ymin=-0.75, ymax=1.15,
+        \begin{axis}[estilo, height=4.4cm, xmin=1100, xmax=2900, ymin=-0.75, ymax=1.15,
             xlabel={$n$ [rpm]}, ylabel={$\Delta T$ [mN$\cdot$m]}, ytick={-0.5,0,0.5,1}]
           \fill[rojo!9] (axis cs:2000,-0.75) rectangle (axis cs:2250,1.15);
-          \draw[gris, thick] (axis cs:1100,0) -- (axis cs:2900,0)
-            node[pos=0.93, above, font=\tiny, text=gris] {tara};
+          \draw[gris, thick] (axis cs:1100,0) -- (axis cs:2900,0);
           \addplot[azul, thick, mark=*, mark size=1.6pt, discard if not={acoplado}{1}] table[x=rpm, y=dT] {datos/agua.dat};
           \addplot[rojo, thick, mark=*, mark size=1.6pt, discard if not={acoplado}{0}] table[x=rpm, y=dT] {datos/agua.dat};
-          \node[font=\tiny, text=azul, anchor=north] at (axis cs:1640,0.66) {enganchada: $+0{,}75$ a $+0{,}87$};
+          \node[font=\tiny, text=azul, anchor=north] at (axis cs:1640,0.62) {enganchada};
           \node[font=\tiny, text=rojo, anchor=south] at (axis cs:2580,-0.3) {suelta};
+          \node[font=\tiny, text=rojo, rotate=90] at (axis cs:2125,0.6) {$n_{dec}$};
         \end{axis}
       \end{tikzpicture}
-
-      \scriptsize
-      Ya se ve algo: $\Delta T$ crece mucho menos que $\omega^2$. Con aire y agua solos no se
-      separa la fricción de la píldora del arrastre del fluido: falta la tara sin píldora.
     \end{column}
   \end{columns}
 
-  \vspace{0.6em}
+  \vspace{0.8em}
   {\color{grisclaro}\hrule height 0.6pt}
-  \vspace{0.45em}
-  \scriptsize
-  \textbf{\color{azul}Ensayos}\enspace
-  \nro{1} repetibilidad\enspace
-  \nro{2} tara sin píldora: $T_{\max} = \Delta T(n_{dec}) + T_{f2}$\enspace
-  \nro{3} desenganche fino, 1800--2300 rpm cada 50\\[0.35em]
-  \hspace*{3.05em}\nro{4} rampa contra desenganche\enspace
-  \nro{5} volumen de líquido\enspace
-  \nro{6} glicerina (viscosidad)\hfill
-  {\color{acento}\bfseries Antes de la mesa: 1, 2 y 3}
+  \vspace{0.5em}
+  \footnotesize
+  \textbf{\color{azul}Ensayos pendientes:} repetibilidad \textperiodcentered{} tara sin píldora
+  \textperiodcentered{} rampa \textperiodcentered{} volumen \textperiodcentered{} glicerina
 \end{frame}
 
 % =====================================================================
-% 6. Utilidad del modelo
-% Guion: el modelo no es una simulación con parámetros inventados. Son pocas
-% ecuaciones, cada parámetro sale de una curva, y sirven para decidir: qué
-% leer en la corriente, hasta qué velocidad y con qué rampa operar, dónde
-% vale el PI y qué ensayo hace falta.
+% 6. Uso del modelo
+% Guion: con el modelo y las curvas se arma una tabla de velocidades máximas
+% por fluido. El usuario elige el fluido y el sistema no supera esa velocidad.
 % =====================================================================
-\begin{frame}{¿Para qué sirve el modelo? Para pasar de curvas a límites de operación}
+\begin{frame}{Uso del modelo: velocidad máxima por fluido}
   \centering
+  \vspace{0.4em}
   \begin{tikzpicture}[x=0.0041cm, y=1cm]
     \fill[rojo!14] (0,0) rectangle (350,0.5);
     \fill[verde!16] (350,0) rectangle (2000,0.5);
     \shade[left color=verde!16, right color=rojo!14] (2000,0) rectangle (2250,0.5);
     \fill[rojo!14] (2250,0) rectangle (3300,0.5);
     \draw[gris] (0,0) rectangle (3300,0.5);
-    \node[font=\tiny\bfseries, text=rojo] at (175,0.25) {zona ciega};
-    \node[font=\scriptsize\bfseries, text=verde!70!black] at (1175,0.25) {modelo lineal y PI válidos};
-    \node[font=\scriptsize\bfseries, text=rojo] at (2775,0.25) {la píldora patina};
+    \node[font=\tiny\bfseries, text=rojo] at (175,0.25) {ciego};
+    \node[font=\scriptsize\bfseries, text=verde!70!black] at (1175,0.25) {operación con PI};
+    \node[font=\scriptsize\bfseries, text=rojo] at (2775,0.25) {píldora suelta};
     \foreach \x in {0,1000,2000,3000} {\draw[gris] (\x,0) -- (\x,-0.07) node[below, font=\tiny, text=gris] {\x};}
     \node[font=\tiny, text=gris, anchor=west] at (3320,-0.2) {rpm};
-    \node[font=\tiny, anchor=south west] at (0,0.52) {$n_{ciego}\approx 300$--$400$ rpm (sensor)};
-    \node[font=\tiny, anchor=south] at (2125,0.52) {$n_{dec}$ en agua $\approx 2000$--$2250$ rpm (acople y fluido)};
-    \draw[-{Stealth[length=3.5pt]}, rojo, thick] (2050,-0.42) -- (1650,-0.42)
-      node[left, font=\tiny, text=rojo] {con más carga, $n_{dec}$ baja};
+    \node[font=\tiny, anchor=south] at (350,0.52) {$n_{ciego}$};
+    \node[font=\tiny, anchor=south] at (2125,0.52) {$n_{dec}$ (agua)};
   \end{tikzpicture}
 
-  \vspace{0.3em}
-  \raggedright
+  \vspace{1.4em}
   \begin{columns}[T]
-    \begin{column}{0.49\textwidth}
-      \titulito{Modelo simple, con parámetros medidos}
-      \footnotesize
-      \begin{itemize}\setlength{\itemsep}{0.3em}
-        \item Eléctrico casi estático ($L/R \ll \tau_{mec}$):
-          $d\,V_{bus} \approx K\,\omega_1 + R_{eq}\,I + V_{L298}$. $K$ sale de la tara.
-        \item Mecánico, con la píldora enganchada: $G_1(s) = \dfrac{K_{dc}}{\tau_{mec}\,s + 1}$
-          para el PI. Vale si el lazo es bastante más lento que la resonancia del acople.
-        \item Acople $T_{\max}\sin(N_a\delta)$: se usa como \textbf{límite}; no hace falta simularlo en detalle.
-        \item Carga $T_L(\omega)$: la dan las curvas, no coeficientes genéricos.
+    \begin{column}{0.46\textwidth}
+      \centering
+      \small
+      \begin{tabular}{lcc}
+        \toprule
+        Fluido & $n_{dec}$ [rpm] & $n_{\max}$ [rpm] \\
+        \midrule
+        Agua & $\approx 2000$ & $m\cdot n_{dec}$ \\
+        Glicerina & a medir & -- \\
+        \bottomrule
+      \end{tabular}
+    \end{column}
+    \begin{column}{0.46\textwidth}
+      \small
+      \begin{itemize}\setlength{\itemsep}{0.5em}
+        \item $m < 1$: margen según la repetibilidad
+        \item Rampa máxima por fluido
+        \item El PI se diseña para $n_{ciego} < n < n_{dec}$
       \end{itemize}
     \end{column}
-    \begin{column}{0.49\textwidth}
-      \titulito{Qué aporta}
-      \footnotesize
-      \begin{enumerate}\setlength{\itemsep}{0.3em}
-        \item \textbf{Leer la medición}: $I_{bus}$ se convierte en torque y la tara cancela $I_0$.
-        \item \textbf{Predecir} $n_{dec}$ y la rampa segura antes de que la píldora se suelte.
-        \item \textbf{Acotar el diseño}: el PI vale para $n_{ciego} < n < n_{dec}$.
-        \item \textbf{Elegir ensayos}: aire y agua no identifican la viscosidad (el agua está en
-          régimen inercial, $Re \sim 10^4$). Hace falta un fluido viscoso de referencia.
-      \end{enumerate}
-    \end{column}
   \end{columns}
-
-  \vspace{0.3em}
-  \centering
-  \colorbox{acento!10}{\parbox{0.94\textwidth}{\centering\small
-    Las curvas le dan los parámetros al modelo; el modelo dice qué consigna y qué rampa son seguras.}}
 \end{frame}
 
 \end{document}
