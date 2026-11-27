@@ -1,5 +1,8 @@
 # Walkthrough completo de la GUI Blazor en C#
 
+> **Nota (spec 002).** Las secciones sobre HIL/PIL, el puente UDP con Simulink (`HilUdpBridgeService`), el modo `SimulinkControl`, las corridas de validacion y los canales de corriente `IU/IV`/BEMF describen codigo que se elimino. El resto del recorrido (transporte HID, `_ioLock`, snapshots, worker) sigue vigente. Para el estado actual ver `GUI_AGENT_CONTEXT.md` y `firmware/COMM_PROTOCOL.md`.
+
+
 Esta guía explica la GUI completa del proyecto `EscGui`: tecnologías usadas, estructura de carpetas, cómo arranca la aplicación, cómo funciona Blazor, cómo se dibuja el dashboard, cómo se conectan los botones con el Bridge, cómo se cargan controles desde `controls.json`, cómo se grafica velocidad y cómo entra Simulink por UDP.
 
 La escribí pensando en alguien que no conoce C# ni Blazor. Por eso, cuando aparece una palabra reservada, una sintaxis rara o una decisión de arquitectura, se explica en contexto.

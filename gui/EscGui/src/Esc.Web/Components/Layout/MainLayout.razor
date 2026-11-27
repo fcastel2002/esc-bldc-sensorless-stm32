@@ -26,9 +26,9 @@
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 16 8 9l3 3 6-8M13 4h4v4" /></svg>
                 <span>Arranque</span>
             </NavLink>
-            <NavLink href="/pil">
-                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5h14M3 10h14M3 15h9" /></svg>
-                <span>PIL Monitor</span>
+            <NavLink href="/curvas">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 17V3M3 17h14M5 14c3 0 4-2 6-5s3-4 6-4" /></svg>
+                <span>Curvas de carga</span>
             </NavLink>
         </nav>
 
@@ -37,17 +37,15 @@
                 <span>Config MCU</span>
                 <button type="button" class="ghost" @onclick="RefreshReferenceAsync" disabled="@(_refreshing || !IsConnected)" title="Leer configuracion del MCU">Leer</button>
             </div>
-            @if (_snapshot.ValidationReference is { } reference)
+            @if (_snapshot.ActiveControllerConfig is { } config)
             {
                 <dl class="rail-config-grid">
                     <dt>KP · KI · KD</dt><dd>@GainText</dd>
-                    <dt>Control</dt><dd>@($"PI RPM v{reference.AlgorithmVersion}")</dd>
-                    <dt>Pares polos</dt><dd>@(_snapshot.ActiveControllerConfig?.PolePairs.ToString() ?? "-")</dd>
-                    <dt>PWM</dt><dd>@KiloHertz(reference.PwmFrequencyHz)</dd>
-                    <dt>ARR</dt><dd>@reference.PwmArrCounts</dd>
-                    <dt>Timer RPM</dt><dd>@KiloHertz(reference.SpeedTimerHz)</dd>
-                    <dt>Periodo</dt><dd>@reference.SpeedMaxPeriodTicks–@reference.SpeedMinPeriodTicks</dd>
-                    <dt>dt</dt><dd>@Invariant(reference.ControllerDtSeconds, "0.000") s</dd>
+                    <dt>Pares polos</dt><dd>@config.PolePairs</dd>
+                    <dt>PWM</dt><dd>@KiloHertz(config.PwmFrequencyHz)</dd>
+                    <dt>ARR</dt><dd>@(_snapshot.Status?.MaxPwm.ToString() ?? "-")</dd>
+                    <dt>Rampa</dt><dd>@RampText(config.SpeedRampRpmPerSecond)</dd>
+                    <dt>Rango</dt><dd>@SpeedRangeText</dd>
                 </dl>
             }
             else
@@ -93,7 +91,6 @@
                     <span>Modo</span>
                     <select value="@_snapshot.Mode" @onchange="SetModeAsync" disabled="@_busy">
                         <option value="@ControlMode.GuiControl">GUI control</option>
-                        <option value="@ControlMode.SimulinkControl">Simulink control</option>
                         <option value="@ControlMode.MonitorOnly">Solo monitoreo</option>
                     </select>
                 </label>
@@ -140,13 +137,13 @@
     private string GainText => _snapshot.ActiveControllerConfig is { } config
         ? $"{Invariant(config.Kp, "0.00")} · {Invariant(config.Ki, "0.00")} · {Invariant(config.Kd, "0.00")}"
         : "-";
-    private string ReferenceState => IsConnected
-        ? (_snapshot.ValidationReferenceError is null ? "Sin leer" : "Lectura fallida")
-        : "Desconectado";
+    private string ReferenceState => IsConnected ? "Sin leer" : "Desconectado";
+    private string SpeedRangeText => _snapshot.ActiveSpeedLimits is { } limits
+        ? $"{limits.MinRpm}–{limits.MaxRpm} rpm"
+        : "-";
     private string ModeHint => _snapshot.Mode switch
     {
         ControlMode.GuiControl => "La GUI puede enviar comandos al ESC.",
-        ControlMode.SimulinkControl => "Comandos reservados para Simulink salvo ESTOP.",
         ControlMode.MonitorOnly => "Solo adquisicion y monitoreo.",
         _ => string.Empty
     };
@@ -238,11 +235,11 @@
         _refreshing = true;
         try
         {
-            await Bridge.RefreshValidationReferenceAsync();
+            await Bridge.RefreshControllerConfigAsync();
         }
-        catch
+        catch (Exception ex)
         {
-            // El estado de error se publica en el snapshot del bridge.
+            _layoutMessage = $"No se pudo leer la configuracion del MCU: {ex.Message}";
         }
         finally
         {
@@ -300,6 +297,9 @@
     }
 
     private static string Invariant(double value, string format) => value.ToString(format, Inv);
+
+    private static string RampText(ushort rpmPerSecond) =>
+        rpmPerSecond == 0 ? "sin limite" : $"{rpmPerSecond} rpm/s";
 
     private static string KiloHertz(double hertz) =>
         hertz >= 1000 ? $"{Invariant(hertz / 1000.0, "0.#")} kHz" : $"{Invariant(hertz, "0")} Hz";

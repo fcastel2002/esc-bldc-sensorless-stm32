@@ -7,6 +7,8 @@
 
 #include "state_machine.h"
 #include "usart.h"
+#include "power_monitor.h"
+#include "load_sweep.h"
 
 #pragma GCC optimize("Os")
 
@@ -14,6 +16,7 @@
 #define RUNNING_RESTART_BRAKE_MS 500U
 
 volatile App_States_t app_state = IDLE;
+volatile uint16_t     motor_restart_count = 0U;
 
 __attribute__((optimize("Oz"))) App_States_t handleState(void)
 {
@@ -48,6 +51,9 @@ __attribute__((optimize("Oz"))) App_States_t handleState(void)
     processUartData();
     last_comm_check = current_time;
   }
+
+  power_monitor_process();
+  load_sweep_process();
 
   if (app_state != IDLE && app_state != HARD_ERROR) {
     process_logging_queue();
@@ -113,6 +119,7 @@ __attribute__((optimize("Oz"))) App_States_t handleState(void)
       bldc_set_pwm(0);
       restart_brake_start_time = current_time;
       restart_pending = 1;
+      motor_restart_count++;
       motor_stalled = false;
       break;
     }
@@ -127,20 +134,19 @@ __attribute__((optimize("Oz"))) App_States_t handleState(void)
       app_state = IDLE;
     break;
   case CLOSEDLOOP:
-    if (hil_session_state != (uint8_t)HIL_EXECUTION_STEPPED + 1U) {
-      HAL_TIM_OC_Start_IT(&htim4, TIM_CHANNEL_1);
-    }
+    motor_control_timer_start();
     current_time = HAL_GetTick();
-    if (hil_session_state == 0U && motor_stalled) {
+    if (motor_stalled) {
       HAL_TIM_OC_Stop_IT(&htim4, TIM_CHANNEL_1);
       PWM_STOP();
       bldc_set_pwm(0);
       restart_brake_start_time = current_time;
       restart_pending = 1;
+      motor_restart_count++;
       motor_stalled = false;
       break;
     }
-    if (hil_session_state == 0U && 0 == consistent_zero_crossing)
+    if (0 == consistent_zero_crossing)
       app_state = RUNNING;
     break;
   case READY:

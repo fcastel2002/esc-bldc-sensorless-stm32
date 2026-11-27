@@ -55,7 +55,7 @@ El firmware STM32 se encuentra en [firmware/](firmware/). Esta carpeta contiene 
 |-- .agents/               Convenciones neutrales para agentes
 |-- docs/                  Documentacion del proyecto, build/test y CI/CD
 |-- specs/                 Specs SSD versionadas por feature
-|-- simulacion_agitador/   Soporte PIL/HIL/Simulink
+|-- simulacion_agitador/   Modelado Simulink offline del agitador
 |-- INFORME/               Paper, proyecto Overleaf, esquematicos e imagenes
 |-- README.md              Resumen visual y tecnico del repositorio
 ```

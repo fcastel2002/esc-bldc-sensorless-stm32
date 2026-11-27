@@ -58,24 +58,27 @@ Responses echo `seq`, `opcode`, and `param`, set `type=0x81`, and place the resu
 | `0x11` | `STOP` | ignored | empty | empty |
 | `0x12` | `ESTOP` | ignored | empty | empty; immediate and accepted in every operational state |
 | `0x13` | `SET_SPEED_RPM` | ignored | `uint16 rpm` | empty |
-| `0x14` | `SET_CONTROL_MODE` | ignored | `uint8 mode` | empty |
 | `0x20` | `GET_CONFIG` | config param | empty | config value |
 | `0x21` | `SET_CONFIG` | config param | config value | empty |
 | `0x22` | `RESET_CONFIG` | config param or `0xFF` | empty | empty |
 | `0x23` | `SAVE_CONFIG` | config param or `0xFF` | empty | empty |
-| `0x24` | `GET_VALIDATION_REFERENCE` | ignored | empty | structural validation reference below |
 | `0x30` | `LOG_START` | log param or `0xFF` | empty | empty |
 | `0x31` | `LOG_STOP` | log param or `0xFF` | empty | empty |
 | `0x32` | `LOG_RATE` | ignored | `uint16 ms` | empty |
 | `0x33` | `TELEMETRY_EVENT` | log param | event only | event payload below |
-| `0x40` | `HIL_START` | ignored | empty, `uint16 input_timeout_ms`, or 3-byte timeout/mode payload below | empty |
-| `0x41` | `HIL_STOP` | ignored | empty | empty |
-| `0x42` | `HIL_SET_INPUTS` | ignored | HIL input payload below | empty |
-| `0x43` | `HIL_GET_OUTPUTS` | ignored | empty | HIL output payload below |
-| `0x44` | `HIL_STEP` | ignored | exact 18-byte deterministic-step payload below | exact 48-byte deterministic-step response below |
 | `0x50` | `SINE_DRIVE` | `0=APPLY`, `1=KEEPALIVE` | `uint32 frequency_mHz`, `uint16 amplitude_permille` | accepted/quantized values in the same 6-byte shape |
 | `0x51` | `STEP_TEST` | `0=APPLY`, `1=KEEPALIVE` | `uint8 step`, `uint16 duty_permille` | same 3-byte shape |
 | `0x52` | `ZC_DIAG` | `0=START`, `1=STOP`, `2=GET_REPORT`, `3=AUTO_DETECT` | empty (or optional `uint16 duty_permille` for `AUTO_DETECT`) | 32-byte freewheel report, empty (`STOP`), or 16-byte auto-detect matrix |
+| `0x60` | `LOAD_SWEEP` | `0=START`, `1=ABORT`, `2=GET_STATUS`, `3=GET_POINTS` | see [Load sweep](#load-sweep-load_sweep-0x60) | see [Load sweep](#load-sweep-load_sweep-0x60) |
+
+Retired opcodes: `0x14 SET_CONTROL_MODE`, `0x24 GET_VALIDATION_REFERENCE` and
+`0x40..0x44` (HIL/PIL) were removed by spec 002 and now return
+`UNKNOWN_OPCODE`.
+
+While a load sweep is active (`GET_STATUS` byte 30 = 1) only `PING`,
+`GET_STATUS`, `STOP`, `ESTOP`, `GET_CONFIG`, `LOG_*` and `LOAD_SWEEP` are
+accepted; everything else returns `INVALID_STATE`. `STOP` and `ESTOP` abort the
+sweep.
 
 `RUN` is valid only while `app_state == IDLE`. In every other state it returns
 `INVALID_STATE` without changing the application state, PWM outputs, or timer
@@ -92,36 +95,49 @@ configuration.
 | 4..5 | `uint16` | speed setpoint RPM |
 | 6..7 | `uint16` | measured speed RPM |
 | 8..9 | `uint16` | `max_pwm` |
+| 10 | `uint8` | INA219 flags: bit 0 present, bit 1 last read valid, bit 2 shunt overflow, bit 3 disabled (UART transport) |
+| 11 | `uint8` | INA219 7-bit I2C address (`0` when absent) |
+| 12..13 | `uint16` | DC-bus voltage at INA219 `VIN-`, mV |
+| 14..17 | `int32` | DC-bus current through the 0.1 ohm shunt, microamps |
+| 18 | `uint8` | INA219 last I2C error: `0` none, `1` not found (no ACK at `0x40..0x4F`), `2` NACK, `3` timeout, `4` bus error/arbitration lost, `5` bus busy, `6` other |
+| 19 | `uint8` | INA219 failed-transaction counter (saturates at 255) |
+| 20 | `uint8` | idle line levels sampled as floating inputs before each probe: bit 0 SCL high, bit 1 SDA high (`0x03` = pull-ups present) |
+| 21 | `uint8` | stage of the last failure: `0` none, `1` probe (address), `2` config write, `3` config read-back verify, `4` shunt read, `5` bus read, `6` BUSY latched while idle (peripheral re-initialised) |
+| 22..23 | `uint16` | INA219 config register read back after the probe write (expected `0x3E67`) |
+| 24..25 | `uint16` | I2C1 peripheral resets done because `BUSY` was latched with idle lines (saturating) |
+| 26..27 | `uint16` | slew-limited speed reference applied to the PI, RPM (equals the setpoint when `SPEED_RAMP` is 0) |
+| 28..29 | `uint16` | commanded PWM duty, 1/10000 of the active `TIM1` period |
+| 30 | `uint8` | `1` while a `LOAD_SWEEP` is active |
+
+The current payload is 31 bytes; 18-, 20-, 24- and 26-byte variants (without the
+trailing fields) are also accepted by the GUI. The probe only reports the sensor as
+present after the config register reads back the written value, so a floating
+bus that fakes an address ACK is not mistaken for an INA219. Legacy firmware returns 10 bytes; clients must
+treat a 10-byte status as "no power monitor".
+
+INA219 notes: the sensor sits on `PB6` (SCL) / `PB7` (SDA), driven by a software
+(bit-banged) I2C master on open-drain GPIOs at ~100 kHz. The pins
+is the same pin pair used by remapped `USART1` for the UART transport. It is
+therefore enabled only when the board boots in USB mode (`PB8` HIGH); in UART
+mode bit 3 is set and all readings are zero. Firmware configures it for 32 V bus
+range, PGA /8 (+/-320 mV shunt, +/-3.2 A with 0.1 ohm), 16-sample averaging on
+both channels, and polls it every 20 ms from the main loop. Addresses
+`0x40..0x4F` are probed; a missing sensor (or 5 consecutive read failures)
+triggers a bus recovery, I2C re-init and re-probe every 1 s. The hardware
+I2C1 peripheral is not used: it needs `PB6/PB7` in alternate-function mode,
+where remapped `USART1` interferes (reads fail), and clearing `USART1_REMAP`
+moves `USART1` onto the TIM1 phase PWM pins `PA8/PA9/PA10`, which breaks the
+power-stage drive and the ZC auto-detect. `USART1_REMAP` must stay set. In GPIO
+mode the pins are driven only by `ODR`, so nothing else can interfere. Byte 24..25
+(BUSY resets) is kept for compatibility and is always `0`; stage `6` is no longer
+reported. `PB6` is also
+`TIM4_CH1`: the control-period timer is started with only the CC1 interrupt
+(`motor_control_timer_start()`), never `HAL_TIM_OC_Start_IT`.
 
 `app_state=10` identifies the continuous open-loop `SINE_DRIVE` state,
 `app_state=11` the commutation-step debug `STEP_TEST` state, and `app_state=12`
 the passive zero-crossing diagnostic `FREEWHEEL` state. Existing state values
 `0..9` retain their previous numeric assignments.
-
-### `GET_VALIDATION_REFERENCE` response payload
-
-This read-only descriptor exposes the active PWM scale and compiled controller
-constants needed by an external validation model. It does not include gains or
-pole pairs because the validation experiment commands those values explicitly.
-
-| Offset | Type | Meaning |
-| --- | --- | --- |
-| 0 | `uint8` | reference schema version (`1`) |
-| 1 | `uint8` | controller algorithm version (`2`, RPM PI Q16.16) |
-| 2..3 | `uint16` | active PWM frequency in Hz |
-| 4..5 | `uint16` | active `TIM1->ARR` in PWM counts |
-| 6..9 | `uint32` | TIM2 speed timer frequency in Hz |
-| 10..11 | `uint16` | maximum measured period (`SPEED_MIN`) |
-| 12..13 | `uint16` | minimum measured period (`SPEED_MAX`) |
-| 14..17 | `uint32` | controller integration coefficient in microseconds |
-| 18..19 | `uint16` | effective minimum PWM in counts |
-| 20 | `uint8` | capability flags; bit 0 announces deterministic HIL stepping |
-| 21 | `uint8` | HIL step operation version (`1`) |
-| 22..23 | `uint16` | maximum ticks accepted by one `HIL_STEP` (`1000`) |
-
-The current descriptor is 24 bytes. A legacy 20-byte descriptor does not
-announce deterministic stepping; clients must test capability bit 0 rather
-than infer support from payload length alone.
 
 ## Config parameters
 
@@ -129,13 +145,8 @@ than infer support from payload length alone.
 | --- | --- | --- | --- |
 | `0x01` | `PWM_FREQ` | `uint16 Hz` | yes |
 | `0x02` | `POLE_PAIRS` | `uint8` | yes |
-| `0x03` | legacy `KP` | reserved | no, returns `NOT_IMPLEMENTED` |
-| `0x04` | legacy `KI` | reserved | no, returns `NOT_IMPLEMENTED` |
-| `0x05` | legacy `KD` | reserved | no, returns `NOT_IMPLEMENTED` |
 | `0x06` | `MAX_SPEED` | `uint16 RPM` | yes |
 | `0x07` | `MIN_SPEED` | `uint16 RPM` | yes |
-| `0x08` | `CURRENT_LIMIT` | reserved | no, returns `NOT_IMPLEMENTED` |
-| `0x09` | `TEMP_LIMIT` | reserved | no, returns `NOT_IMPLEMENTED` |
 | `0x0A` | `KP_RPM` | `int16` hundredths, canonical counts/RPM | yes |
 | `0x0B` | `KI_RPM` | `int16` hundredths, canonical counts/(RPM s) | yes |
 | `0x0C` | `KD_RPM` | `int16` hundredths | only zero; nonzero is not supported in algorithm 2 |
@@ -146,7 +157,13 @@ than infer support from payload length alone.
 | `0x11` | `STARTUP_DURATION` | `uint32 ms` | yes, `500..10000` |
 | `0x12` | `BEMF_BLANKING_US` | `uint16 us` | yes, `0..200`; `0` disables blanking |
 | `0x13` | `ZC_MAP` | `uint8[3]` (`ch_u, ch_v, ch_w`) | yes, permutation of `{0=PA0, 1=PA1, 2=PB10}`; default `[2, 1, 0]` |
+| `0x14` | `SPEED_RAMP` | `uint16 RPM/s` | yes, `0..20000`; `0` disables the setpoint slew limit (default) |
 | `0xFF` | `ALL` | reset/log only | yes for `RESET_CONFIG`, `LOG_START`, `LOG_STOP` |
+
+Params `0x03..0x05` (legacy `KP/KI/KD`), `0x08 CURRENT_LIMIT` and
+`0x09 TEMP_LIMIT` were removed by spec 002 and return `UNKNOWN_PARAM`; the
+persisted `ESCparams` still carries the `current_limit`/`temp_limit` fields so the
+flash layout is unchanged.
 
 For gains, value `100` means `1.00`. Algorithm 2 computes RPM error and a
 canonical PWM output referenced to ARR=2000 using Q16.16 state and standard
@@ -157,9 +174,12 @@ resets only gains to v2 defaults (`KP=0.28`, `KI=1.00`, `KD=0`). V1, V2, and
 V3 flash blocks are validated with their original size and CRC and migrated to
 V4. V1/V2 receive startup defaults of `20% -> 100%`, `2.09 Hz -> 9.28 Hz`, and
 `3 s`; every legacy version receives the compatible blanking default of `0 us`.
+The current block is V6 (`ESCparams` 68 bytes): it appends `speed_ramp_rpm_s`
+(and a reserved `uint16`) to the V5 layout. V5 blocks are migrated verbatim with
+`SPEED_RAMP = 0`, so existing behavior is preserved until a ramp is configured.
 
-When `app_state == CLOSEDLOOP`, changes to `PWM_FREQ`, `KP_RPM`, `KI_RPM`, and
-zero `KD_RPM` apply immediately. KD remains blocked until a fresh-sample RPM
+When `app_state == CLOSEDLOOP`, changes to `PWM_FREQ`, `KP_RPM`, `KI_RPM`,
+zero `KD_RPM` and `SPEED_RAMP` apply immediately. KD remains blocked until a fresh-sample RPM
 derivative and filter are implemented. Other parameters use the deferred
 `CONFIG` path.
 
@@ -178,6 +198,13 @@ stall timing, or update speed-consensus buffers. PWM operation is unchanged.
 the full configuration contains parameters that cannot change while running.
 All forms of `SAVE_CONFIG` require `IDLE` because a named save still writes the
 entire active configuration block.
+
+`SPEED_RAMP` limits how fast the PI reference follows `SET_SPEED_RPM`: every
+2 ms control tick the reference moves toward the target by at most
+`SPEED_RAMP * 0.002` RPM (Q16.16). On entering `CLOSEDLOOP` with a non-zero ramp
+the reference starts at the measured speed (bumpless) instead of jumping to the
+target. Purpose: keep the stir-bar coupling below its pull-out torque while
+accelerating.
 
 ## Continuous three-phase sine drive
 
@@ -255,223 +282,122 @@ Log params:
 
 | Param | Name |
 | --- | --- |
-| `0x01` | `SPEED` |
-| `0x02` | `TEMP` |
-| `0x03` | `CURRENT_U` (`PA3`, ADC1_IN3; hardware actualmente desconectado) |
-| `0x04` | `CURRENT_V` (`PA4`, ADC2_IN4; hardware actualmente desconectado) |
-| `0x05` | `BEMF_PERIOD` (periodo filtrado de capturas `TIM2`) |
+| `0x01` | `SPEED` (value RPM; raw = filtered `TIM2` period; flags = BEMF quality) |
+| `0x06` | `BUS_VOLTAGE` (INA219, value en mV; raw = mV; flags = INA219 flags) |
+| `0x07` | `BUS_CURRENT` (INA219, value en mA; raw = registro shunt `int16`, 10 uV/LSB; flags = INA219 flags) |
+| `0x08` | `DUTY` (value = duty en 1/10000; raw = compare de `TIM1`; flags bit 0 = valido) |
 | `0xFF` | `ALL` |
 
-`LOG_RATE` accepts `100..5000 ms`. Telemetry is sent as `type=0x82`, `opcode=0x33`.
+Params `0x02 TEMP`, `0x03 CURRENT_U`, `0x04 CURRENT_V`, `0x05 BEMF_PERIOD` and
+`0x09 LOAD_CURRENT` were removed by spec 002 (no phase shunts, no temperature
+sensor, no model-based estimates in firmware) and return `UNKNOWN_PARAM`.
+
+`LOG_RATE` accepts `100..5000 ms`. Telemetry is sent as `type=0x82`, `opcode=0x33`
+and only while `app_state != IDLE`.
 
 Telemetry event payload:
 
 | Offset | Type | Meaning |
 | --- | --- | --- |
 | 0 | `uint8` | log param |
-| 1..4 | `int32` | value: RPM, centi-degrees C, or mA |
+| 1..4 | `int32` | value (unit per param above) |
 | 5..8 | `uint32` | `HAL_GetTick()` timestamp |
+| 9..10 | `uint16` | raw value (per param above) |
+| 11 | `uint8` | flags: bit 0 valid (INA219 params carry the INA219 flag byte) |
+| 12..13 | `uint16` | reserved (`0`) |
+| 14 | `int8` | active commutation step |
 
-Firmware actual emite una extension de 6 bytes, manteniendo intactos los primeros
-9 bytes para receptores anteriores:
+The firmware only reports measured quantities. Load comparisons are done on the
+host against a tare curve at the same speed: the bridge's own consumption cancels
+in `I_bus - I_bus,tare`, and dividing that difference by the duty gives the extra
+winding current (low-side recirculation keeps the PWM off-time current out of
+the INA219 shunt, so `mean(I_bus) ~= d * mean(I_phase)`).
 
-| Offset | Type | Meaning |
-| --- | --- | --- |
-| 9..10 | `uint16` | cuentas ADC raw; para velocidad/BEMF, periodo en ticks |
-| 11 | `uint8` | flags: bit 0 valido, bit 1 calibrado, bit 2 saturado, bit 3 sobrecorriente |
-| 12..13 | `uint16` | cantidad acumulada de muestras validas |
-| 14 | `int8` | sector de conmutacion activo |
+## Load sweep (`LOAD_SWEEP`, 0x60)
 
-`CURRENT_U` y `CURRENT_V` usan conversiones inyectadas simultaneas de ADC1/ADC2,
-disparadas internamente por `TIM1_CH4`. La escala nominal en firmware asume
-`VDDA=3.3 V` y shunts de `0.47 ohm` (~`1.714 mA` por cuenta ADC). **Estado
-actual del hardware:** el sensado de corriente no esta conectado en la placa
-actual (se descarto usar `SENSE_A`/`SENSE_B` del L298; pendiente etapa dedicada
-con acondicionamiento/op-amp por fase), por lo que estas lecturas no representan
-corriente real hasta incorporar el hardware nuevo.
+Firmware-side instrumentation to identify the load curve of the stirred fluid.
+The sweep drives the speed target in closed loop and records averaged operating
+points in a 128-entry RAM table that the host reads back. Points are not
+persisted and are cleared by the next `START`.
 
-`BEMF_PERIOD` no representa una tension analogica. Expone el periodo y calidad
-de la ruta existente LM339/TIM2; la conmutacion sensorless sigue usando esa ruta.
-
-Temperature telemetry remains a placeholder until a real sensor exists.
-
-## HIL mode
-
-Control modes:
-
-| Value | Name |
-| --- | --- |
-| `0` | `NORMAL` |
-| `1` | `MONITOR_ONLY` |
-| `2` | `HIL_SIM` |
-
-In `HIL_SIM`, the MCU is blind to ESC commutation and real TIM2 input-capture
-events are ignored. Simulink owns the simulated plant and ESC/commutation.
-`HIL_START` selects one of two execution modes. Periodic mode keeps the existing
-live/UDP behavior: `HIL_SET_INPUTS` updates the latest simulated speed, TIM4
-runs the PI tick, and `HIL_GET_OUTPUTS` is read periodically for monitoring.
-Stepped mode is reserved for deterministic offline replay: TIM4 remains
-stopped and each `HIL_STEP` synchronously applies one input, executes exactly
-the requested number of PI ticks, and returns the resulting output.
-
-`HIL_START` accepts these payload shapes:
-
-| Length | Offset | Type | Meaning |
-| --- | --- | --- | --- |
-| 0 | - | - | default 50 ms input timeout, periodic mode |
-| 2 | 0..1 | `uint16` | `input_timeout_ms` (`10..5000`), periodic mode |
-| 3 | 0..1 | `uint16` | `input_timeout_ms` (`10..5000`) |
-| 3 | 2 | `uint8` | execution mode: `0=periodic`, `1=stepped` |
-
-Starting HIL resets the PI dynamic state and validation provenance. A stepped
-session cannot be restarted in place: issue `HIL_STOP` before another
-`HIL_START`. `HIL_STOP` stops the logical controller, clears PWM, and restores
-the runtime control mode to `NORMAL`.
-
-`HIL_SET_INPUTS` payload:
+### `START` (param `0`), 12-byte payload
 
 | Offset | Type | Meaning |
 | --- | --- | --- |
-| 0..1 | `uint16` | simulated speed RPM |
-| 2..3 | `uint16` | reserved, ignored |
-| 4..5 | `int16` | load torque, reserved for future use |
-| 6 | `uint8` | input flags |
-| 7 | `uint8` | enable: `0=stop`, nonzero=start/update |
-| 8..11 | `uint32` | optional validated-input `run_id` |
-| 12..15 | `uint32` | optional validated-input `source_seq` |
+| 0 | `uint8` | mode: `0` staircase, `1` continuous ramp |
+| 1..2 | `uint16` | start RPM |
+| 3..4 | `uint16` | end RPM (may be below start) |
+| 5..6 | `uint16` | staircase: step in RPM (`>= 10`); ramp: slew rate in RPM/s (`1..5000`) |
+| 7..8 | `uint16` | settle time in ms (`0..30000`) |
+| 9..10 | `uint16` | averaging window per point in ms (`100..10000`) |
+| 11 | `uint8` | options: bit 0 stop the motor when the sweep completes normally |
 
-The legacy payload is exactly 8 bytes and remains supported. The validated payload is exactly 16 bytes; its first 8 bytes are identical to the legacy payload. Other payload lengths are rejected. For a legacy input, validation provenance reports `run_id=0` and `source_seq=0`.
+Start and end must lie inside `MIN_SPEED..MAX_SPEED` (`UNDERLIMIT`/`OVERLIMIT`).
+The plan must fit the table: staircase `ceil(span/step) + 1 <= 128`, ramp
+`(span*1000/rate)/window + 1 <= 128`, otherwise `OVERLIMIT`. Accepted only in
+`IDLE` or `CLOSEDLOOP` with no sweep active, otherwise `INVALID_STATE`.
 
-`HIL_GET_OUTPUTS` payload:
+Sequence:
 
-| Offset | Type | Meaning |
-| --- | --- | --- |
-| 0..3 | `uint32` | `HAL_GetTick()` timestamp |
-| 4 | `uint8` | `app_state` |
-| 5 | `uint8` | control mode |
-| 6..7 | `uint16` | speed setpoint RPM |
-| 8..9 | `uint16` | measured/simulated speed RPM |
-| 10..11 | `uint16` | logical PWM command |
-| 12 | `int8` | commutation step |
-| 13 | `uint8` | HIL flags |
-| 14 | `uint8` | HIL timeout |
-| 15..18 | `uint32` | accepted `run_id` |
-| 19..22 | `uint32` | accepted `source_seq` |
-| 23..26 | `uint32` | output generation observed when that input was accepted |
-| 27..30 | `uint32` | `run_id` used for the current logical PWM |
-| 31..34 | `uint32` | `source_seq` used for the current logical PWM |
-| 35..38 | `uint32` | current logical-PWM output generation |
-| 39..42 | `uint32` | `HAL_GetTick()` when that logical PWM was updated |
+1. From `IDLE`: average the bus current for 500 ms with the power stage off
+   (reported as idle bus current), set the target to the start RPM and run the normal SPWM startup. If
+   `CLOSEDLOOP` is not reached within 15 s the sweep aborts (`STARTUP_TIMEOUT`)
+   and the motor is stopped. From `CLOSEDLOOP`: report the idle current tracked
+   during the last `IDLE`.
+2. Staircase: for each step set the target, wait until the slew-limited reference
+   reaches it (`SPEED_RAMP` applies), wait `settle_ms`, then average one window
+   into a point.
+3. Ramp: move to the start RPM, wait `settle_ms`, then set the target to the end
+   RPM with the sweep rate temporarily overriding `SPEED_RAMP` and record
+   consecutive windows until the reference reaches the end.
+4. On completion the configured `SPEED_RAMP` is restored. A ramp that stops early
+   (abort, table full) freezes the target at the current reference so the motor
+   never jumps to the end RPM.
 
-`HIL_GET_OUTPUTS` now has a 43-byte payload. Bytes `0..14` retain their legacy layout exactly. The extension is an interrupt-safe snapshot: `accepted_*` identifies the most recently accepted HIL input and the controller output generation already present at acceptance, while `applied_*`, `output_generation`, and `pwm_update_tick` identify the input and control update that produced the current logical PWM. `HIL_START` resets the PI dynamic state and all validation provenance to zero; each HIL PI update increments `output_generation` and records its tick.
+The sweep aborts if the motor leaves `CLOSEDLOOP` or the state machine performs
+an automatic restart (`MOTOR_LOST`, motor stopped), on `ABORT` (`USER`, motor
+keeps the current reference), on `STOP`/`ESTOP` (`STOPPED`) and when the table
+fills (`TABLE_FULL`).
 
-`HIL_STEP` request payload (exactly 18 bytes):
+Inside a window speed, duty and reference are sampled every 10 ms; INA219
+readings are taken as they arrive (one every ~20 ms).
 
-| Offset | Type | Meaning |
-| --- | --- | --- |
-| 0..1 | `uint16` | simulated speed RPM |
-| 2..3 | `uint16` | reserved, must be zero |
-| 4..5 | `int16` | load torque, reserved and currently required to be zero |
-| 6 | `uint8` | input flags |
-| 7 | `uint8` | enable, must be exactly `1` |
-| 8..11 | `uint32` | nonzero `run_id` |
-| 12..15 | `uint32` | nonzero, strictly increasing `source_seq` |
-| 16..17 | `uint16` | requested PI ticks `N`, `1..maximum_hil_steps` |
+### `ABORT` (param `1`)
 
-`HIL_STEP` response payload (exactly 48 bytes):
+Empty payload. No-op when no sweep is active.
+
+### `GET_STATUS` (param `2`), 29-byte response
 
 | Offset | Type | Meaning |
 | --- | --- | --- |
-| 0..42 | bytes | complete 43-byte `HIL_GET_OUTPUTS` snapshot |
-| 43..44 | `uint16` | requested ticks `N` |
-| 45..46 | `uint16` | applied ticks; must equal `N` |
-| 47 | `uint8` | result flags; bit 0 means idempotent replay |
+| 0 | `uint8` | state: `0` idle, `1` measuring `I_q`, `2` starting, `3` moving, `4` settling, `5` measuring, `6` done, `7` aborted |
+| 1 | `uint8` | abort reason: `0` none, `1` user, `2` motor lost, `3` startup timeout, `4` table full, `5` STOP/ESTOP |
+| 2 | `uint8` | mode of the last sweep |
+| 3 | `uint8` | options of the last sweep |
+| 4..5 | `uint16` | points recorded |
+| 6..7 | `uint16` | table capacity (`128`) |
+| 8..17 | `uint16[5]` | start, end, step-or-rate, settle ms, window ms of the last sweep |
+| 18..19 | `uint16` | current speed target, RPM |
+| 20..23 | `int32` | bus current measured in `IDLE` with the power stage off, uA (informative) |
+| 24..27 | `uint32` | elapsed ms since `START` (frozen when finished) |
+| 28 | `uint8` | `1` if the idle bus current has been measured |
 
-For a newly accepted command, `accepted_generation` is captured before the PI
-ticks and `output_generation - accepted_generation` must equal exactly `N`
-without overflow. `accepted_*` and `applied_*` must identify the request. The
-firmware retains the meaningful fields of the last stepped command. Repeating
-the same `run_id`, `source_seq`, speed, flags, and `N` returns the current
-logical result with the replay flag and executes no additional ticks. Reusing
-the provenance with different content, changing `run_id` during a session, or
-sending a non-increasing new `source_seq` is rejected.
+### `GET_POINTS` (param `3`)
 
-`HIL_STEP` is valid only in an active stepped session. While that session is
-active, `HIL_SET_INPUTS`, another `HIL_START`, setpoint/control-mode changes,
-and configuration set/reset/save commands return `INVALID_STATE`; use
-`HIL_STOP` to leave the session. The input timeout still bounds a stalled host,
-but wall-clock timing never advances the controller.
+Request payload `uint16 first_index`. Response: `uint16 first_index`,
+`uint8 count` (`0..3`), then `count` points of 16 bytes:
 
-The ESC Bridge exposes a UDP loopback bridge for Simulink on `127.0.0.1:5055`. Send ASCII CSV:
-
-`seq,speed_rpm,enable`
-
-The bridge also accepts command-prefixed packets:
-
-`PIL,speed_rpm,enable`
-
-`PIL,seq,speed_rpm,enable`
-
-For the live UDP diagnostic path, the bridge also accepts provenance-tagged
-inputs:
-
-`PILV,run_id,seq,speed_rpm,enable`
-
-`PILV` carries its `run_id` and `seq` in the validated 16-byte
-`HIL_SET_INPUTS` payload. This remains part of periodic live HIL and does not
-provide deterministic controller stepping. Persistent offline validation uses
-the stepped `HIL_START` mode and one `HIL_STEP` request/response per MAT sample;
-it does not poll `HIL_GET_OUTPUTS` to infer completion.
-
-For compatibility with older HIL blocks, the bridge still accepts:
-
-`seq,speed_rpm,reserved,load_torque,flags,enable`
-
-The `reserved` field is ignored and no zero-crossing or commutation event is generated. The GUI exposes a `/pil` page that shows recent UDP frames from Simulink and recent binary HID frames exchanged with the MCU for PIL/HIL commands.
-
-The legacy response prefix is ASCII CSV:
-
-`ok,seq,tick_ms,app_state,mode,setpoint_rpm,measured_rpm,pwm_command,commutation_step,flags,timeout,rx_frames,lost_frames,effective_hz,avg_rtt_ms,jitter_ms`
-
-Responses to `PILV` retain that numeric prefix and append:
-
-`input_run_id,accepted_run_id,accepted_source_seq,accepted_generation,applied_run_id,applied_source_seq,output_generation,pwm_update_tick_ms,fresh_output,cache_age_ms`
-
-The response `seq` remains the source sequence. In this live diagnostic,
-`applied_*` and `output_generation` describe the cached PWM provenance; response
-arrival time and the echoed input sequence alone do not prove which input
-produced it. This diagnostic metadata is not a substitute for `HIL_STEP` during
-deterministic replay.
-
-The bridge treats high-rate UDP values as latest-value signals, not as a command
-FIFO. If packets accumulate while the HID transaction is in progress, older
-`SETPOINT` and HIL input packets are coalesced and the newest packet is applied.
-This prevents stale Simulink samples from being replayed late. `ESTOP` keeps
-priority over coalesced packets. HIL outputs are polled for monitoring at a
-lower rate than HIL inputs, so the response may contain the latest cached output
-sample while the newest input sample is still applied immediately. These
-coalescing and polling rules apply to live periodic HIL/UDP only, never to a
-deterministic stepped validation session.
-
-The same UDP port also accepts real-motor commands that do not enter `HIL_SIM`.
-The GUI must be in `Simulink control` mode for these commands, except `ESTOP`,
-which is always allowed:
-
-| UDP ASCII command | Meaning | Response |
+| Offset | Type | Meaning |
 | --- | --- | --- |
-| `SETPOINT,<rpm>` | Send `SET_SPEED_RPM` to the MCU | `ok,setpoint,0,setpoint_rpm,actual_rpm,app_state` |
-| `SETPOINT,<seq>,<rpm>` | Same, with sequence echoed in the response | `ok,setpoint,seq,setpoint_rpm,actual_rpm,app_state` |
-| `RUN` | Send real `RUN` command to the MCU | `ok,run,0,setpoint_rpm,actual_rpm,app_state` |
-| `MOTOR_STOP` or `REAL_STOP` | Send real `STOP` command to the MCU | `ok,stop,0,setpoint_rpm,actual_rpm,app_state` |
-| `ESTOP` | Send real emergency stop | `ok,estop,0,setpoint_rpm,actual_rpm,app_state` |
-| `HIL_START` or legacy `START` | Start HIL simulation mode | `ok,start` |
-| `HIL_STOP` or legacy `STOP` | Stop HIL simulation mode | `ok,stop` |
-
-For real-motor setpoint control from Simulink, use `SETPOINT,<seq>,<rpm>`.
-Receiving an `ok,setpoint,...` response means the bridge received the UDP packet,
-sent the binary HID command to the MCU, and received an OK response from the MCU.
-For latency, this path updates the bridge cached setpoint but does not issue a
-`GET_STATUS` after every packet.
+| 0..1 | `uint16` | mean slew-limited reference, RPM |
+| 2..3 | `uint16` | mean measured speed, RPM |
+| 4..5 | `uint16` | mean duty, 1/10000 |
+| 6..7 | `uint16` | mean bus voltage, mV |
+| 8..9 | `int16` | mean bus current, 0.1 mA |
+| 10..11 | `uint16` | standard deviation of the duty, 1/10000 |
+| 12..13 | `uint16` | standard deviation of the bus current, 0.1 mA |
+| 14 | `uint8` | standard deviation of the speed, RPM (saturates at 255) |
+| 15 | `uint8` | flags: bit 0 no INA219 sample, bit 1 fewer than half the expected INA219 samples, bit 2 duty reached the PI ceiling |
 
 ## ASCII command equivalence
 
@@ -502,17 +428,9 @@ For latency, this path updates the bridge cached setpoint but does not issue a
 | `:GET:MINSPEED` | opcode `0x20 GET_CONFIG`, param `0x07` |
 | `:SET:MINSPEED:<rpm>` | opcode `0x21 SET_CONFIG`, param `0x07`, payload `uint16 RPM` |
 | `:RESET:MINSPEED` | opcode `0x22 RESET_CONFIG`, param `0x07` |
-| `:GET:CURRENT_LIMIT` | opcode `0x20 GET_CONFIG`, param `0x08`, returns `NOT_IMPLEMENTED` |
-| `:SET:CURRENT_LIMIT:<value>` | opcode `0x21 SET_CONFIG`, param `0x08`, returns `NOT_IMPLEMENTED` |
-| `:GET:TEMP_LIMIT` | opcode `0x20 GET_CONFIG`, param `0x09`, returns `NOT_IMPLEMENTED` |
-| `:SET:TEMP_LIMIT:<value>` | opcode `0x21 SET_CONFIG`, param `0x09`, returns `NOT_IMPLEMENTED` |
 | `:LOG:START:SPEED` | opcode `0x30 LOG_START`, param `0x01` |
-| `:LOG:START:TEMP` | opcode `0x30 LOG_START`, param `0x02` |
-| `:LOG:START:CRRT` | opcode `0x30 LOG_START`, param `0x03` |
 | `:LOG:START:ALL` | opcode `0x30 LOG_START`, param `0xFF` |
 | `:LOG:STOP:SPEED` | opcode `0x31 LOG_STOP`, param `0x01` |
-| `:LOG:STOP:TEMP` | opcode `0x31 LOG_STOP`, param `0x02` |
-| `:LOG:STOP:CRRT` | opcode `0x31 LOG_STOP`, param `0x03` |
 | `:LOG:STOP:ALL` | opcode `0x31 LOG_STOP`, param `0xFF` |
 | `:LOG:RATE:<ms>` | opcode `0x32 LOG_RATE`, payload `uint16 ms` |
 | `:HELP` | removed from main channel; use this document |

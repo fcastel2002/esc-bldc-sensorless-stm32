@@ -59,15 +59,15 @@ public sealed class HomeControlTests
         string homeMarkup = File.ReadAllText(
             Path.Combine(AppContext.BaseDirectory, "TestAssets", "Home.razor"));
 
-        Assert.Equal(5, Count(homeMarkup, "class=\"panel-toggle\""));
+        Assert.Equal(6, Count(homeMarkup, "class=\"panel-toggle\""));
         Assert.Contains("aria-expanded=", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("aria-controls=", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("hidden=\"@IsPanelCollapsed(PanelTelemetry)\"", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("<SpeedChart", homeMarkup, StringComparison.Ordinal);
         Assert.DoesNotContain("@if (!IsPanelCollapsed(PanelTelemetry))", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("hidden=\"@IsPanelCollapsed(PanelCurrents)\"", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("<CurrentChart", homeMarkup, StringComparison.Ordinal);
-        Assert.DoesNotContain("@if (!IsPanelCollapsed(PanelCurrents))", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains("hidden=\"@IsPanelCollapsed(PanelLoad)\"", homeMarkup, StringComparison.Ordinal);
+        Assert.DoesNotContain("<CurrentChart", homeMarkup, StringComparison.Ordinal);
+        Assert.DoesNotContain("@if (!IsPanelCollapsed(PanelLoad))", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("localStorage.setItem", homeMarkup, StringComparison.Ordinal);
         Assert.Contains("esc.dashboard.panels.v1", homeMarkup, StringComparison.Ordinal);
     }
@@ -145,16 +145,58 @@ public sealed class HomeControlTests
     }
 
     [Fact]
-    public void DashboardExposesSynchronizedCurrentAndBemfChannels()
+    public void DashboardExposesControlEffortChannelsWithoutPhaseCurrentSensing()
     {
         string homeMarkup = File.ReadAllText(
             Path.Combine(AppContext.BaseDirectory, "TestAssets", "Home.razor"));
 
-        Assert.Contains("PA3 · SENSE_A", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("PA4 · SENSE_B", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("LogParam.CurrentU", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("LogParam.CurrentV", homeMarkup, StringComparison.Ordinal);
-        Assert.Contains("LogParam.BemfPeriod", homeMarkup, StringComparison.Ordinal);
+        Assert.Contains("LogParam.Duty", homeMarkup, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogParam.LoadCurrent", homeMarkup, StringComparison.Ordinal);
+        Assert.DoesNotContain("SENSE_A", homeMarkup, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogParam.CurrentU", homeMarkup, StringComparison.Ordinal);
+        Assert.DoesNotContain("LogParam.BemfPeriod", homeMarkup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void NavigationOffersLoadCurvesAndNoLongerOffersPilOrSimulink()
+    {
+        string layoutMarkup = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "MainLayout.razor"));
+
+        Assert.Contains("href=\"/curvas\"", layoutMarkup, StringComparison.Ordinal);
+        Assert.DoesNotContain("href=\"/pil\"", layoutMarkup, StringComparison.Ordinal);
+        Assert.DoesNotContain("SimulinkControl", layoutMarkup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LoadCurvesPageDrivesTheSweepThroughTheBridge()
+    {
+        string markup = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "LoadCurves.razor"));
+
+        Assert.Contains("@page \"/curvas\"", markup, StringComparison.Ordinal);
+        Assert.Contains("Bridge.StartLoadSweepAsync", markup, StringComparison.Ordinal);
+        Assert.Contains("Bridge.AbortLoadSweepAsync", markup, StringComparison.Ordinal);
+        Assert.Contains("Bridge.SaveCurrentLoadCurve", markup, StringComparison.Ordinal);
+        Assert.Contains("Bridge.ImportLoadCurveCsv", markup, StringComparison.Ordinal);
+        Assert.Contains("Bridge.SetLoadCurveTare", markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("HidSharpEscTransport", markup, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void SpeedRampControlUsesGenericConfigCommand()
+    {
+        string controlsJson = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "TestAssets", "controls.json"));
+        using System.Text.Json.JsonDocument document = System.Text.Json.JsonDocument.Parse(controlsJson);
+
+        System.Text.Json.JsonElement control = document.RootElement.EnumerateArray().Single(
+            item => item.TryGetProperty("param", out System.Text.Json.JsonElement parameter) &&
+                    parameter.GetString() == "SpeedRamp");
+
+        Assert.Equal("set_config", control.GetProperty("command").GetString());
+        Assert.Equal(0, control.GetProperty("min").GetInt32());
+        Assert.Equal(20000, control.GetProperty("max").GetInt32());
     }
 
     private static int Count(string source, string value)

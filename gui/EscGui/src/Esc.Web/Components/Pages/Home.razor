@@ -57,32 +57,55 @@
                 </div>
             </section>
 
-            <section class="panel current-panel collapsible-panel @(IsPanelCollapsed(PanelCurrents) ? "is-collapsed" : null)">
+            <section class="panel current-panel collapsible-panel @(IsPanelCollapsed(PanelLoad) ? "is-collapsed" : null)">
                 <div class="panel-title">
                     <div class="panel-heading">
-                        <h2>Corrientes y BEMF</h2>
-                        <span>IU @Snapshot.CurrentUTelemetry.SampleCount · IV @Snapshot.CurrentVTelemetry.SampleCount muestras</span>
+                        <h2>Esfuerzo de control</h2>
+                        <span>Duty @Snapshot.DutyTelemetry.SampleCount muestras</span>
                     </div>
                     <div class="panel-heading-actions">
-                        <button type="button" class="panel-toggle" aria-expanded="@(!IsPanelCollapsed(PanelCurrents))" aria-controls="current-acquisition-body" aria-label='@PanelToggleLabel(PanelCurrents, "Corrientes y BEMF")' @onclick="() => TogglePanelAsync(PanelCurrents)">
+                        <button type="button" class="panel-toggle" aria-expanded="@(!IsPanelCollapsed(PanelLoad))" aria-controls="load-acquisition-body" aria-label='@PanelToggleLabel(PanelLoad, "Esfuerzo de control")' @onclick="() => TogglePanelAsync(PanelLoad)">
                             <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
                         </button>
                     </div>
                 </div>
-                <div id="current-acquisition-body" class="panel-body" hidden="@IsPanelCollapsed(PanelCurrents)">
-                    <div class="electrical-telemetry" aria-label="Corrientes sincronizadas y BEMF">
-                        @ChannelCard(LogParam.CurrentU, "PA3 · SENSE_A", "Corriente IU", Snapshot.CurrentUTelemetry, Snapshot.CurrentULoggingEnabled, "mA", "iu")
-                        @ChannelCard(LogParam.CurrentV, "PA4 · SENSE_B", "Corriente IV", Snapshot.CurrentVTelemetry, Snapshot.CurrentVLoggingEnabled, "mA", "iv")
-                        @ChannelCard(LogParam.BemfPeriod, "TIM2 · LM339", "Periodo BEMF", Snapshot.BemfTelemetry, Snapshot.BemfLoggingEnabled, "ticks", "bemf")
+                <div id="load-acquisition-body" class="panel-body" hidden="@IsPanelCollapsed(PanelLoad)">
+                    <div class="electrical-telemetry" aria-label="Duty">
+                        @ChannelCard(LogParam.Duty, "TIM1 · PI RPM", "Duty", Snapshot.DutyTelemetry, Snapshot.DutyLoggingEnabled, "%", "iu")
                     </div>
-                    <CurrentChart SamplesU="_currentUSamples"
-                                  SamplesV="_currentVSamples"
-                                  ClearRequested="ClearCurrentTelemetry" />
+                    <p class="hint">Duty comandado por el PI. Para comparar carga entre fluidos usar la pagina Curvas de carga (corriente de bus contra una tara).</p>
                 </div>
             </section>
         </div>
 
         <aside class="dashboard-side">
+            <section class="panel supply-panel collapsible-panel @(IsPanelCollapsed(PanelSupply) ? "is-collapsed" : null)">
+                <div class="panel-title">
+                    <div class="panel-heading">
+                        <h2>Alimentacion</h2>
+                        <span>INA219 · bus DC · @SupplyStateText</span>
+                    </div>
+                    <div class="panel-heading-actions">
+                        <button type="button" class="panel-toggle" aria-expanded="@(!IsPanelCollapsed(PanelSupply))" aria-controls="supply-monitor-body" aria-label='@PanelToggleLabel(PanelSupply, "Alimentacion")' @onclick="() => TogglePanelAsync(PanelSupply)">
+                            <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+                        </button>
+                    </div>
+                </div>
+                <div id="supply-monitor-body" class="panel-body" hidden="@IsPanelCollapsed(PanelSupply)">
+                    <div class="supply-readouts" aria-live="polite">
+                        <div class="supply-reading voltage"><span>Voltaje</span><strong>@SupplyVoltageText <small>V</small></strong></div>
+                        <div class="supply-reading current"><span>Corriente</span><strong>@SupplyCurrentText <small>@SupplyCurrentUnit</small></strong></div>
+                        <div class="supply-reading power"><span>Potencia</span><strong>@SupplyPowerText <small>W</small></strong></div>
+                    </div>
+                    <p class="supply-state @SupplyStateClass">@SupplyStateDetail</p>
+                    <div class="supply-telemetry">
+                        @ChannelCard(LogParam.BusVoltage, "INA219 · VIN-", "Voltaje bus", Snapshot.BusVoltageTelemetry, Snapshot.BusVoltageLoggingEnabled, "mV", "vbus")
+                        @ChannelCard(LogParam.BusCurrent, "INA219 · R100", "Corriente bus", Snapshot.BusCurrentTelemetry, Snapshot.BusCurrentLoggingEnabled, "mA", "ibus")
+                    </div>
+                    <p class="hint">Lectura en vivo via GET_STATUS (500 ms). La adquisicion por telemetria solo emite fuera de IDLE. Requiere transporte USB (PB6/PB7 compartidos con UART).</p>
+                </div>
+            </section>
+
             <section class="panel command-panel collapsible-panel @(IsPanelCollapsed(PanelPower) ? "is-collapsed" : null)">
                 <div class="panel-title">
                     <h2>Marcha</h2>
@@ -120,7 +143,9 @@
                     <div class="kpi-grid">
                         <div class="kpi kpi-wide"><span>Estado</span><strong class="state-chip @StateChipClass">@(Snapshot.Status?.AppStateName ?? "-")</strong></div>
                         <div class="kpi"><span>Setpoint</span><strong>@(Snapshot.Status?.SpeedSetpointRpm.ToString() ?? "-") <small>rpm</small></strong></div>
+                        <div class="kpi"><span>Referencia</span><strong>@(Snapshot.Status?.ReferenceRpm?.ToString() ?? "-") <small>rpm</small></strong></div>
                         <div class="kpi"><span>Velocidad</span><strong>@(Snapshot.Status?.ActualSpeedRpm.ToString() ?? "-") <small>rpm</small></strong></div>
+                        <div class="kpi"><span>Duty</span><strong>@(Snapshot.Status?.DutyPercent?.ToString("0.0", Inv) ?? "-") <small>%</small></strong></div>
                         <div class="kpi"><span>Max PWM</span><strong>@(Snapshot.Status?.MaxPwm.ToString() ?? "-")</strong></div>
                         <div class="kpi"><span>Transporte</span><strong>@(Snapshot.Status?.Transport ?? "-")</strong></div>
                         <div class="kpi"><span>Stall</span><strong class="@FlagClass(Snapshot.Status?.MotorStalled, true)">@BoolText(Snapshot.Status?.MotorStalled)</strong></div>
@@ -160,16 +185,15 @@
     private const string PanelPower = "power-command";
     private const string PanelParameters = "parameter-adjustment";
     private const string PanelTelemetry = "speed-acquisition";
-    private const string PanelCurrents = "current-acquisition";
+    private const string PanelLoad = "load-acquisition";
+    private const string PanelSupply = "supply-monitor";
     private static readonly string[] KnownPanels =
-        [PanelStatus, PanelPower, PanelParameters, PanelTelemetry, PanelCurrents];
+        [PanelStatus, PanelPower, PanelParameters, PanelTelemetry, PanelLoad, PanelSupply];
     private static readonly System.Globalization.CultureInfo Inv = System.Globalization.CultureInfo.InvariantCulture;
 
     private BridgeSnapshot Snapshot { get; set; } = default!;
     private IReadOnlyList<DashboardControl> _controls = Array.Empty<DashboardControl>();
     private IReadOnlyList<TelemetrySample> _speedSamples = Array.Empty<TelemetrySample>();
-    private IReadOnlyList<TelemetrySample> _currentUSamples = Array.Empty<TelemetrySample>();
-    private IReadOnlyList<TelemetrySample> _currentVSamples = Array.Empty<TelemetrySample>();
     private readonly Dictionary<string, double> _controlValues = new(StringComparer.OrdinalIgnoreCase);
     private ushort _logRateMs = 500;
     private readonly HashSet<string> _collapsedPanels = new(StringComparer.Ordinal);
@@ -187,9 +211,72 @@
         "HARD_ERROR" => "bad",
         _ => null
     } ?? string.Empty;
+    private PowerMonitorReading? Supply => Snapshot.Status?.Power;
+    private bool SupplyReadable => Supply is { Valid: true };
+    private string SupplyVoltageText => SupplyReadable ? Supply!.BusVolts.ToString("0.00", Inv) : "-";
+    private bool SupplyCurrentInAmps => SupplyReadable && Math.Abs(Supply!.CurrentAmps) >= 1.0;
+    private string SupplyCurrentUnit => SupplyCurrentInAmps ? "A" : "mA";
+    private string SupplyCurrentText => !SupplyReadable
+        ? "-"
+        : SupplyCurrentInAmps
+            ? Supply!.CurrentAmps.ToString("0.000", Inv)
+            : (Supply!.CurrentMicroamps / 1000.0).ToString("0.0", Inv);
+    private string SupplyPowerText => SupplyReadable ? Supply!.PowerWatts.ToString("0.00", Inv) : "-";
+    private string SupplyStateText => Supply switch
+    {
+        null => "sin datos",
+        { Disabled: true } => "deshabilitado",
+        { Present: false } => "no detectado",
+        { Overflow: true } => "sobrerango",
+        { Valid: true } => "OK",
+        _ => "sin lectura"
+    };
+    private string SupplyStateClass => Supply switch
+    {
+        { Valid: true, Overflow: false } => "ok",
+        { Valid: true, Overflow: true } => "warn",
+        null => string.Empty,
+        _ => "bad"
+    };
+    private string SupplyStateDetail => Supply switch
+    {
+        null when IsConnected => "El firmware no reporta INA219 (GET_STATUS de 10 bytes); actualice el firmware.",
+        null => "Conecte el ESC para leer la alimentacion.",
+        { Disabled: true } => "Transporte UART activo: PB6/PB7 son de USART1, el INA219 queda deshabilitado.",
+        { Present: false } => $"INA219 no responde en I2C1 (PB6 SCL / PB7 SDA){SupplyErrorSuffix}; reintentando cada 1 s.",
+        { Overflow: true } => $"INA219 0x{Supply.I2cAddress:X2}: sobrerango del shunt (> 320 mV / 3.2 A).",
+        { Valid: true } => $"INA219 en 0x{Supply.I2cAddress:X2} · shunt 0.1 Ω · PGA ±320 mV · {Supply.ErrorCount} fallos I2C.",
+        _ => $"INA219 en 0x{Supply.I2cAddress:X2}: fallo de lectura I2C{SupplyErrorSuffix}."
+    };
+    private string SupplyErrorSuffix => Supply is null || Supply.LastError == PowerMonitorError.None
+        ? string.Empty
+        : $" · ultimo error: {SupplyErrorText(Supply.LastError)} en {SupplyStageText(Supply.FailStage)} ({Supply.ErrorCount} fallos){SupplyLineText}";
+    private string SupplyLineText => Supply?.LineState is null
+        ? string.Empty
+        : Supply.SclIdleHigh == true && Supply.SdaIdleHigh == true
+            ? " · lineas en reposo OK (SCL/SDA altas)"
+            : $" · lineas en reposo: SCL {(Supply.SclIdleHigh == true ? "alta" : "BAJA")}, SDA {(Supply.SdaIdleHigh == true ? "alta" : "BAJA")} → revisar VCC del INA219 y pull-ups";
+    private static string SupplyStageText(PowerMonitorStage stage) => stage switch
+    {
+        PowerMonitorStage.Probe => "deteccion",
+        PowerMonitorStage.ConfigWrite => "escritura de config",
+        PowerMonitorStage.ConfigVerify => "verificacion de config",
+        PowerMonitorStage.ReadShunt => "lectura shunt",
+        PowerMonitorStage.ReadBus => "lectura bus",
+        PowerMonitorStage.IdleBusy => "reposo (BUSY del I2C por hardware)",
+        _ => "-"
+    };
+    private static string SupplyErrorText(PowerMonitorError error) => error switch
+    {
+        PowerMonitorError.NotFound => "sin ACK en 0x40..0x4F (cableado, pull-ups o VCC)",
+        PowerMonitorError.Nack => "NACK durante la transferencia",
+        PowerMonitorError.Timeout => "timeout (SCL retenido o sin respuesta)",
+        PowerMonitorError.Bus => "error de bus / arbitraje (ruido)",
+        PowerMonitorError.Busy => "bus ocupado (SDA retenido en bajo)",
+        _ => "error I2C"
+    };
     private string ModeHint => Snapshot.Mode switch
     {
-        ControlMode.SimulinkControl => "Modo Simulink: los comandos quedan reservados para Simulink salvo ESTOP.",
         ControlMode.MonitorOnly => "Modo monitoreo: solo adquisicion.",
         _ => string.Empty
     };
@@ -210,8 +297,6 @@
 
         _logRateMs = Snapshot.LogRateMs;
         _speedSamples = Bridge.SpeedSamples;
-        _currentUSamples = Bridge.CurrentUSamples;
-        _currentVSamples = Bridge.CurrentVSamples;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -254,8 +339,6 @@
 
             Snapshot = Bridge.Snapshot;
             _speedSamples = Bridge.SpeedSamples;
-            _currentUSamples = Bridge.CurrentUSamples;
-            _currentVSamples = Bridge.CurrentVSamples;
             if (!IsConnected)
             {
                 _configLoaded = false;
@@ -318,7 +401,7 @@
                 <span class="channel-kicker">@kicker</span>
                 <strong>@title</strong>
             </div>
-            <div class="channel-reading">@(stats.LastValue?.ToString("0", Inv) ?? "-") <span>@unit</span></div>
+            <div class="channel-reading">@(stats.LastValue?.ToString(parameter == LogParam.Duty ? "0.00" : "0", Inv) ?? "-") <span>@unit</span></div>
             <small>@CurrentDetail(parameter, stats)</small>
             <div class="channel-actions">
                 @if (enabled)
@@ -376,11 +459,19 @@
         TelemetrySample? sample = Bridge.GetTelemetrySamples(parameter).LastOrDefault();
         if (sample is null) return $"{stats.SampleCount} muestras";
         string raw = sample.AdcRawValue.HasValue
-            ? parameter == LogParam.BemfPeriod
-                ? $"periodo {sample.AdcRawValue.Value} ticks"
-                : $"ADC {sample.AdcRawValue.Value}"
+            ? parameter switch
+            {
+                LogParam.Duty => $"compare {sample.AdcRawValue.Value}",
+                LogParam.BusVoltage => "INA219",
+                LogParam.BusCurrent => $"shunt {(short)sample.AdcRawValue.Value * 10} uV",
+                _ => $"ADC {sample.AdcRawValue.Value}"
+            }
             : "sin raw";
-        string validity = sample.IsValid ? "valida" : "fuera de ventana";
+        string validity = parameter switch
+        {
+            LogParam.BusVoltage or LogParam.BusCurrent => sample.IsValid ? "presente" : "sin sensor",
+            _ => sample.IsValid ? "valida" : "invalida"
+        };
         return $"{stats.SampleCount} muestras · {raw} · {validity}";
     }
 
@@ -390,16 +481,6 @@
         Snapshot = Bridge.Snapshot;
         _speedSamples = Bridge.SpeedSamples;
         _lastCommandResult = "Grafica de velocidad limpiada; la adquisicion continua activa.";
-    }
-
-    private void ClearCurrentTelemetry()
-    {
-        Bridge.ClearTelemetry(LogParam.CurrentU);
-        Bridge.ClearTelemetry(LogParam.CurrentV);
-        Snapshot = Bridge.Snapshot;
-        _currentUSamples = Bridge.CurrentUSamples;
-        _currentVSamples = Bridge.CurrentVSamples;
-        _lastCommandResult = "Grafica de corrientes limpiada; la adquisicion continua activa.";
     }
 
     private async Task ApplyControlAsync(DashboardControl control) => await BusyExecAsync(async () =>

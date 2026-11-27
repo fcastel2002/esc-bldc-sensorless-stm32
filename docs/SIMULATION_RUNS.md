@@ -1,5 +1,8 @@
 # Simulation Validation Runs
 
+> **Retirado (spec 002).** El firmware ya no implementa HIL/PIL (`HIL_START..HIL_STEP`, `SET_CONTROL_MODE`, `GET_VALIDATION_REFERENCE`) y la GUI ya no tiene el puente UDP ni las corridas de validacion. Este documento queda como registro historico; Simulink se sigue usando solo para modelado offline en `simulacion_agitador/`. Ver [`specs/002-load-curve-instrumentation`](../specs/002-load-curve-instrumentation/spec.md).
+
+
 The GUI validates an already-executed discrete Simulink experiment against the
 STM32 speed controller. It does not launch MATLAB or allow the MCU to control
 

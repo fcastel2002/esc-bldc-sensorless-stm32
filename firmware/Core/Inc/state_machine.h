@@ -45,6 +45,7 @@ App_States_t handleState(void);
 void         event_delay(void);
 // variables
 extern volatile App_States_t app_state;
-extern volatile App_States_t cmd_origin_state;
+/** Incremented every time the state machine brakes the motor for an automatic restart. */
+extern volatile uint16_t     motor_restart_count;
 
 #endif /* INC_STATE_MACHINE_H_ */

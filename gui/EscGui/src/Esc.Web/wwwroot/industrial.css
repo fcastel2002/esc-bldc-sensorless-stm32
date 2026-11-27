@@ -1275,6 +1275,81 @@ input[type="range"] {
 
 /* ---- Responsive -------------------------------------------------------------- */
 
+/* Supply monitor (INA219) */
+.supply-readouts {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.supply-reading {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+    border-radius: var(--radius-sm);
+    border-top: 2px solid var(--accent);
+    background: var(--surface-2);
+    padding: 9px 10px;
+}
+
+.supply-reading.voltage { border-top-color: var(--amber); }
+.supply-reading.current { border-top-color: var(--green); }
+.supply-reading.power { border-top-color: var(--orange); }
+
+.supply-reading span {
+    color: var(--text-muted);
+    font-size: 0.66rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+.supply-reading strong {
+    overflow: hidden;
+    color: var(--text-bright);
+    font-family: var(--mono);
+    font-size: 1.25rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.supply-reading small {
+    color: var(--text-muted);
+    font-size: 0.7rem;
+    font-weight: 400;
+}
+
+.supply-state {
+    margin: 10px 0;
+    color: var(--text-muted);
+    font-size: 0.74rem;
+}
+
+.supply-state.ok { color: var(--green); }
+.supply-state.warn { color: var(--amber); }
+.supply-state.bad { color: var(--red); }
+
+.supply-telemetry {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.supply-telemetry .channel-reading {
+    font-size: 1.2rem;
+}
+
+.electrical-channel.vbus { border-left-color: var(--amber); }
+.electrical-channel.ibus { border-left-color: var(--green); }
+
+@media (max-width: 420px) {
+    .supply-readouts,
+    .supply-telemetry {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
 @media (max-width: 1240px) {
     .dashboard-grid {
         grid-template-columns: minmax(0, 1fr);

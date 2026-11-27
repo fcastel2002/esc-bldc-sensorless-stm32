@@ -43,7 +43,7 @@ Manten la carpeta `gui\EscGui\publish\win-x64` completa junto al ejecutable porq
 
 - `GUI_AGENT_CONTEXT.md`: mapa compacto orientado a agentes para ubicar rapido arquitectura, ownership, invariantes y archivos a tocar.
 - `GUI_BLAZOR_WALKTHROUGH.md`: recorrido completo de la GUI, Blazor, C#, servicios, controles modulares, grafico y tecnologias usadas.
-- `BRIDGE_WALKTHROUGH.md`: recorrido detallado del Bridge, protocolo HID, UDP para Simulink y flujo hacia el MCU.
+- `BRIDGE_WALKTHROUGH.md`: recorrido detallado del Bridge, protocolo HID y flujo hacia el MCU (las secciones de UDP/Simulink son historicas).
 
 ## Endpoints locales
 
@@ -59,4 +59,4 @@ Manten la carpeta `gui\EscGui\publish\win-x64` completa junto al ejecutable porq
 - `GET /api/bridge/telemetry/speed`
 - `GET /ws/bridge`
 
-La integracion futura con Simulink debe consumir el bridge por un endpoint local, evitando abrir el HID desde dos procesos a la vez.
+Cualquier cliente externo debe consumir el bridge por sus endpoints HTTP locales, evitando abrir el HID desde dos procesos a la vez.

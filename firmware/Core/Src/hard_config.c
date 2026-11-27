@@ -7,17 +7,11 @@
 
 #include "hard_config.h"
 #include "bldc_driver.h"
-#include "current_sense.h"
 
 #include <math.h>
 
-static volatile uint16_t pwm_freq_arr      = 0;
-static volatile uint16_t current_limit_adc = 0;
-static volatile uint16_t max_speed_arr     = 0;
-
 static const uint16_t ESC_max_pwm_freq = 36000; // hz
 static const uint16_t ESC_min_pwm_freq = 5000;
-static const float    ESC_max_current  = 3;     // amp
 static const uint16_t ESC_max_speed    = 12000; // rpm
 static const uint16_t ESC_min_speed    = 600;
 
@@ -31,7 +25,7 @@ ESCparams        current_esc_params    = {0};
 void             set_default_esc_params()
 {
   memset(&current_esc_params, 0, sizeof(current_esc_params));
-  current_esc_params.signature     = ESC_PARAMS_SIGNATURE_V5;
+  current_esc_params.signature     = ESC_PARAMS_SIGNATURE_V6;
   current_esc_params.pwm_freq_hz   = ESC_DEFAULT_PWM_FREQ_HZ;
   current_esc_params.current_limit = ESC_DEFAULT_CURRENT_LIMIT;
   current_esc_params.temp_limit    = ESC_DEFAULT_TEMP_LIMIT;
@@ -55,6 +49,8 @@ void             set_default_esc_params()
   current_esc_params.zc_channel_v = ESC_DEFAULT_ZC_CHANNEL_V;
   current_esc_params.zc_channel_w = ESC_DEFAULT_ZC_CHANNEL_W;
   current_esc_params.zc_reserved = 0U;
+  current_esc_params.speed_ramp_rpm_s = ESC_DEFAULT_SPEED_RAMP_RPM_S;
+  current_esc_params.reserved_v6 = 0U;
 
   current_esc_params.crc32 = compute_crc32(&current_esc_params);
 }
@@ -64,7 +60,6 @@ void update_all_esc()
   uint32_t tim_arr = CPU_clock / (2 * current_esc_params.pwm_freq_hz);
   TIM1->PSC        = 0;
   TIM1->ARR        = tim_arr;
-  current_sense_update_pwm_window(bldc_get_pwm());
   esc_config_done = 1;
 }
 
@@ -317,6 +312,19 @@ uint32_t get_startup_duration(void)
 uint16_t get_bemf_blanking_us(void)
 {
   return current_esc_params.bemf_blanking_us;
+}
+
+ConfigStatus set_speed_ramp(uint16_t rpm_per_s)
+{
+  if (rpm_per_s > ESC_MAX_SPEED_RAMP_RPM_S) return CONFIG_ERROR_OVERLIMIT;
+  current_esc_params.speed_ramp_rpm_s = rpm_per_s;
+  flash_config_parameter_changed();
+  return CONFIG_OK;
+}
+
+uint16_t get_speed_ramp(void)
+{
+  return current_esc_params.speed_ramp_rpm_s;
 }
 
 bool zc_channel_map_is_valid(uint8_t ch_u, uint8_t ch_v, uint8_t ch_w)

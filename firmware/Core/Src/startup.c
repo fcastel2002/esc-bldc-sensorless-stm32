@@ -157,8 +157,6 @@ bool sine_drive_start_or_update(uint32_t frequency_millihz,
   if (frequency_millihz < ESC_MIN_SINE_FREQUENCY_MILLIHZ ||
       frequency_millihz > ESC_MAX_SINE_FREQUENCY_MILLIHZ ||
       amplitude_permille > ESC_MAX_SINE_AMPLITUDE_PERMILLE ||
-      control_runtime_mode != CONTROL_RUNTIME_NORMAL ||
-      hil_session_state != 0U ||
       (app_state != IDLE && app_state != SINE_DRIVE)) {
     return false;
   }
@@ -217,8 +215,6 @@ bool sine_drive_is_active(void)
 bool step_test_apply(uint8_t step, uint16_t duty_permille)
 {
   if (step >= NUM_POS || duty_permille > ESC_MAX_STEP_TEST_DUTY_PERMILLE ||
-      control_runtime_mode != CONTROL_RUNTIME_NORMAL ||
-      hil_session_state != 0U ||
       (app_state != IDLE && app_state != STEP_TEST)) {
     return false;
   }

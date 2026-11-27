@@ -18,7 +18,6 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
-#include "adc.h"
 #include "crc.h"
 #include "tim.h"
 #include "usart.h"
@@ -26,7 +25,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "current_sense.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -97,10 +95,7 @@ int main(void)
   MX_CRC_Init();
   MX_TIM3_Init();
   MX_USART1_UART_Init();
-  MX_ADC2_Init();
-  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
-  current_sense_init();
   HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
   TIM1->PSC = 0;
   HAL_TIM_IC_Start_IT(&htim2, TIM_CHANNEL_1);

@@ -14,9 +14,10 @@ Objetivo: dar contexto suficiente para modificar `EscGui` con la menor lectura p
   - `src/Esc.Protocol/CommConstants.cs`
   - `src/Esc.Protocol/EscProtocol.cs`
   - `src/Esc.Transport/HidSharpEscTransport.cs`
-- Si el cambio toca HIL/Simulink, sumar:
-  - `src/Esc.Bridge/HilUdpBridgeService.cs`
-  - `src/Esc.Protocol/HilModels.cs`
+- Si el cambio toca curvas de carga, sumar:
+  - `src/Esc.Web/Components/Pages/LoadCurves.razor`
+  - `src/Esc.Protocol/LoadSweepModels.cs`
+  - `src/Esc.Bridge/LoadCurveAnalysis.cs`, `src/Esc.Bridge/LoadSweepCsvWriter.cs`
 - Si el cambio toca grafico o telemetria, sumar:
   - `src/Esc.Web/Components/SpeedChart.razor`
   - `src/Esc.Bridge/TelemetryStore.cs`
@@ -36,15 +37,9 @@ Browser UI
   -> HidSharpEscTransport
   -> USB HID
   -> MCU
-
-Simulink
-  -> UDP 127.0.0.1:5055
-  -> HilUdpBridgeService
-  -> EscBridgeService
-  -> mismo camino HID
 ```
 
-Regla central: solo `EscBridgeService` decide cuando y como se usa el HID. La UI no abre HID, y Simulink tampoco.
+Regla central: solo `EscBridgeService` decide cuando y como se usa el HID. La UI no abre HID. El puente UDP/HIL con Simulink se elimino en la spec 002.
 
 ## 3. Ownership por proyecto
 
@@ -53,7 +48,7 @@ Regla central: solo `EscBridgeService` decide cuando y como se usa el HID. La UI
   - Usa `EscBridgeService` por inyeccion de dependencias, no por HTTP.
 - `src/Esc.Bridge`
   - Fuente de verdad de estado de la aplicacion.
-  - Arbitraje entre GUI, telemetria, HTTP, WebSocket y UDP.
+  - Arbitraje entre GUI, telemetria, HTTP y WebSocket.
   - Expone `BridgeSnapshot` para la UI.
 - `src/Esc.Transport`
   - Enumeracion HID y lectura/escritura de reports con HidSharp.
@@ -75,7 +70,6 @@ Regla central: solo `EscBridgeService` decide cuando y como se usa el HID. La UI
   - `TelemetryStore`
   - `EscBridgeService`
   - `EscBridgeWorker`
-  - `HilUdpBridgeService`
 
 ## 5. Fuente de verdad y sincronizacion
 
@@ -86,7 +80,7 @@ Regla central: solo `EscBridgeService` decide cuando y como se usa el HID. La UI
   - `ControlMode`
   - errores
   - estado de log de velocidad
-  - estadisticas HIL
+  - estado del barrido de carga (`LoadSweepSnapshot`) y la curva de tara fijada en el host
 - La UI consume `Bridge.Snapshot`, que es un `record` inmutable (`BridgeSnapshot`).
 - La UI se refresca porque `EscBridgeService` emite `SnapshotChanged`.
 - El acceso I/O al HID esta serializado con `_ioLock`.
@@ -98,20 +92,21 @@ Consecuencia: si un cambio afecta estado observable, casi seguro debe terminar a
 
 - `App.razor` monta `Routes` y `ReconnectModal`.
 - `Routes.razor` usa `MainLayout` y enruta a paginas Razor.
-- Las paginas operativas principales son `Components/Pages/Home.razor` (Dashboard), `Debug.razor`, `Startup.razor` y el monitor PIL. Las paginas de validaciones (`/runs`) se quitaron de la GUI; la API `/api/validation/*` sigue disponible.
+- Las paginas operativas principales son `Components/Pages/Home.razor` (Dashboard), `Debug.razor`, `Startup.razor` y `LoadCurves.razor` (`/curvas`). El monitor PIL y la API `/api/validation/*` se eliminaron en la spec 002.
 - `MainLayout.razor` es comun a todas las paginas y concentra conexion HID, selector de modo, `ESTOP` global y la tarjeta `CONFIG MCU`.
 - El tema es oscuro y sus tokens viven en `wwwroot/industrial.css` (`--bg`, `--surface*`, `--accent`, `--plot-*`, mas alias legacy `--line`, `--cyan`, ... usados por los graficos).
 - `Home.razor`:
   - inyecta `EscBridgeService` y `ModularControlProvider`.
   - se suscribe a `Bridge.SnapshotChanged` y lee la config activa al detectar una conexion nueva.
   - renderiza en dos columnas:
-    - principal: velocidad (`SpeedChart`) y corrientes/BEMF (`CurrentChart`)
+    - principal: velocidad (`SpeedChart`) y esfuerzo de control (canales `Duty` y `LoadCurrent`)
     - lateral: RUN/STOP + consigna, estado del ESC, controles modulares de `controls.json` con botones -/+ que usan `step`
     - paneles minimizables con preferencias en `localStorage`
 - `Debug.razor`:
   - paso de conmutacion fijo (`STEP_TEST`): selector de los 6 pasos six-step (UV..WV: primera fase PWM, segunda a GND, tercera flotante) con duty 0-30 %. El firmware reutiliza `commutate()` via `bldc_apply_step()`.
   - lazo abierto sinusoidal trifasico (movido desde el Dashboard).
 - `Startup.razor` muestra los cinco parametros fisicos de la rampa de arranque y separa Aplicar en RAM de Guardar en flash.
+- `LoadCurves.razor` configura `LOAD_SWEEP` (escalera o rampa), superpone varias curvas (la actual, guardadas e importadas de CSV), grafica I bus, duty, potencia, dispersion de velocidad o corriente de carga contra una tara, y exporta CSV.
 
 ## 7. Worker de fondo
 
@@ -120,7 +115,7 @@ Consecuencia: si un cambio afecta estado observable, casi seguro debe terminar a
   - `ScanAsync()`
   - `ReadTelemetryOnceAsync()`
   - `RefreshStatusAsync()` si hay conexion
-- Un ciclo separado de 350 ms mantiene el `KEEPALIVE` de `SINE_DRIVE` sin depender del refresh general.
+- Un ciclo separado de 350 ms mantiene el `KEEPALIVE` de `SINE_DRIVE`/`STEP_TEST`, consulta el freewheel y sigue el barrido de carga (`PollLoadSweepAsync`) sin depender del refresh general.
 - `ReadTelemetryOnceAsync()` lee una trama cuando cualquier canal esta activo; un loop dedicado de 10 ms evita acumular eventos mientras el status conserva su ciclo de 500 ms.
 
 Consecuencia: la telemetria no es un stream continuo separado; depende del worker y del log habilitado.
@@ -129,19 +124,14 @@ Consecuencia: la telemetria no es un stream continuo separado; depende del worke
 
 - `GuiControl`
   - la GUI puede enviar `Run`, `Stop`, `SetSpeedRpm`, `SetConfig`, `ResetConfig`, `SaveConfig`.
-- `SimulinkControl`
-  - la GUI queda bloqueada para control real.
-  - `ESTOP` sigue permitido.
-  - Simulink puede enviar `Run`, `Stop`, `SetSpeedRpm`.
 - `MonitorOnly`
-  - sin control desde GUI ni HIL.
-  - solo monitoreo/adquisicion.
+  - sin control desde GUI.
+  - solo monitoreo/adquisicion; `ESTOP` y `ABORT` del barrido siguen permitidos.
 
 Detalles importantes:
 
 - `SetSpeedRpmAsync()` valida `GuiControl`.
-- `SetSpeedRpmFromSimulinkAsync()` valida `SimulinkControl`.
-- `HilStartAsync()` y `HilSetInputsAsync()` validan `mode != MonitorOnly`.
+- `StartLoadSweepAsync()` valida `GuiControl` y el plan (rango activo, ventana, maximo 128 puntos) antes de enviar; `AbortLoadSweepAsync()` no depende del modo.
 - `EmergencyStopAsync()` no depende del modo.
 - `SetSineDriveAsync()` solo admite `GuiControl`; `EscBridgeWorker` envia `KEEPALIVE` en un ciclo dedicado de 350 ms y el firmware corta tras 1500 ms sin renovacion. `KEEPALIVE` nunca puede iniciar el modo desde `IDLE`.
 - El panel ofrece `Manual`, que conserva un borrador hasta pulsar Aplicar, y `Dinamico`, que usa `UpdateSineDriveAsync()` con `KEEPALIVE` y sin `GET_STATUS` adicional para enviar frecuencia en cada input valido y amplitud al soltar el slider. Al usar `KEEPALIVE`, una edicion dinamica nunca puede iniciar desde `IDLE`.
@@ -171,10 +161,10 @@ La persistencia en flash no viene del JSON. La UI muestra el boton guardar solo 
 - `EscBridgeService.HandleFrame()` decodifica el evento y lo guarda en `TelemetryStore`.
 - `TelemetryStore` conserva hasta 2000 muestras por variable.
 - `BridgeSnapshot.SpeedTelemetry` trae estadisticas agregadas.
-- Los canales disponibles son velocidad, `IU`, `IV` y periodo/calidad BEMF. Las corrientes incluyen cuentas ADC, flags de validez y sector de conmutacion.
+- Los canales disponibles son velocidad, tension y corriente de bus (INA219) y duty (`DisplayValue` en %). No hay sensado de corriente por fase; el firmware solo reporta magnitudes medidas.
 - `BridgeSnapshot.StartupConfiguration`, `BridgeSnapshot.SineDrive` y `BridgeSnapshot.StepTest` exponen configuracion y readback de los modos manuales.
-- `Bridge.SpeedSamples` expone las muestras de `speed`; `Bridge.CurrentUSamples` y `Bridge.CurrentVSamples` exponen `current_u`/`current_v`.
-- `SpeedChart.razor` dibuja SVG manual (velocidad) y `CurrentChart.razor` dibuja IU e IV simultaneamente en el panel "Adquisicion de corrientes". Ambos reutilizan `js/speed-chart.js` para los cursores.
+- `Bridge.SpeedSamples` expone las muestras de `speed`; `Bridge.GetTelemetrySamples(LogParam)` el resto de los canales.
+- `SpeedChart.razor` dibuja SVG manual (velocidad) y reutiliza `js/speed-chart.js` para cursores y descarga de CSV. `LoadCurves.razor` dibuja su propio SVG (rpm en X).
 
 Suposiciones actuales del chart:
 
@@ -182,39 +172,12 @@ Suposiciones actuales del chart:
 - ordena muestras por `TargetTickMs`.
 - solo grafica velocidad.
 
-## 11. HIL / Simulink
+## 11. Curvas de carga
 
-- `HilUdpBridgeService` escucha en `127.0.0.1:5055`.
-- Acepta comandos discretos y CSVs de entradas HIL.
-- Drena paquetes pendientes y prioriza:
-  - `ESTOP` por encima de todo
-  - el ultimo setpoint o ultimo paquete HIL si son coalescibles
-- Mantiene:
-  - `RxFrames`
-  - `LostFrames`
-  - `EffectiveRateHz`
-  - `AverageRoundTripMs`
-  - `JitterMs`
-  - `LastOutputs`
-
-Formatos relevantes:
-
-- setpoint:
-  - `SETPOINT,rpm`
-  - `SETPOINT,seq,rpm`
-  - aliases: `SP`, `SPEED`
-- discreto:
-  - `RUN`, `MOTOR_RUN`
-  - `MOTOR_STOP`, `REAL_STOP`
-  - `ESTOP`
-  - `HIL_START`, `START`
-  - `HIL_STOP`, `STOP`
-- entradas HIL:
-  - recomendado: `seq,speed_rpm,enable`
-  - prefijado: `PIL,speed_rpm,enable`
-  - prefijado con secuencia: `PIL,seq,speed_rpm,enable`
-  - compatibilidad legacy: `seq,speed_rpm,reserved,load_torque,flags,enable`
-  - `reserved` se ignora; Simulink simula ESC/conmutacion y el MCU solo recibe velocidad
+- El firmware ejecuta el barrido (`LOAD_SWEEP`) y guarda hasta 128 puntos promediados en RAM; el bridge copia los puntos nuevos con `GET_POINTS` (3 por trama).
+- `StartLoadSweepAsync()` borra los puntos del host; `SaveCurrentLoadCurve()` e `ImportLoadCurveCsv()` agregan curvas guardadas y `SetLoadCurveTare()` elige la tara (nada de esto viaja al MCU).
+- `LoadCurveAnalysis.Subtract()` y `LoadCurrentVsTare()` interpolan la tara linealmente y nunca extrapolan fuera de su rango de rpm. La corriente de carga es `(I_bus − I_bus,tara)/d`.
+- `LoadSweepCsvWriter` genera el CSV con una linea `#` de metadatos; `LoadSweepCsvReader` lo relee (tambien el formato viejo con `load_ma`).
 
 ## 12. Superficie HTTP/WebSocket
 
@@ -244,11 +207,13 @@ Los endpoints viven en `BridgeEndpointMapper.cs`.
   - `POST /api/bridge/log/rate`
   - `POST /api/bridge/log/speed/start`
   - `POST /api/bridge/log/speed/stop`
-- HIL:
-  - `POST /api/bridge/hil/start`
-  - `POST /api/bridge/hil/stop`
-  - `POST /api/bridge/hil/inputs`
-  - `GET /api/bridge/hil/outputs`
+- curvas de carga:
+  - `GET /api/bridge/load-sweep` (refresca estado y puntos)
+  - `POST /api/bridge/load-sweep/start` (`LoadSweepRequest`)
+  - `POST /api/bridge/load-sweep/abort`
+  - `GET /api/bridge/load-sweep/csv`
+- config del controlador:
+  - `GET /api/bridge/controller-config`
 - WebSocket:
   - `GET /ws/bridge`
   - envia `bridge.Snapshot` cada 500 ms
@@ -261,11 +226,11 @@ Importante: la pagina `Home.razor` no usa estos endpoints. Llama al bridge en me
 - Header de 10 bytes, CRC16 al final.
 - `CommOpcode` contiene lo soportado por GUI/bridge:
   - `Ping`, `GetStatus`
-  - `Run`, `Stop`, `EmergencyStop`, `SetSpeedRpm`, `SetControlMode`
+  - `Run`, `Stop`, `EmergencyStop`, `SetSpeedRpm`
   - `GetConfig`, `SetConfig`, `ResetConfig`, `SaveConfig`
   - `LogStart`, `LogStop`, `LogRate`, `TelemetryEvent`
-  - `HilStart`, `HilStop`, `HilSetInputs`, `HilGetOutputs`
-  - `SineDrive`
+  - `SineDrive`, `StepTest`, `ZcDiag`
+  - `LoadSweep`
 - `HidSharpEscTransport`:
   - abre por VID/PID y `DevicePath`
   - agrega report ID 0 al escribir cuando Windows lo necesita
@@ -289,16 +254,17 @@ Importante: la pagina `Home.razor` no usa estos endpoints. Llama al bridge en me
   - `LogParam`
   - decode en `EscProtocol.DecodeTelemetry()`
   - consumo en `TelemetryStore` o nueva UI
-- Cambiar HIL/UDP:
-  - `HilUdpBridgeService.cs`
-  - si cambia payload binario, tambien `HilModels.cs` y `EscProtocol`
+- Cambiar el barrido de carga:
+  - firmware `load_sweep.c` y `comm_protocol.c`
+  - `LoadSweepModels.cs` y `EscProtocol` si cambian bytes
+  - `EscBridgeService` (`StartLoadSweepAsync`, `RefreshLoadSweepAsync`) y `LoadCurves.razor`
 
 ## 15. Trampas reales del proyecto
 
 - `controls.json` esta cacheado; no esperar recarga en caliente.
 - El paquete `ScottPlot.Blazor` esta referenciado pero el grafico real usa SVG manual.
 - `SaveConfig` es separado: `SetConfig` no persiste a flash por si solo.
-- `ConfigParam.CurrentLimit` y `ConfigParam.TempLimit` existen en enum, pero `EscProtocol.ConfigPayload()` no los soporta todavia.
+- `ConfigParam.SpeedRamp` (0 = sin limite) se aplica en caliente; persistirla requiere `SaveConfig` como el resto.
 - `Home.razor` depende de `Bridge.SnapshotChanged`; si se saltea `Notify()`, la UI queda desfasada.
 - El bridge refresca estado despues de la mayoria de los comandos. Si se agrega uno nuevo, decidir si necesita `refreshStatus`.
 - La lectura de telemetria comparte el mismo lock que los requests. No abrir caminos paralelos al HID desde la UI.
@@ -311,7 +277,9 @@ Importante: la pagina `Home.razor` no usa estos endpoints. Llama al bridge en me
   - valida que `ESTOP` siga permitido
   - valida buffering de telemetria
   - valida flujo `SetConfig` + `SaveConfig`
-  - valida opcodes HIL
+  - valida el barrido de carga (payload, drenado de puntos, validacion local, tara)
+- `tests/Esc.Tests/LoadCurveAnalysisTests.cs`
+  - valida curvas, interpolacion de tara y CSV
 - `tests/Esc.Tests/ProtocolTests.cs`
   - valida framing, CRC y decode del protocolo
 

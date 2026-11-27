@@ -6,7 +6,6 @@ namespace Esc.Bridge;
 
 public sealed class EscBridgeService
 {
-    private const int MaxHilTraceEntries = 80;
     private const byte SineDriveAppState = 10;
     private const byte StepTestAppState = 11;
     private const byte FreewheelAppState = 12;
@@ -18,7 +17,6 @@ public sealed class EscBridgeService
     private readonly SemaphoreSlim _ioLock = new(1, 1);
     private readonly SemaphoreSlim _controlGate = new(1, 1);
     private readonly object _stateGate = new();
-    private readonly List<HilFrameTraceEntry> _hilFrameTrace = new();
 
     private IReadOnlyList<HidDeviceDescriptor> _devices = Array.Empty<HidDeviceDescriptor>();
     private HidDeviceDescriptor? _currentDevice;
@@ -31,8 +29,6 @@ public sealed class EscBridgeService
     private byte _sequence;
     private int _emergencyStopPending;
     private int _emergencyStopGeneration;
-    private HilBridgeStats _hilStats = new(false, 0, 0, 0, 0, 0, null, null);
-    private ValidationReference? _validationReference;
     private ActiveControllerConfig? _activeControllerConfig;
     private ActiveSpeedLimits? _activeSpeedLimits;
     private StartupConfiguration? _startupConfiguration;
@@ -46,8 +42,12 @@ public sealed class EscBridgeService
     private ZcChannelMap? _activeZcMap;
     private ZcAutoDetectResult? _lastZcAutoDetect;
     private DateTimeOffset? _freewheelLastUpdatedAt;
-    private DateTimeOffset? _validationReferenceCapturedAt;
-    private string? _validationReferenceError;
+    private LoadSweepStatus? _loadSweepStatus;
+    private readonly List<LoadSweepPoint> _loadSweepPoints = new();
+    private DateTimeOffset? _loadSweepUpdatedAt;
+    private string? _loadSweepError;
+    private readonly List<SavedLoadCurve> _savedCurves = new();
+    private Guid? _tareCurveId;
 
     public EscBridgeService(
         IEscDeviceEnumerator deviceEnumerator,
@@ -75,9 +75,6 @@ public sealed class EscBridgeService
     }
 
     public IReadOnlyList<TelemetrySample> SpeedSamples => _telemetryStore.GetSamples("speed");
-    public IReadOnlyList<TelemetrySample> CurrentUSamples => _telemetryStore.GetSamples("current_u");
-    public IReadOnlyList<TelemetrySample> CurrentVSamples => _telemetryStore.GetSamples("current_v");
-    public IReadOnlyList<TelemetrySample> BemfSamples => _telemetryStore.GetSamples("bemf_period");
     public bool IsTransportOpen => _transport.IsOpen;
 
     public void ClearSpeedTelemetry()
@@ -87,11 +84,11 @@ public sealed class EscBridgeService
     }
 
     public IReadOnlyList<TelemetrySample> GetTelemetrySamples(LogParam parameter) =>
-        _telemetryStore.GetSamples(TelemetryVariable(parameter));
+        _telemetryStore.GetSamples(EscProtocol.TelemetryVariable(parameter));
 
     public void ClearTelemetry(LogParam parameter)
     {
-        _telemetryStore.Clear(TelemetryVariable(parameter));
+        _telemetryStore.Clear(EscProtocol.TelemetryVariable(parameter));
         Notify();
     }
 
@@ -113,7 +110,7 @@ public sealed class EscBridgeService
                 _status = null;
                 _currentDevice = null;
                 ClearManualOutputs();
-                ClearValidationReference();
+                ClearDeviceCache();
             }
             else if (!_transport.IsOpen && devices.Count > 0 && _state is DeviceConnectionState.NotDetected or DeviceConnectionState.Disconnected)
             {
@@ -128,7 +125,7 @@ public sealed class EscBridgeService
                 _currentDevice = null;
                 _status = null;
                 ClearManualOutputs();
-                ClearValidationReference();
+                ClearDeviceCache();
             }
         }
 
@@ -166,8 +163,8 @@ public sealed class EscBridgeService
 
             EscFrame statusFrame = await SendRequestCoreAsync(CommOpcode.GetStatus, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
             EscStatus status = EscProtocol.DecodeStatus(statusFrame);
-            (ValidationReference validationReference, ActiveControllerConfig activeControllerConfig) =
-                await ReadValidationReferenceCoreAsync(cancellationToken).ConfigureAwait(false);
+            ActiveControllerConfig activeControllerConfig =
+                await ReadControllerConfigCoreAsync(cancellationToken).ConfigureAwait(false);
             ActiveSpeedLimits activeSpeedLimits = await ReadSpeedLimitsCoreAsync(cancellationToken).ConfigureAwait(false);
             StartupConfiguration startupConfiguration = await ReadStartupConfigurationCoreAsync(cancellationToken).ConfigureAwait(false);
 
@@ -177,12 +174,9 @@ public sealed class EscBridgeService
                 _currentDevice = descriptor;
                 _status = status;
                 _lastError = null;
-                _validationReference = validationReference;
                 _activeControllerConfig = activeControllerConfig;
                 _activeSpeedLimits = activeSpeedLimits;
                 _startupConfiguration = startupConfiguration;
-                _validationReferenceCapturedAt = DateTimeOffset.UtcNow;
-                _validationReferenceError = null;
             }
 
             Notify();
@@ -218,7 +212,7 @@ public sealed class EscBridgeService
                 _currentDevice = null;
                 _status = null;
                 _lastError = null;
-                ClearValidationReference();
+                ClearDeviceCache();
             }
 
             Notify();
@@ -914,42 +908,6 @@ public sealed class EscBridgeService
         return await SendCommandAsync(CommOpcode.SetSpeedRpm, 0, payload, cancellationToken);
     }
 
-    public Task<CommandResult> RunFromSimulinkAsync(CancellationToken cancellationToken = default)
-    {
-        return SendSimulinkControlCommandAsync(CommOpcode.Run, cancellationToken);
-    }
-
-    public Task<CommandResult> StopFromSimulinkAsync(CancellationToken cancellationToken = default)
-    {
-        return SendSimulinkControlCommandAsync(CommOpcode.Stop, cancellationToken);
-    }
-
-    public async Task<CommandResult> SetSpeedRpmFromSimulinkAsync(int rpm, bool refreshStatus = true, CancellationToken cancellationToken = default)
-    {
-        if (!AllowsSimulinkControl())
-        {
-            return CommandResult.Failed("Cambia el modo a Simulink control para enviar comandos de motor.");
-        }
-
-        byte[] payload;
-        try
-        {
-            payload = EscProtocol.UInt16Payload(rpm);
-        }
-        catch (OverflowException)
-        {
-            return CommandResult.Failed($"Valor de velocidad fuera de rango: {rpm} rpm.");
-        }
-
-        CommandResult result = await SendCommandAsync(CommOpcode.SetSpeedRpm, 0, payload, cancellationToken, refreshStatus).ConfigureAwait(false);
-        if (result.Success && !refreshStatus)
-        {
-            UpdateCachedSpeedSetpoint((ushort)rpm);
-        }
-
-        return result;
-    }
-
     public async Task<object?> GetConfigAsync(ConfigParam parameter, CancellationToken cancellationToken = default)
     {
         EscFrame response = await SendRequestAsync(CommOpcode.GetConfig, (byte)parameter, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
@@ -957,33 +915,19 @@ public sealed class EscBridgeService
         return EscProtocol.DecodeConfigValue(parameter, response.Payload);
     }
 
-    public async Task<ValidationReference> RefreshValidationReferenceAsync(CancellationToken cancellationToken = default)
+    public async Task<ActiveControllerConfig> RefreshControllerConfigAsync(CancellationToken cancellationToken = default)
     {
         await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            (ValidationReference validationReference, ActiveControllerConfig activeControllerConfig) =
-                await ReadValidationReferenceCoreAsync(cancellationToken).ConfigureAwait(false);
+            ActiveControllerConfig config = await ReadControllerConfigCoreAsync(cancellationToken).ConfigureAwait(false);
             lock (_stateGate)
             {
-                _validationReference = validationReference;
-                _activeControllerConfig = activeControllerConfig;
-                _validationReferenceCapturedAt = DateTimeOffset.UtcNow;
-                _validationReferenceError = null;
+                _activeControllerConfig = config;
             }
 
             Notify();
-            return validationReference;
-        }
-        catch (Exception exception)
-        {
-            lock (_stateGate)
-            {
-                _validationReferenceError = exception.Message;
-            }
-
-            Notify();
-            throw;
+            return config;
         }
         finally
         {
@@ -1009,9 +953,9 @@ public sealed class EscBridgeService
         }
 
         CommandResult result = await SendCommandAsync(CommOpcode.SetConfig, (byte)parameter, payload, cancellationToken);
-        if (result.Success && parameter is ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm or ConfigParam.PolePairs or ConfigParam.PwmFreq)
+        if (result.Success && IsControllerParameter(parameter))
         {
-            await RefreshValidationReferenceAsync(cancellationToken).ConfigureAwait(false);
+            await RefreshControllerConfigAsync(cancellationToken).ConfigureAwait(false);
         }
         if (result.Success && parameter is ConfigParam.MinSpeed or ConfigParam.MaxSpeed)
         {
@@ -1036,7 +980,7 @@ public sealed class EscBridgeService
             CommOpcode.ResetConfig, (byte)parameter, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
         if (result.Success)
         {
-            await RefreshValidationReferenceAsync(cancellationToken).ConfigureAwait(false);
+            await RefreshControllerConfigAsync(cancellationToken).ConfigureAwait(false);
             if (parameter is ConfigParam.MinSpeed or ConfigParam.MaxSpeed or ConfigParam.All)
             {
                 await RefreshSpeedLimitsAsync(cancellationToken).ConfigureAwait(false);
@@ -1060,185 +1004,316 @@ public sealed class EscBridgeService
         return SendCommandAsync(CommOpcode.SaveConfig, (byte)parameter, Array.Empty<byte>(), cancellationToken);
     }
 
-    public async Task<CommandResult> SetControlRuntimeModeAsync(ControlRuntimeMode mode, CancellationToken cancellationToken = default)
-    {
-        if (!AllowsHilControl())
-        {
-            return CommandResult.Failed("Control bloqueado por el modo actual.");
-        }
-
-        return await SendCommandAsync(CommOpcode.SetControlMode, 0, EscProtocol.ControlModePayload(mode), cancellationToken).ConfigureAwait(false);
-    }
-
-    public async Task<CommandResult> HilStartAsync(
-        ushort? inputTimeoutMs = null,
-        CancellationToken cancellationToken = default,
-        HilExecutionMode? executionMode = null)
-    {
-        if (!AllowsHilControl())
-        {
-            return CommandResult.Failed("Control bloqueado por el modo actual.");
-        }
-
-        if (executionMode.HasValue && !inputTimeoutMs.HasValue)
-        {
-            return CommandResult.Failed("El modo de ejecucion HIL requiere un timeout de entrada.");
-        }
-
-        byte[] payload = inputTimeoutMs.HasValue
-            ? executionMode.HasValue
-                ? EscProtocol.HilStartPayload(inputTimeoutMs.Value, executionMode.Value)
-                : EscProtocol.HilStartPayload(inputTimeoutMs.Value)
-            : Array.Empty<byte>();
-        CommandResult result = await SendCommandAsync(CommOpcode.HilStart, 0, payload, cancellationToken, refreshStatus: false).ConfigureAwait(false);
-        if (result.Success)
-        {
-            SetHilEnabled(true);
-        }
-
-        return result;
-    }
-
-    public async Task<CommandResult> HilStopAsync(CancellationToken cancellationToken = default)
-    {
-        CommandResult result = await SendCommandAsync(CommOpcode.HilStop, 0, Array.Empty<byte>(), cancellationToken, refreshStatus: false).ConfigureAwait(false);
-        if (result.Success)
-        {
-            SetHilEnabled(false);
-        }
-
-        return result;
-    }
-
-    public async Task<CommandResult> HilSetInputsAsync(HilInputs inputs, CancellationToken cancellationToken = default)
-    {
-        if (!AllowsHilControl())
-        {
-            return CommandResult.Failed("Control bloqueado por el modo actual.");
-        }
-
-        CommandResult result = await SendCommandAsync(CommOpcode.HilSetInputs, 0, EscProtocol.HilInputsPayload(inputs), cancellationToken, refreshStatus: false).ConfigureAwait(false);
-        if (result.Success)
-        {
-            SetHilEnabled(inputs.Enable);
-        }
-
-        return result;
-    }
-
-    public async Task<HilOutputs> HilGetOutputsAsync(CancellationToken cancellationToken = default)
-    {
-        EscFrame response = await SendRequestAsync(CommOpcode.HilGetOutputs, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
-        return EscProtocol.DecodeHilOutputs(response);
-    }
-
-    public async Task<HilStepResult> HilStepAsync(
-        HilStepRequest request,
-        int responseDeadlineMs,
+    public async Task<CommandResult> StartLoadSweepAsync(
+        LoadSweepRequest request,
         CancellationToken cancellationToken = default)
     {
-        if (!AllowsHilControl())
+        ArgumentNullException.ThrowIfNull(request);
+        if (IsEmergencyStopPending()) return CommandResult.Failed("ESTOP en curso.");
+        if (!AllowsGuiControl())
         {
-            throw new InvalidOperationException("Control bloqueado por el modo actual.");
-        }
-        if (responseDeadlineMs < 1)
-        {
-            throw new ArgumentOutOfRangeException(nameof(responseDeadlineMs), "Response deadline must be at least 1 ms.");
+            return CommandResult.Failed("Control bloqueado por el modo actual.");
         }
 
-        byte[] payload = EscProtocol.HilStepPayload(request);
-        EscFrame response;
+        string? invalid = ValidateLoadSweep(request);
+        if (invalid is not null)
+        {
+            return CommandResult.Failed(invalid);
+        }
+
         try
         {
-            response = await SendRequestAsync(
-                CommOpcode.HilStep, 0, payload, cancellationToken, responseDeadlineMs).ConfigureAwait(false);
-        }
-        catch (TimeoutException)
-        {
-            response = await SendRequestAsync(
-                CommOpcode.HilStep, 0, payload, cancellationToken, responseDeadlineMs).ConfigureAwait(false);
-        }
-
-        HilStepResult result = EscProtocol.DecodeHilStepResult(response);
-        SetHilEnabled(request.Enable);
-        return result;
-    }
-
-    public Task<CommandResult> HilStartAsync(
-        ushort? inputTimeoutMs,
-        HilExecutionMode executionMode,
-        CancellationToken cancellationToken = default)
-    {
-        return HilStartAsync(inputTimeoutMs, cancellationToken, executionMode);
-    }
-
-    public void UpdateHilStats(HilBridgeStats stats)
-    {
-        lock (_stateGate)
-        {
-            _hilStats = stats;
-        }
-
-        Notify();
-    }
-
-    public void ClearHilOutputs()
-    {
-        lock (_stateGate)
-        {
-            _hilStats = _hilStats with { LastOutputs = null };
-        }
-
-        Notify();
-    }
-
-    public void RecordHilFrame(
-        string direction,
-        string transport,
-        uint? sequence,
-        string summary,
-        string payload)
-    {
-        bool collapsed = false;
-        lock (_stateGate)
-        {
-            DateTimeOffset timestamp = DateTimeOffset.Now;
-            if (_hilFrameTrace.Count > 0)
+            EscFrame response = await SendRequestAsync(
+                CommOpcode.LoadSweep,
+                (byte)LoadSweepCommand.Start,
+                EscProtocol.LoadSweepStartPayload(request),
+                cancellationToken).ConfigureAwait(false);
+            CommandResult result = response.Status switch
             {
-                HilFrameTraceEntry last = _hilFrameTrace[^1];
-                if (last.Direction == direction &&
-                    last.Transport == transport &&
-                    last.Sequence == sequence &&
-                    last.Summary == summary &&
-                    last.Payload == payload)
+                CommStatus.Ok => CommandResult.Ok("Barrido iniciado."),
+                CommStatus.InvalidState => new CommandResult(
+                    false, response.Status, "El barrido solo arranca en IDLE o CLOSEDLOOP y sin otro barrido activo."),
+                CommStatus.UnderLimit or CommStatus.OverLimit => new CommandResult(
+                    false, response.Status, "El ESC rechazo los limites del barrido (rpm fuera del rango activo o demasiados puntos)."),
+                _ => CommandResult.FromStatus(response.Status)
+            };
+            if (result.Success)
+            {
+                lock (_stateGate)
                 {
-                    _hilFrameTrace[^1] = last with
-                    {
-                        Timestamp = timestamp,
-                        RepeatCount = last.RepeatCount + 1
-                    };
-                    collapsed = true;
+                    _loadSweepPoints.Clear();
+                    _loadSweepError = null;
                 }
             }
 
-            if (!collapsed)
-            {
-                _hilFrameTrace.Add(new HilFrameTraceEntry(
-                    timestamp,
-                    direction,
-                    transport,
-                    sequence,
-                    summary,
-                    payload));
+            await RefreshLoadSweepAsync(cancellationToken).ConfigureAwait(false);
+            await RefreshStatusAfterCommandAsync(cancellationToken).ConfigureAwait(false);
+            return result;
+        }
+        catch (Exception ex)
+        {
+            SetError(DeviceConnectionState.Error, ex.Message);
+            return CommandResult.Failed(ex.Message);
+        }
+    }
 
-                while (_hilFrameTrace.Count > MaxHilTraceEntries)
+    /// <summary>Abort the running sweep; the motor keeps the last reference. Allowed in every mode.</summary>
+    public async Task<CommandResult> AbortLoadSweepAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            CommandResult result = await SendCommandAsync(
+                CommOpcode.LoadSweep, (byte)LoadSweepCommand.Abort, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
+            await RefreshLoadSweepAsync(cancellationToken).ConfigureAwait(false);
+            return result.Success ? CommandResult.Ok("Barrido abortado; el motor mantiene la referencia actual.") : result;
+        }
+        catch (Exception ex)
+        {
+            SetError(DeviceConnectionState.Error, ex.Message);
+            return CommandResult.Failed(ex.Message);
+        }
+    }
+
+    /// <summary>Read the sweep status and copy any new points from the MCU table.</summary>
+    public async Task<LoadSweepSnapshot> RefreshLoadSweepAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_transport.IsOpen)
+        {
+            return Snapshot.LoadSweep;
+        }
+
+        try
+        {
+            EscFrame statusFrame = await SendRequestAsync(
+                CommOpcode.LoadSweep, (byte)LoadSweepCommand.GetStatus, Array.Empty<byte>(), cancellationToken,
+                responseDeadlineMs: 500).ConfigureAwait(false);
+            LoadSweepStatus status = EscProtocol.DecodeLoadSweepStatus(statusFrame);
+
+            int known;
+            lock (_stateGate)
+            {
+                if (status.PointCount < _loadSweepPoints.Count)
                 {
-                    _hilFrameTrace.RemoveAt(0);
+                    _loadSweepPoints.Clear();
                 }
+                known = _loadSweepPoints.Count;
+            }
+
+            var fetched = new List<LoadSweepPoint>();
+            while (known + fetched.Count < status.PointCount)
+            {
+                ushort first = checked((ushort)(known + fetched.Count));
+                byte[] payload = EscProtocol.UInt16Payload(first);
+                EscFrame pointsFrame = await SendRequestAsync(
+                    CommOpcode.LoadSweep, (byte)LoadSweepCommand.GetPoints, payload, cancellationToken,
+                    responseDeadlineMs: 500).ConfigureAwait(false);
+                LoadSweepPointBatch batch = EscProtocol.DecodeLoadSweepPoints(pointsFrame);
+                if (batch.Points.Count == 0)
+                {
+                    break;
+                }
+                fetched.AddRange(batch.Points);
+            }
+
+            lock (_stateGate)
+            {
+                if (_loadSweepPoints.Count == known)
+                {
+                    _loadSweepPoints.AddRange(fetched);
+                }
+                _loadSweepStatus = status;
+                _loadSweepUpdatedAt = DateTimeOffset.UtcNow;
+                _loadSweepError = null;
+                if (_status is not null && _status.LoadSweepActive != status.IsActive)
+                {
+                    // Keep the cached GET_STATUS flag coherent until the next status refresh.
+                    _status = _status with { LoadSweepActive = status.IsActive };
+                }
+            }
+        }
+        catch (Exception ex) when (ex is EscProtocolException or TimeoutException)
+        {
+            _logger.LogDebug(ex, "Load sweep refresh failed.");
+            lock (_stateGate)
+            {
+                _loadSweepError = ex.Message;
             }
         }
 
         Notify();
+        return Snapshot.LoadSweep;
+    }
+
+    /// <summary>Background poll: follows a running sweep and drains the points of a finished one.</summary>
+    public async Task PollLoadSweepAsync(CancellationToken cancellationToken = default)
+    {
+        if (!_transport.IsOpen) return;
+
+        bool follow;
+        lock (_stateGate)
+        {
+            follow = _status?.LoadSweepActive == true ||
+                     _loadSweepStatus?.IsActive == true ||
+                     (_loadSweepStatus is { } status && status.PointCount > _loadSweepPoints.Count);
+        }
+        if (!follow) return;
+
+        await RefreshLoadSweepAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Forget the points copied to the host; the MCU table is untouched.</summary>
+    public void ClearLoadSweepPoints()
+    {
+        lock (_stateGate)
+        {
+            _loadSweepPoints.Clear();
+            _loadSweepStatus = null;
+            _loadSweepError = null;
+        }
+
+        Notify();
+    }
+
+    /// <summary>Keep the points of the current sweep as a named curve for comparison.</summary>
+    public CommandResult SaveCurrentLoadCurve(string? label = null)
+    {
+        lock (_stateGate)
+        {
+            if (_loadSweepPoints.Count == 0)
+            {
+                return CommandResult.Failed("No hay puntos para guardar.");
+            }
+
+            string name = string.IsNullOrWhiteSpace(label)
+                ? $"Curva {DateTime.Now:HH:mm:ss}"
+                : label.Trim();
+            _savedCurves.Add(new SavedLoadCurve(
+                Guid.NewGuid(), name, _loadSweepPoints.ToArray(), "MCU", DateTimeOffset.Now));
+        }
+
+        Notify();
+        return CommandResult.Ok("Curva guardada para comparar.");
+    }
+
+    /// <summary>Import a CSV exported by this GUI as a named curve.</summary>
+    public CommandResult ImportLoadCurveCsv(string label, string csv)
+    {
+        IReadOnlyList<LoadSweepPoint> points;
+        try
+        {
+            points = LoadSweepCsvReader.Parse(csv);
+        }
+        catch (FormatException ex)
+        {
+            return CommandResult.Failed($"No se pudo leer el CSV: {ex.Message}");
+        }
+
+        if (points.Count == 0)
+        {
+            return CommandResult.Failed("El CSV no tiene puntos.");
+        }
+
+        lock (_stateGate)
+        {
+            _savedCurves.Add(new SavedLoadCurve(
+                Guid.NewGuid(), string.IsNullOrWhiteSpace(label) ? "CSV" : label.Trim(), points, "CSV", DateTimeOffset.Now));
+        }
+
+        Notify();
+        return CommandResult.Ok($"Curva importada ({points.Count} puntos).");
+    }
+
+    public void RemoveSavedLoadCurve(Guid id)
+    {
+        lock (_stateGate)
+        {
+            _savedCurves.RemoveAll(curve => curve.Id == id);
+            if (_tareCurveId == id)
+            {
+                _tareCurveId = null;
+            }
+        }
+
+        Notify();
+    }
+
+    /// <summary>Use a saved curve as tare; null clears it.</summary>
+    public void SetLoadCurveTare(Guid? id)
+    {
+        lock (_stateGate)
+        {
+            _tareCurveId = id is { } value && _savedCurves.Any(curve => curve.Id == value) ? value : null;
+        }
+
+        Notify();
+    }
+
+    public string? SavedLoadCurveCsv(Guid id)
+    {
+        SavedLoadCurve? curve = Snapshot.LoadSweep.SavedCurves.FirstOrDefault(item => item.Id == id);
+        return curve is null ? null : LoadSweepCsvWriter.Write(null, curve.Points);
+    }
+
+    public string LoadSweepCsv()
+    {
+        LoadSweepSnapshot sweep = Snapshot.LoadSweep;
+        return LoadSweepCsvWriter.Write(sweep.Status, sweep.Points);
+    }
+
+    private string? ValidateLoadSweep(LoadSweepRequest request)
+    {
+        ActiveSpeedLimits? limits;
+        lock (_stateGate)
+        {
+            limits = _activeSpeedLimits;
+        }
+
+        if (limits is not null &&
+            (request.StartRpm < limits.MinRpm || request.EndRpm < limits.MinRpm ||
+             request.StartRpm > limits.MaxRpm || request.EndRpm > limits.MaxRpm))
+        {
+            return $"Las rpm del barrido deben estar dentro del rango activo {limits.MinRpm}-{limits.MaxRpm} rpm.";
+        }
+        if (request.WindowMs is < CommConstants.LoadSweepMinWindowMs or > CommConstants.LoadSweepMaxWindowMs)
+        {
+            return $"La ventana debe estar entre {CommConstants.LoadSweepMinWindowMs} y {CommConstants.LoadSweepMaxWindowMs} ms.";
+        }
+        if (request.SettleMs > CommConstants.LoadSweepMaxSettleMs)
+        {
+            return $"El asentamiento no puede superar {CommConstants.LoadSweepMaxSettleMs} ms.";
+        }
+
+        int span = Math.Abs(request.EndRpm - request.StartRpm);
+        if (request.Mode == LoadSweepMode.Staircase)
+        {
+            if (request.StepOrRate < CommConstants.LoadSweepMinStepRpm)
+            {
+                return $"El escalon debe ser de al menos {CommConstants.LoadSweepMinStepRpm} rpm.";
+            }
+            int steps = (span + request.StepOrRate - 1) / request.StepOrRate + 1;
+            if (steps > 128)
+            {
+                return $"La escalera tendria {steps} escalones; el maximo es 128.";
+            }
+        }
+        else
+        {
+            if (span == 0)
+            {
+                return "La rampa necesita rpm inicial y final distintas.";
+            }
+            if (request.StepOrRate is < 1 or > CommConstants.LoadSweepMaxRampRpmPerSecond)
+            {
+                return $"La pendiente debe estar entre 1 y {CommConstants.LoadSweepMaxRampRpmPerSecond} rpm/s.";
+            }
+            long points = span * 1000L / request.StepOrRate / request.WindowMs + 1;
+            if (points > 128)
+            {
+                return $"La rampa generaria ~{points} puntos; el maximo es 128 (ampliar la ventana o la pendiente).";
+            }
+        }
+
+        return null;
     }
 
     public async Task<CommandResult> SetLogRateAsync(ushort rateMs, CancellationToken cancellationToken = default)
@@ -1414,17 +1489,6 @@ public sealed class EscBridgeService
         return result;
     }
 
-    private async Task<CommandResult> SendSimulinkControlCommandAsync(CommOpcode opcode, CancellationToken cancellationToken)
-    {
-        if (!AllowsSimulinkControl())
-        {
-            return CommandResult.Failed("Cambia el modo a Simulink control para enviar comandos de motor.");
-        }
-
-        return await SendMotorCommandWithEstopGuardAsync(
-            opcode, cancellationToken).ConfigureAwait(false);
-    }
-
     private async Task<CommandResult> SendMotorCommandWithEstopGuardAsync(
         CommOpcode opcode,
         CancellationToken cancellationToken)
@@ -1549,10 +1613,6 @@ public sealed class EscBridgeService
         }
         byte sequence = unchecked(++_sequence);
         byte[] request = EscProtocol.BuildRequest(sequence, opcode, parameter, payload);
-        if (IsPilOpcode(opcode))
-        {
-            RecordHilBinaryFrame("Bridge -> MCU", request);
-        }
 
         await _transport.WriteFrameAsync(request, cancellationToken).ConfigureAwait(false);
 
@@ -1580,11 +1640,6 @@ public sealed class EscBridgeService
 
             if (frame.Type == CommFrameType.Response && frame.Sequence == sequence && frame.Opcode == opcode)
             {
-                if (IsPilOpcode(opcode))
-                {
-                    RecordHilBinaryFrame("MCU -> Bridge", frame);
-                }
-
                 return frame;
             }
         }
@@ -1592,27 +1647,26 @@ public sealed class EscBridgeService
         throw new TimeoutException($"Timed out waiting for {opcode} response.");
     }
 
-    private async Task<(ValidationReference Reference, ActiveControllerConfig Config)> ReadValidationReferenceCoreAsync(
-        CancellationToken cancellationToken)
+    private async Task<ActiveControllerConfig> ReadControllerConfigCoreAsync(CancellationToken cancellationToken)
     {
         if (!_transport.IsOpen)
         {
             throw new InvalidOperationException("ESC is not connected.");
         }
 
-        EscFrame referenceFrame = await SendRequestCoreAsync(
-            CommOpcode.GetValidationReference, 0, Array.Empty<byte>(), cancellationToken).ConfigureAwait(false);
-        ValidationReference reference = EscProtocol.DecodeValidationReference(referenceFrame);
-        if (reference.AlgorithmVersion != ValidationReference.SupportedAlgorithmVersion)
-        {
-            throw new InvalidOperationException(
-                $"Unsupported controller algorithm {reference.AlgorithmVersion}; expected {ValidationReference.SupportedAlgorithmVersion}.");
-        }
         double kp = await ReadConfigCoreAsync(ConfigParam.KpRpm, cancellationToken).ConfigureAwait(false);
         double ki = await ReadConfigCoreAsync(ConfigParam.KiRpm, cancellationToken).ConfigureAwait(false);
         double kd = await ReadConfigCoreAsync(ConfigParam.KdRpm, cancellationToken).ConfigureAwait(false);
         double polePairs = await ReadConfigCoreAsync(ConfigParam.PolePairs, cancellationToken).ConfigureAwait(false);
-        return (reference, new ActiveControllerConfig(kp, ki, kd, checked((byte)polePairs)));
+        double pwmFrequency = await ReadConfigCoreAsync(ConfigParam.PwmFreq, cancellationToken).ConfigureAwait(false);
+        double speedRamp = await ReadConfigCoreAsync(ConfigParam.SpeedRamp, cancellationToken).ConfigureAwait(false);
+        return new ActiveControllerConfig(
+            kp,
+            ki,
+            kd,
+            checked((byte)polePairs),
+            checked((ushort)pwmFrequency),
+            checked((ushort)speedRamp));
     }
 
     private async Task<ActiveSpeedLimits> RefreshSpeedLimitsAsync(CancellationToken cancellationToken)
@@ -1713,45 +1767,6 @@ public sealed class EscBridgeService
         }
     }
 
-    private bool AllowsHilControl()
-    {
-        lock (_stateGate)
-        {
-            return _mode != ControlMode.MonitorOnly;
-        }
-    }
-
-    private bool AllowsSimulinkControl()
-    {
-        lock (_stateGate)
-        {
-            return _mode == ControlMode.SimulinkControl;
-        }
-    }
-
-    private void SetHilEnabled(bool enabled)
-    {
-        lock (_stateGate)
-        {
-            _hilStats = _hilStats with { Enabled = enabled };
-        }
-
-        Notify();
-    }
-
-    private void UpdateCachedSpeedSetpoint(ushort rpm)
-    {
-        lock (_stateGate)
-        {
-            if (_status is not null)
-            {
-                _status = _status with { SpeedSetpointRpm = rpm };
-            }
-        }
-
-        Notify();
-    }
-
     private void SetState(DeviceConnectionState state, HidDeviceDescriptor? device, string? error)
     {
         lock (_stateGate)
@@ -1777,7 +1792,6 @@ public sealed class EscBridgeService
 
     private BridgeSnapshot BuildSnapshot()
     {
-        HilBridgeStats hilStats = _hilStats with { RecentFrames = _hilFrameTrace.AsEnumerable().Reverse().ToArray() };
         return new BridgeSnapshot(
             _state,
             _transport.IsOpen,
@@ -1790,14 +1804,6 @@ public sealed class EscBridgeService
             _enabledLogs.Contains(LogParam.Speed),
             _logRateMs,
             _telemetryStore.GetStats("speed", "rpm"),
-            _enabledLogs.Contains(LogParam.CurrentU),
-            _enabledLogs.Contains(LogParam.CurrentV),
-            _enabledLogs.Contains(LogParam.BemfPeriod),
-            _telemetryStore.GetStats("current_u", "mA"),
-            _telemetryStore.GetStats("current_v", "mA"),
-            _telemetryStore.GetStats("bemf_period", "ticks"),
-            hilStats,
-            _validationReference,
             _activeControllerConfig,
             _activeSpeedLimits,
             _startupConfiguration,
@@ -1817,23 +1823,27 @@ public sealed class EscBridgeService
                 _activeZcMap,
                 _lastZcAutoDetect,
                 _freewheelLastUpdatedAt),
-            _validationReferenceCapturedAt,
-            _validationReferenceError);
+            new LoadSweepSnapshot(
+                _loadSweepStatus,
+                _loadSweepPoints.ToArray(),
+                _loadSweepUpdatedAt,
+                _loadSweepError)
+            {
+                SavedCurves = _savedCurves.ToArray(),
+                TareCurveId = _tareCurveId,
+            })
+        {
+            BusVoltageLoggingEnabled = _enabledLogs.Contains(LogParam.BusVoltage),
+            BusCurrentLoggingEnabled = _enabledLogs.Contains(LogParam.BusCurrent),
+            DutyLoggingEnabled = _enabledLogs.Contains(LogParam.Duty),
+            BusVoltageTelemetry = _telemetryStore.GetStats("bus_voltage", "mV"),
+            BusCurrentTelemetry = _telemetryStore.GetStats("bus_current", "mA"),
+            DutyTelemetry = _telemetryStore.GetStats("duty", "%"),
+        };
     }
 
-    private static string TelemetryVariable(LogParam parameter) => parameter switch
+    private void ClearDeviceCache()
     {
-        LogParam.Speed => "speed",
-        LogParam.Temperature => "temperature",
-        LogParam.CurrentU => "current_u",
-        LogParam.CurrentV => "current_v",
-        LogParam.BemfPeriod => "bemf_period",
-        _ => throw new ArgumentOutOfRangeException(nameof(parameter), parameter, "Canal de telemetria no soportado.")
-    };
-
-    private void ClearValidationReference()
-    {
-        _validationReference = null;
         _activeControllerConfig = null;
         _activeSpeedLimits = null;
         _startupConfiguration = null;
@@ -1841,8 +1851,6 @@ public sealed class EscBridgeService
         _activeZcMap = null;
         _lastZcAutoDetect = null;
         _freewheelLastUpdatedAt = null;
-        _validationReferenceCapturedAt = null;
-        _validationReferenceError = null;
     }
 
     private void SynchronizeManualOutputs(EscStatus status)
@@ -1887,6 +1895,16 @@ public sealed class EscBridgeService
 
     private bool IsEmergencyStopPending() => Volatile.Read(ref _emergencyStopPending) != 0;
 
+    private static bool IsControllerParameter(ConfigParam parameter)
+    {
+        return parameter is ConfigParam.KpRpm
+            or ConfigParam.KiRpm
+            or ConfigParam.KdRpm
+            or ConfigParam.PolePairs
+            or ConfigParam.PwmFreq
+            or ConfigParam.SpeedRamp;
+    }
+
     private static bool IsStartupParameter(ConfigParam parameter)
     {
         return parameter is ConfigParam.StartupInitialAmplitude
@@ -1899,31 +1917,5 @@ public sealed class EscBridgeService
     private void Notify()
     {
         SnapshotChanged?.Invoke(this, EventArgs.Empty);
-    }
-
-    private static bool IsPilOpcode(CommOpcode opcode)
-    {
-        return opcode is CommOpcode.HilStart or CommOpcode.HilStop or CommOpcode.HilSetInputs or CommOpcode.HilGetOutputs or CommOpcode.HilStep;
-    }
-
-    private void RecordHilBinaryFrame(string direction, byte[] rawFrame)
-    {
-        try
-        {
-            RecordHilBinaryFrame(direction, EscProtocol.Parse(rawFrame));
-        }
-        catch (Exception ex)
-        {
-            RecordHilFrame(direction, "HID", null, "binary frame parse error", ex.Message);
-        }
-    }
-
-    private void RecordHilBinaryFrame(string direction, EscFrame frame)
-    {
-        string summary = $"{frame.Type} {frame.Opcode} seq={frame.Sequence} len={frame.Payload.Length} status={frame.Status}";
-        string payload = frame.Payload.Length == 0
-            ? $"payload=- raw={Convert.ToHexString(frame.Raw)}"
-            : $"payload={Convert.ToHexString(frame.Payload)} raw={Convert.ToHexString(frame.Raw)}";
-        RecordHilFrame(direction, "HID", frame.Sequence, summary, payload);
     }
 }

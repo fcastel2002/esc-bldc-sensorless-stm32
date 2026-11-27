@@ -47,6 +47,9 @@
     <None Include="..\..\src\Esc.Web\Components\Layout\MainLayout.razor"
           Link="TestAssets\MainLayout.razor"
           CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\src\Esc.Web\Components\Pages\LoadCurves.razor"
+          Link="TestAssets\LoadCurves.razor"
+          CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

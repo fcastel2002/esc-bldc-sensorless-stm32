@@ -7,7 +7,6 @@
 
 #include "tim.h"
 #include "motor_control.h"
-#include "current_sense.h"
 #include "hard_config.h"
 #include "zc_diag.h"
 
@@ -35,35 +34,19 @@ void HAL_TIM_IC_CaptureCallback(TIM_HandleTypeDef* htim)
     }
     __enable_irq();
   }
-  if (htim->Instance == TIM1) {
-    // pwm_input(htim);
-  }
 }
 
 void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef* htim)
 {
-  if (htim->Instance == TIM4 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_3) {
-    // TIM3->CCER &= ~(TIM_CCER_CC1E | TIM_CCER_CC2E | TIM_CCER_CC3E | TIM_CCER_CC4E);
-    // event_delay();
-  }
   if (htim->Instance == TIM4 && htim->Channel == HAL_TIM_ACTIVE_CHANNEL_1 &&
-      CLOSEDLOOP == app_state &&
-      hil_session_state != (uint8_t)HIL_EXECUTION_STEPPED + 1U) {
+      CLOSEDLOOP == app_state) {
     pi_control();
   }
 }
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef* htim)
 {
   if (htim->Instance == TIM4) {
-    if (hil_session_state != (uint8_t)HIL_EXECUTION_STEPPED + 1U) {
-      update_pwm_startup_foc();
-    }
-  }
-}
-
-void HAL_ADCEx_InjectedConvCpltCallback(ADC_HandleTypeDef* hadc)
-{
-  if (hadc->Instance == ADC1) {
-    current_sense_handle_conversion();
+    update_pwm_startup_foc();
   }
 }

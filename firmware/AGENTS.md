@@ -27,7 +27,12 @@
 - RPM PI v2 stores gains as floats but executes Q16.16; `KP_RPM/KI_RPM` payloads use `int16` hundredths. KD is fixed at zero.
 - In `CLOSEDLOOP`, `PWM_FREQ`, `KP`, `KI`, and `KD` apply hot. Other config changes use the deferred `CONFIG` path.
 - `KD` acts on measured-speed derivative, not error derivative.
-- `CURRENT_LIMIT` and `TEMP_LIMIT` remain `NOT_IMPLEMENTED`. `CURRENT_U`/`CURRENT_V` telemetry (`PA3`/`PA4`, ADC1/ADC2 injected) exists in firmware, **but hardware current sensing is currently not connected/populated** (L298 `SENSE_A`/`SENSE_B` was dropped; planned replacement uses dedicated per-phase conditioning with op-amp); do not rely on current readings until the new sensing hardware is built. Temperature telemetry remains a placeholder.
+- No phase-current sensing and no ADC: `current_sense.c`, `adc.c` and the HAL ADC module were removed in spec 002. The only current measurement is the INA219 DC bus (`power_monitor.c`). `CURRENT_LIMIT`/`TEMP_LIMIT` and legacy `KP/KI/KD` params return `UNKNOWN_PARAM`; keep their `ESCparams` fields for flash-layout compatibility.
+- HIL/PIL, `SET_CONTROL_MODE` and `GET_VALIDATION_REFERENCE` were removed in spec 002; do not reintroduce runtime control modes.
+- `ESCparams` is V6 (68 bytes): it only appends `speed_ramp_rpm_s` to V5. New persisted fields must append again and add a migration in `flash_config.c`.
+- `SPEED_RAMP` slew-limits the PI reference inside the 2 ms ISR (`motor_control.c`); `0` keeps the historical step behavior.
+- Firmware reports measured quantities only; do not add model-based estimates (e.g. `I_bus/d`) to telemetry or sweep points, compute them in the GUI.
+- `load_sweep.c` runs from the main loop (`load_sweep_process()` in `handleState()`), owns the speed target while active and aborts on `STOP`/`ESTOP`, user `ABORT`, leaving `CLOSEDLOOP` or any automatic restart (`motor_restart_count`).
 - `foc_startup()` is historical naming: it is open-loop sinusoidal/SPWM startup, not field-oriented control and not a current loop.
 
 ## Critical Files
@@ -36,7 +41,8 @@
 - Transport selection: `Core/Src/comm_transport.c`
 - Periodic communication and telemetry facade: `Core/Src/comm.c`
 - Firmware state machine: `Core/Src/state_machine.c`
-- Motor control and stall/PI logic: `Core/Src/motor_control.c`
+- Motor control, stall/PI logic and setpoint slew limiter: `Core/Src/motor_control.c`
+- Load-curve sweep: `Core/Src/load_sweep.c`
 - Speed measurement: `Core/Src/speed_sensor.c`
 - Commutation: `Core/Src/bldc_driver.c`
 - HAL callbacks: `Core/Src/isr_callbacks.c`

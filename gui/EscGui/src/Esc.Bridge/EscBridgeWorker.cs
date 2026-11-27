@@ -87,6 +87,7 @@ public sealed class EscBridgeWorker : BackgroundService
                 await _bridge.MaintainSineDriveAsync(stoppingToken).ConfigureAwait(false);
                 await _bridge.MaintainStepTestAsync(stoppingToken).ConfigureAwait(false);
                 await _bridge.PollFreewheelAsync(stoppingToken).ConfigureAwait(false);
+                await _bridge.PollLoadSweepAsync(stoppingToken).ConfigureAwait(false);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {

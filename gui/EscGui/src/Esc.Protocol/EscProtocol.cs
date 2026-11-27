@@ -124,6 +124,7 @@ public static class EscProtocol
         return parameter switch
         {
             ConfigParam.PwmFreq or ConfigParam.MaxSpeed or ConfigParam.MinSpeed or ConfigParam.BemfBlankingUs
+                or ConfigParam.SpeedRamp
                 => UInt16Payload((int)value),
             ConfigParam.PolePairs => new[] { checked((byte)value) },
             ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm => Int16CentiPayload(value),
@@ -313,141 +314,13 @@ public static class EscProtocol
             matrix);
     }
 
-    public static byte[] ControlModePayload(ControlRuntimeMode mode)
-    {
-        return [(byte)mode];
-    }
-
-    public static byte[] HilStartPayload(ushort inputTimeoutMs)
-    {
-        return UInt16Payload(inputTimeoutMs);
-    }
-
-    public static byte[] HilStartPayload(ushort inputTimeoutMs, HilExecutionMode executionMode)
-    {
-        if (executionMode is not HilExecutionMode.Periodic and not HilExecutionMode.Stepped)
-        {
-            throw new ArgumentOutOfRangeException(nameof(executionMode), executionMode, "Unsupported HIL execution mode.");
-        }
-
-        var payload = new byte[3];
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(0, 2), inputTimeoutMs);
-        payload[2] = (byte)executionMode;
-        return payload;
-    }
-
-    public static byte[] HilInputsPayload(HilInputs inputs)
-    {
-        if (inputs.RunId.HasValue != inputs.SourceSequence.HasValue)
-        {
-            throw new ArgumentException("HIL validation inputs require both run ID and source sequence.", nameof(inputs));
-        }
-
-        var payload = new byte[inputs.HasValidationProvenance ? 16 : 8];
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(0, 2), inputs.SpeedRpm);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(2, 2), 0);
-        BinaryPrimitives.WriteInt16LittleEndian(payload.AsSpan(4, 2), inputs.LoadTorque);
-        payload[6] = inputs.Flags;
-        payload[7] = inputs.Enable ? (byte)1 : (byte)0;
-        if (inputs.HasValidationProvenance)
-        {
-            BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(8, 4), inputs.RunId!.Value);
-            BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(12, 4), inputs.SourceSequence!.Value);
-        }
-
-        return payload;
-    }
-
-    public static byte[] HilStepPayload(HilStepRequest request)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-
-        if (request.RunId == 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(request), request.RunId, "HIL step run ID must be non-zero.");
-        }
-
-        if (request.SourceSequence == 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(request), request.SourceSequence, "HIL step source sequence must be non-zero.");
-        }
-
-        if (request.Steps is < 1 or > 1000)
-        {
-            throw new ArgumentOutOfRangeException(nameof(request), request.Steps, "HIL step count must be between 1 and 1000.");
-        }
-        if (!request.Enable)
-        {
-            throw new ArgumentException("Deterministic HIL steps require enable=true.", nameof(request));
-        }
-
-        var payload = new byte[18];
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(0, 2), request.SpeedRpm);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(2, 2), 0);
-        BinaryPrimitives.WriteInt16LittleEndian(payload.AsSpan(4, 2), request.LoadTorque);
-        payload[6] = request.Flags;
-        payload[7] = request.Enable ? (byte)1 : (byte)0;
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(8, 4), request.RunId);
-        BinaryPrimitives.WriteUInt32LittleEndian(payload.AsSpan(12, 4), request.SourceSequence);
-        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(16, 2), request.Steps);
-        return payload;
-    }
-
-    public static HilOutputs DecodeHilOutputs(EscFrame frame)
-    {
-        EnsureOkResponse(frame, CommOpcode.HilGetOutputs);
-        if (frame.Payload.Length < 15)
-        {
-            throw new EscProtocolException("HIL_GET_OUTPUTS response payload is shorter than 15 bytes.");
-        }
-
-        return DecodeHilOutputsPayload(frame.Payload);
-    }
-
-    public static HilStepResult DecodeHilStepResult(EscFrame frame)
-    {
-        EnsureOkResponse(frame, CommOpcode.HilStep);
-        if (frame.Payload.Length != 48)
-        {
-            throw new EscProtocolException($"HIL_STEP response payload must be exactly 48 bytes, received {frame.Payload.Length}.");
-        }
-
-        return new HilStepResult(
-            DecodeHilOutputsPayload(frame.Payload.AsSpan(0, 43)),
-            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(43, 2)),
-            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(45, 2)),
-            frame.Payload[47]);
-    }
-
-    private static HilOutputs DecodeHilOutputsPayload(ReadOnlySpan<byte> payload)
-    {
-        bool hasValidationProvenance = payload.Length >= 43;
-        return new HilOutputs(
-            BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(0, 4)),
-            payload[4],
-            (ControlRuntimeMode)payload[5],
-            BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(6, 2)),
-            BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(8, 2)),
-            BinaryPrimitives.ReadUInt16LittleEndian(payload.Slice(10, 2)),
-            unchecked((sbyte)payload[12]),
-            payload[13],
-            payload[14] != 0,
-            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(15, 4)) : 0,
-            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(19, 4)) : 0,
-            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(23, 4)) : 0,
-            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(27, 4)) : 0,
-            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(31, 4)) : 0,
-            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(35, 4)) : 0,
-            hasValidationProvenance ? BinaryPrimitives.ReadUInt32LittleEndian(payload.Slice(39, 4)) : 0,
-            hasValidationProvenance);
-    }
-
     public static object DecodeConfigValue(ConfigParam parameter, ReadOnlySpan<byte> payload)
     {
         return parameter switch
         {
             ConfigParam.PolePairs when payload.Length >= 1 => payload[0],
             ConfigParam.PwmFreq or ConfigParam.MaxSpeed or ConfigParam.MinSpeed or ConfigParam.BemfBlankingUs
+                or ConfigParam.SpeedRamp
                 when payload.Length >= 2
                 => BinaryPrimitives.ReadUInt16LittleEndian(payload[..2]),
             ConfigParam.KpRpm or ConfigParam.KiRpm or ConfigParam.KdRpm when payload.Length >= 2
@@ -480,32 +353,108 @@ public static class EscProtocol
             frame.Payload[3] != 0,
             BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(4, 2)),
             BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(6, 2)),
-            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(8, 2)));
+            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(8, 2)),
+            frame.Payload.Length >= 18
+                ? new PowerMonitorReading(
+                    (PowerMonitorFlags)frame.Payload[10],
+                    frame.Payload[11],
+                    BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(12, 2)),
+                    BinaryPrimitives.ReadInt32LittleEndian(frame.Payload.AsSpan(14, 4)),
+                    frame.Payload.Length >= 20 ? (PowerMonitorError)frame.Payload[18] : PowerMonitorError.None,
+                    frame.Payload.Length >= 20 ? frame.Payload[19] : (byte)0,
+                    frame.Payload.Length >= 24 ? frame.Payload[20] : null,
+                    frame.Payload.Length >= 24 ? (PowerMonitorStage)frame.Payload[21] : PowerMonitorStage.None,
+                    frame.Payload.Length >= 24 ? BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(22, 2)) : (ushort)0,
+                    frame.Payload.Length >= 26 ? BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(24, 2)) : (ushort)0)
+                : null,
+            frame.Payload.Length >= 30 ? BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(26, 2)) : null,
+            frame.Payload.Length >= 30 ? BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(28, 2)) : null,
+            frame.Payload.Length >= 31 && frame.Payload[30] != 0);
     }
 
-    public static ValidationReference DecodeValidationReference(EscFrame frame)
+    public static byte[] LoadSweepStartPayload(LoadSweepRequest request)
     {
-        EnsureOkResponse(frame, CommOpcode.GetValidationReference);
-        if (frame.Payload.Length is not 20 and not 24)
+        ArgumentNullException.ThrowIfNull(request);
+        if (!Enum.IsDefined(request.Mode))
         {
-            throw new EscProtocolException($"GET_VALIDATION_REFERENCE response payload must be 20 or 24 bytes, received {frame.Payload.Length}.");
+            throw new ArgumentOutOfRangeException(nameof(request), request.Mode, "Unknown sweep mode.");
         }
 
-        bool hasCapabilities = frame.Payload.Length == 24;
+        var payload = new byte[12];
+        payload[0] = (byte)request.Mode;
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(1, 2), request.StartRpm);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(3, 2), request.EndRpm);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(5, 2), request.StepOrRate);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(7, 2), request.SettleMs);
+        BinaryPrimitives.WriteUInt16LittleEndian(payload.AsSpan(9, 2), request.WindowMs);
+        payload[11] = (byte)request.Options;
+        return payload;
+    }
 
-        return new ValidationReference(
-            frame.Payload[0],
-            frame.Payload[1],
-            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(2, 2)),
-            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(4, 2)),
-            BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(6, 4)),
-            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(10, 2)),
-            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(12, 2)),
-            BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(14, 4)),
-            BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(18, 2)),
-            hasCapabilities ? frame.Payload[20] : (byte)0,
-            hasCapabilities ? frame.Payload[21] : (byte)0,
-            hasCapabilities ? BinaryPrimitives.ReadUInt16LittleEndian(frame.Payload.AsSpan(22, 2)) : (ushort)0);
+    public static LoadSweepStatus DecodeLoadSweepStatus(EscFrame frame)
+    {
+        EnsureOkResponse(frame, CommOpcode.LoadSweep);
+        if (frame.Payload.Length != 29)
+        {
+            throw new EscProtocolException(
+                $"LOAD_SWEEP status payload must be exactly 29 bytes, received {frame.Payload.Length}.");
+        }
+
+        ReadOnlySpan<byte> p = frame.Payload;
+        return new LoadSweepStatus(
+            (LoadSweepState)p[0],
+            (LoadSweepAbortReason)p[1],
+            (LoadSweepMode)p[2],
+            (LoadSweepOptions)p[3],
+            BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(4, 2)),
+            BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(6, 2)),
+            BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(8, 2)),
+            BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(10, 2)),
+            BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(12, 2)),
+            BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(14, 2)),
+            BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(16, 2)),
+            BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(18, 2)),
+            BinaryPrimitives.ReadInt32LittleEndian(p.Slice(20, 4)),
+            BinaryPrimitives.ReadUInt32LittleEndian(p.Slice(24, 4)),
+            p[28] != 0);
+    }
+
+    public static LoadSweepPointBatch DecodeLoadSweepPoints(EscFrame frame)
+    {
+        EnsureOkResponse(frame, CommOpcode.LoadSweep);
+        ReadOnlySpan<byte> p = frame.Payload;
+        if (p.Length < 3)
+        {
+            throw new EscProtocolException("LOAD_SWEEP points payload is shorter than 3 bytes.");
+        }
+
+        ushort first = BinaryPrimitives.ReadUInt16LittleEndian(p.Slice(0, 2));
+        int count = p[2];
+        if (count > CommConstants.LoadSweepPointsPerFrame ||
+            p.Length != 3 + count * CommConstants.LoadSweepPointSize)
+        {
+            throw new EscProtocolException(
+                $"LOAD_SWEEP points payload has {p.Length} bytes for {count} points.");
+        }
+
+        var points = new List<LoadSweepPoint>(count);
+        for (int i = 0; i < count; i++)
+        {
+            ReadOnlySpan<byte> q = p.Slice(3 + i * CommConstants.LoadSweepPointSize, CommConstants.LoadSweepPointSize);
+            points.Add(new LoadSweepPoint(
+                first + i,
+                BinaryPrimitives.ReadUInt16LittleEndian(q.Slice(0, 2)),
+                BinaryPrimitives.ReadUInt16LittleEndian(q.Slice(2, 2)),
+                BinaryPrimitives.ReadUInt16LittleEndian(q.Slice(4, 2)),
+                BinaryPrimitives.ReadUInt16LittleEndian(q.Slice(6, 2)),
+                BinaryPrimitives.ReadInt16LittleEndian(q.Slice(8, 2)),
+                BinaryPrimitives.ReadUInt16LittleEndian(q.Slice(10, 2)),
+                BinaryPrimitives.ReadUInt16LittleEndian(q.Slice(12, 2)),
+                q[14],
+                (LoadPointFlags)q[15]));
+        }
+
+        return new LoadSweepPointBatch(first, points);
     }
 
     public static TelemetrySample DecodeTelemetry(EscFrame frame, DateTimeOffset hostTimestamp)
@@ -531,22 +480,11 @@ public static class EscProtocol
         }
         int value = BinaryPrimitives.ReadInt32LittleEndian(frame.Payload.AsSpan(1, 4));
         uint targetTick = BinaryPrimitives.ReadUInt32LittleEndian(frame.Payload.AsSpan(5, 4));
-        string unit = logParam switch
-        {
-            LogParam.Speed => "rpm",
-            LogParam.Temperature => "cdeg",
-            LogParam.CurrentU or LogParam.CurrentV => "mA",
-            LogParam.BemfPeriod => "ticks",
-            _ => "raw"
-        };
-
+        string unit = TelemetryUnit(logParam);
         string name = logParam switch
         {
-            LogParam.Speed => "speed",
-            LogParam.Temperature => "temperature",
-            LogParam.CurrentU => "current_u",
-            LogParam.CurrentV => "current_v",
-            LogParam.BemfPeriod => "bemf_period",
+            LogParam.Speed or LogParam.BusVoltage or LogParam.BusCurrent or LogParam.Duty
+                => TelemetryVariable(logParam),
             _ => $"0x{frame.Payload[0]:X2}"
         };
 
@@ -567,6 +505,26 @@ public static class EscProtocol
             name, logParam, value, unit, targetTick, hostTimestamp,
             adcRaw, quality, validSamples, commutationStep);
     }
+
+    /// <summary>Telemetry store key for a log channel.</summary>
+    public static string TelemetryVariable(LogParam parameter) => parameter switch
+    {
+        LogParam.Speed => "speed",
+        LogParam.BusVoltage => "bus_voltage",
+        LogParam.BusCurrent => "bus_current",
+        LogParam.Duty => "duty",
+        _ => throw new ArgumentOutOfRangeException(nameof(parameter), parameter, "Canal de telemetria no soportado.")
+    };
+
+    /// <summary>Unit of the raw telemetry value for a log channel.</summary>
+    public static string TelemetryUnit(LogParam parameter) => parameter switch
+    {
+        LogParam.Speed => "rpm",
+        LogParam.BusVoltage => "mV",
+        LogParam.BusCurrent => "mA",
+        LogParam.Duty => "%", /* raw value is 1/10000; DisplayValue is percent */
+        _ => "raw"
+    };
 
     public static void EnsureOkResponse(EscFrame frame, CommOpcode expectedOpcode)
     {
